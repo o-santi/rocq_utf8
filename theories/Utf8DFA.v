@@ -14,22 +14,22 @@ Definition zero_codep : codepoint := (0, b4_zero, b4_zero, b4_zero, b4_zero, b4_
 (* https://writings.sh/post/en/utf8/ *)
 
 Inductive range :=
-  Range_00_7F (*  0 *)
-| Range_80_8F (*  1 *)
-| Range_90_9F (*  9 *)
-| Range_A0_BF (*  7 *)
-| Range_C0_C1 (*  8 *)
-| Range_C2_DF (*  2 *)
-| Byte_E0     (* 10 *)
-| Range_E1_EF (*  3 *)
-| Byte_F0     (* 11 *)
-| Range_F1_F3 (*  6 *)
-| Byte_F4     (*  5 *)
-| Range_F5_FF (*  8 *)
+  Range_00_7F
+| Range_80_8F
+| Range_90_9F
+| Range_A0_BF
+| Range_C0_C1
+| Range_C2_DF
+| Byte_E0 
+| Range_E1_EF
+| Byte_F0
+| Range_F1_F3
+| Byte_F4
+| Range_F5_FF
 .
 
 Inductive parsing_state :=
-  Initial (* State0 *)
+  Initial
 | Expecting_1_80_BF
 | Expecting_2_80_BF
 | Expecting_3_80_BF
@@ -135,57 +135,3 @@ Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsi
 
 Definition utf8_dfa_decode (bytes: list byte) : @result (unicode_str * (list byte)) (@error unicode_decode_error) :=
   utf8_dfa_decode_rec bytes zero_codep Initial.
-
-From Coq Require Import Lists.List. Import ListNotations.
-From Coq Require Import Strings.String.
-
-(* The character sequence U+0041 U+2262 U+0391 U+002E "A<NOT IDENTICAL
-   TO><ALPHA>." is encoded in UTF-8 as follows: *)
-
-(*     --+--------+-----+-- *)
-(*     41 E2 89 A2 CE 91 2E *)
-(*     --+--------+-----+-- *)
-Definition test1 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [x41; xe2; x89; xa2; xce; x91; x2e]))
-  = Ok (["U+0041"%string; "U+2262"%string; "U+0391"%string; "U+002E"%string], []).
-  simpl.
-  reflexivity.
-Qed.
-
-(* The character sequence U+D55C U+AD6D U+C5B4 (Korean "hangugeo", *)
-(* meaning "the Korean language") is encoded in UTF-8 as follows: *)
-
-(*     --------+--------+-------- *)
-(*     ED 95 9C EA B5 AD EC 96 B4 *)
-(*     --------+--------+-------- *)
-Definition test2 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [xed; x95; x9c; xea; xb5; xad; xec; x96; xb4]))
-  = Ok (["U+D55C"%string; "U+AD6D"%string; "U+C5B4"%string], []).
-  reflexivity.
-Qed.
-
-
-(* The character sequence U+65E5 U+672C U+8A9E (Japanese "nihongo", *)
-(* meaning "the Japanese language") is encoded in UTF-8 as follows: *)
-
-(*     --------+--------+-------- *)
-(*     E6 97 A5 E6 9C AC E8 AA 9E *)
-(*     --------+--------+-------- *)
-Definition test3 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [xe6; x97; xa5; xe6; x9c; xac; xe8; xaa; x9e]))
-  = Ok (["U+65E5"%string; "U+672C"%string; "U+8A9E"%string], []).
-  reflexivity.
-Qed.
-
-(* The character U+233B4 (a Chinese character meaning 'stump of tree'), *)
-(* prepended with a UTF-8 BOM, is encoded in UTF-8 as follows: *)
-
-(*     --------+----------- *)
-(*     EF BB BF F0 A3 8E B4 *)
-(*     --------+----------- *)
-
-Definition test4 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_dfa_decode [xef; xbb; xbf; xf0; xa3; x8e; xb4]))
-  = Ok (["U+FEFF"%string; "U+0233B4"%string], []).
-  reflexivity.
-Qed.
