@@ -1,0 +1,9 @@
+#+title: Related Works
+
+* Formalizations of machine code protocols and specifications
+** [[file:protobuf.pdf][Verified protobuf compiler]]
+A verified compiler of the protobuf format, that produces a formally correct parser from any protobuf schema.
+
+* Speed based binary techniques
+** [[file:base64_enc_dec.pdf][Base64 encoding and decoding]]
+   
