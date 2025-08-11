@@ -1,9 +1,51 @@
 #+title: Related Works
 
 * Formalizations of machine code protocols and specifications
-** [[file:protobuf.pdf][Verified protobuf compiler]]
-A verified compiler of the protobuf format, that produces a formally correct parser from any protobuf schema.
+** [[file:protobuf.pdf][A Verified Protocol Buffer Compiler]]  :coq: 
+A verified compiler of the protobuf format, that produces a formally correct parser and deserializer from any protobuf schema.
+
+** [[file:narcissus_deriver.pdf][Narcissus: Correct-by-Construction Derivation of Decoders and Encoders from Binary Formats]] :coq:
+
+A deriver for encoders and decoders for binary formats, based on a relatively generic Format DSL.
+
+** [[file:bigrammar.pdf][Bidirectional Grammars for Machine-Code Decoding and Encoding]] :coq: 
+
+Another DSL for writing grammars that can be used to generate both encoders and decoders.
+
+** [[file:cbodr_cddl_cose_parsing.pdf][Secure Parsing and Serializing with Separation Logic Applied to CBOR, CDDL, and COSE]] :f_star:
+
+Similar to protobuf approach, but for CBOR, CDDL and COSE, focused on security. As the other one, these formats are recursive in nature and correctness proofs are non-trivial.
+
+** [[file:formalizing_huffman_coding.pdf][Formalizing Huffman's algorithm]]                                     :coq:
+
+An implementation of Huffman's compression algorithm, a stepping stone to implementing zlib's binary deflate.
+
+** [[file:formalizing_deflate_in_coq.pdf][An implementation of Deflate in Coq]] :coq:
+
+An implementation of the deflate compression algorithm in Coq. Multiple binary formats utilize deflate for compression, such as PNG, and formalizations like this may be used as a stepping stone for future work.
+
+** [[file:trx_parser_interpreter.pdf][TRX: A FORMALLY VERIFIED PARSER INTERPRETER]] :coq:
+
+A correct interpreter of parsing expression grammars (PEGs) written in Coq.
+
+** [[file:v2v_messaging_system.pdf][Formal Verification of a Vehicle-to-Vehicle (V2V) Messaging System]]
+An industry use case of software correctness for security. An ASN.1 compiler that generates encode/decode pair, verified through /Software Analysis Workbench/.
+
+** [[file:verified-parsing-pretty-printing.pdf][Generic Packet Descriptions: Verified Parsing and Pretty Printing of Low-Level Data]] :agda:
+
+Another DSL for describing formats of binary schemas, of which one can derive encoding and decoding. The authors also show their DSL to be efficient by way of deriving a correct IPV4 implementation, according to the specification.
 
 * Speed based binary techniques
+
+** [[file:parsing_gb_of_json.pdf][Parsing GB of JSON per second]]
+
+An extremely fast implementation of JSON parsing using SIMD. This is the theory behind the famous [[https://github.com/simdjson/simdjson][simdjson]] library. Even though it has some correctness concepts, it is *not formally verified*.
+
+** [[file:validating_utf8_in_less_than_1_instruction.pdf][Validating UTF-8 In Less Than One Instruction Per Byte]]
+
+A SIMD UTF-8 validator written in C++. Even though correctness concerns are addressed, it is *not formally verified*.
+
 ** [[file:base64_enc_dec.pdf][Base64 encoding and decoding]]
-   
+
+Fast Base64 encoding and decoding using SIMD.
+  
