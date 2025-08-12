@@ -1,4 +1,4 @@
-From Coq Require Import Lists.List. Import ListNotations.
+From Stdlib Require Import Lists.List. Import ListNotations.
 
 Inductive result {T E: Type} : Type :=
 | Ok (x: T) : @result T E

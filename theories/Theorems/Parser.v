@@ -1,6 +1,7 @@
-From Coq Require Import Lists.List. Import ListNotations.
 Require Import Utf8.Parser.
-Require Import Lia.
+
+From Stdlib Require Import Lists.List. Import ListNotations.
+From Stdlib Require Import Lia.
 
 Lemma parser_map_correct: forall T R I E (f: T -> R) s (p: @parser T I E),
     (parser_map f p) s = fmap (fun '(v, rest) => (f v, rest)) (p s).

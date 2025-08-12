@@ -6,24 +6,33 @@
   };
 
   outputs = { self, nixpkgs }: let
-    system= "x86_64-linux";
-    pkgs = import nixpkgs { inherit system; };
+    for-all-systems = f:
+      nixpkgs.lib.genAttrs [
+        "x86_64-linux"
+        "aarch64-darwin"
+      ] (system: f nixpkgs.legacyPackages.${system});
   in {
-    packages.${system}.default = self.packages.x86_64-linux.hello;
-    devShells.${system}.default = pkgs.mkShell {
-      shellHook = "unset SOURCE_DATE_EPOCH";
-      packages = with pkgs; [
-        coq_8_20
-        (texlive.combine {
-          inherit (texlive) scheme-basic collection-fontsrecommended
-            dvisvgm dvipng # for preview and export as html
-            biblatex latexmk babel-portuges
-            abntex2 memoir xpatch booktabs textcase enumitem supertabular listings
-            lastpage glossaries
-            wrapfig amsmath ulem hyperref capt-of;
-        })
-        typst
-      ];
-    };
+    devShells = for-all-systems (pkgs: {
+      default = pkgs.mkShell {
+        shellHook = ''
+          unset SOURCE_DATE_EPOCH
+          unset COQPATH
+        '';
+        packages = with pkgs; [
+          coq
+          coqPackages.stdlib
+          # (texlive.combine {
+          #   inherit (texlive) scheme-basic collection-fontsrecommended
+          #   dvisvgm dvipng # for preview and export as html
+          #   biblatex latexmk babel-portuges
+          #   abntex2 memoir xpatch booktabs textcase enumitem supertabular listings
+          #   lastpage glossaries
+          #   wrapfig amsmath ulem hyperref capt-of;
+          # })
+          typst
+          gnumake
+        ];
+      };
+    });
   };
 }
