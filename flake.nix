@@ -11,6 +11,7 @@
   in {
     packages.${system}.default = self.packages.x86_64-linux.hello;
     devShells.${system}.default = pkgs.mkShell {
+      shellHook = "unset SOURCE_DATE_EPOCH";
       packages = with pkgs; [
         coq_8_20
         (texlive.combine {
@@ -21,7 +22,7 @@
             lastpage glossaries
             wrapfig amsmath ulem hyperref capt-of;
         })
-        
+        typst
       ];
     };
   };
