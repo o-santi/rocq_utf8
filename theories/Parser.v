@@ -7,6 +7,12 @@ Inductive result {T E: Type} : Type :=
 Arguments Ok {T E}.
 Arguments Err {T E}.
 
+Definition ok {T E: Type} (res: @result T E) : option T :=
+  match res with
+  | Ok t => Some t
+  | Err e => None
+  end.
+
 Definition bind {A B E} (r: @result A E) (f: A -> @result B E) :=
   match r with
   | Ok p => f p
@@ -20,12 +26,7 @@ Notation "'let*' p ':=' c1 'in' c2" :=
 Definition fmap { A B E } (f: A -> B) (r: @result A E) : @result B E :=
   bind r (fun x => Ok (f x)).
 
-Inductive error {E: Type}: Type :=
-| NoError
-| Error (e: E)
-| Both (left: @error E) (right: @error E).
-
-Definition parser (T: Type) {I E: Type} := list I -> @result (T * (list I)) (@error E).
+Definition parser (T: Type) {I E: Type} := list I -> @result (T * (list I)) E.
 
 Definition parser_map {A B I E} (f: A -> B) (p: @parser A I E) : @parser B I E :=
   fun s =>
@@ -39,27 +40,14 @@ Definition maybe {A I E} (p: @parser A I E) : @parser (option A) I E :=
     | Err _        => Ok (None, s)
     end.
 
-Fixpoint any_aux {A I E} (parsers: list (@parser A I E)) (errs: @error E) : @parser A I E :=
-  fun s =>
-    match parsers with
-    | [] => Err errs
-    | p :: rest =>
-        match p s with
-        | Err err => any_aux rest (Both err errs) s
-        | Ok p => Ok p
-        end
-    end.
-
-Definition any {A I E} (parsers : list (@parser A I E)): @parser A I E := any_aux parsers NoError.
-
 Definition predicate {I E} (pred: I -> bool) (err: option I -> E) : @parser I I E :=
   fun s => 
     match s with
-    | [] => Err (Error (err None))
+    | [] => Err (err None)
     | c :: rest =>
         match pred c with
         | true => Ok (c, rest)
-        | false => Err (Error (err (Some c)))
+        | false => Err (err (Some c))
         end
     end.
 

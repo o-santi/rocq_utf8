@@ -174,10 +174,10 @@ Definition parse_continuation : @parser b6 byte unicode_decode_error :=
 Definition parse_header : @parser encoding_size byte unicode_decode_error :=
   fun s =>
     match s with
-    | [] => Err (Error (InvalidStartHeader None))
+    | [] => Err (InvalidStartHeader None)
     | h :: rest =>
         match encoding_size_from_header h with
-        | None => Err (Error (InvalidStartHeader (Some h)))
+        | None => Err (InvalidStartHeader (Some h))
         | Some e => Ok (e, rest)
         end
     end.
@@ -203,13 +203,13 @@ Definition parse_codepoint : @parser codepoint byte unicode_decode_error :=
       end in
     match codepoint_range_to_codepoint codepoint_bits with
     | Ok code => Ok (code, rest)
-    | Err err => Err (Error err)
+    | Err err => Err err
     end.
 
 Definition utf8_decode : @parser unicode_str byte unicode_decode_error :=
   all parse_codepoint.
 
-Definition to_unicode (s: string) : @result unicode_str (@error unicode_decode_error) :=
+Definition to_unicode (s: string) : @result unicode_str unicode_decode_error :=
   let bytes := List.map byte_of_ascii (list_ascii_of_string s) in
   fmap (fun '(v, _) => v) (utf8_decode bytes).
 
@@ -246,13 +246,13 @@ Definition utf8_encode_codepoint (c: codepoint) : @result (list byte) unicode_en
   | _ => Err (EncodingCodepointTooBig c)
   end.
 
-Fixpoint utf8_encode (unicode: unicode_str) : @result ((list byte) * (list codepoint)) (@error unicode_encode_error) :=
+Fixpoint utf8_encode (unicode: unicode_str) : @result ((list byte) * (list codepoint)) unicode_encode_error :=
   match unicode with
   | [] => Ok ([], [])
   | code :: unicode_rest =>
       let bytes := utf8_encode_codepoint code in
       match bytes with
-      | Err err => Err (Error err)
+      | Err err => Err err
       | Ok bytes => 
           let* (bytes_rest, unicode_rest) := utf8_encode unicode_rest in
           Ok (bytes ++ bytes_rest, unicode_rest)

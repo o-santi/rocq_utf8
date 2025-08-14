@@ -11,6 +11,20 @@ Proof.
   destruct (p s) as [[val rest] |  err]; reflexivity.
 Defined.
 
+Lemma ok_let_star : forall T E (res: @result T E) (f: T -> @result T E),
+    ok (match res with
+        | Ok t => f t
+        | Err e => Err e
+        end) =
+      match ok res with
+      | Some t => ok (f t)
+      | None => None
+      end.
+Proof.
+  intros.
+  destruct res; reflexivity.
+Defined.  
+
 Lemma predicate_correct: forall T I E (p: @parser T I E) (pred: I -> bool) (err_handler: option I -> list E) v s rest,
     Ok (v, rest) = predicate pred err_handler s ->
     pred v = true.

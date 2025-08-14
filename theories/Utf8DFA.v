@@ -88,7 +88,7 @@ Definition extract_3_bits (b: byte) : codepoint :=
   let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
   (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, b3, b2, b1)).
 
-Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @result parsing_result (@error unicode_decode_error) :=
+Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @result parsing_result unicode_decode_error :=
   match (state, byte_range b) with
   | (Initial, Range_00_7F) => Ok (Finished (extract_7_bits b))
   | (Initial, Range_C2_DF) => Ok (More Expecting_1_80_BF (extract_5_bits b))
@@ -97,8 +97,8 @@ Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @res
   | (Initial, Byte_F0)     => Ok (More Expecting_3_90_BF (extract_3_bits b))
   | (Initial, Range_F1_F3) => Ok (More Expecting_3_80_BF (extract_3_bits b))
   | (Initial, Byte_F4)     => Ok (More Expecting_3_80_8F (extract_3_bits b))
-  | (Initial, Range_C0_C1) => Err (Error OverlongEncoding)
-  | (Initial, _) => Err (Error (InvalidStartHeader (Some b)))
+  | (Initial, Range_C0_C1) => Err OverlongEncoding
+  | (Initial, _) => Err (InvalidStartHeader (Some b))
   | (Expecting_1_80_BF,  Range_A0_BF)
   | (Expecting_1_80_BF,  Range_90_9F)
   | (Expecting_1_80_BF,  Range_80_8F) => Ok (Finished (push_bottom_bits carry b))
@@ -113,12 +113,12 @@ Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @res
   | (Expecting_3_80_8F, Range_80_8F) => Ok (More Expecting_2_80_BF (push_bottom_bits carry b))
   | (Expecting_2_A0_BF, Range_A0_BF) => Ok (More Expecting_1_80_BF (push_bottom_bits carry b))
   | (Expecting_3_80_8F, Range_90_9F)
-  | (Expecting_3_80_8F, Range_A0_BF) => Err (Error CodepointTooBig)
-  | _ => Err (Error (InvalidContinuationHeader (Some b)))
+  | (Expecting_3_80_8F, Range_A0_BF) => Err CodepointTooBig
+  | _ => Err (InvalidContinuationHeader (Some b))
   end.
 
 Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state)
-  : @result (unicode_str * (list byte)) (@error unicode_decode_error) :=
+  : @result (unicode_str * (list byte)) unicode_decode_error :=
   match bytes with
   | nil => Ok (nil, nil)
   | cons b rest =>
@@ -132,5 +132,5 @@ Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsi
       end
   end.
 
-Definition utf8_dfa_decode (bytes: list byte) : @result (unicode_str * (list byte)) (@error unicode_decode_error) :=
+Definition utf8_dfa_decode (bytes: list byte) : @result (unicode_str * (list byte)) unicode_decode_error :=
   utf8_dfa_decode_rec bytes zero_codep Initial.
