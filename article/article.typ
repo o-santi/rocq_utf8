@@ -104,25 +104,29 @@ Criado por Rob Pike e Ken Thompson, o UTF-8 surgiu como uma alternativa ao UTF-1
 #let p(t) = text(fill: purple, t)
 #let m(t) = text(fill: maroon, t)
 
-A quantidade de bytes necessárias para representar um _code point_ em UTF-8 é uma função do intervalo que esse _code point_ se encontra. Considerando que um _code point_ precisa de 21 bits para ser armazenado, podemos separar seus bits como [#m(`u`), #b(`vvvv`), #r(`wwww`), #g(`xxxx`), #p(`yyyy`), #o(`zzzz`)]. Utilizando essa notação, a serialização deste pode ser vista como:
+A quantidade de bytes necessárias para representar um _code point_ em UTF-8 é uma função do intervalo que esse _code point_ se encontra. Ao invés de serializar os _code points_ diretamente, como o UTF-16 fazia para _code points_ no BMP, agora todos os bytes contém cabeçalhos, que indicam o tamanho do _code point_ -- isto é, a quantidade de bytes a seguir.
+
+Para _code points_ no intervalo `U+0000..U+007F`, apenas 1 byte é usado, e esse deve começar com o bit `0`. Para _code points_ no intervalo `U+0080..07FF`, dois bytes são usados, o primeiro começando com os bits `110`, e o segundo sendo um byte de continuação, que começa sempre com `10`. Para aqueles no intervalo `U+0800..U+FFFF`, o primeiro byte deve começar com `1110`, seguido de dois bytes de continuação, e por fim, aqueles no intervalo `U+10000..U+10FFFF`, o primeiro byte deve começar com `11110`, seguido de três bytes de continuação.
+
+Considerando que um _code point_ precisa de 21 bits para ser armazenado, podemos separar seus bits como [#m(`u`), #b(`vvvv`), #r(`wwww`), #g(`xxxx`), #p(`yyyy`), #o(`zzzz`)]. Utilizando essa notação, a serialização deste pode ser vista como:
 
 #align(center, table(columns: (auto, auto, auto, auto),
-    align: (center, auto, right, auto),
+    align: (right, right, right, auto),
     stroke: none,
-    table.header(table.cell(colspan: 2, "Início..Fim"), table.cell(align:center, "Bytes"), "Bits relevantes"),
+    table.header(table.cell(colspan: 2, align:center, "Início..Fim"), table.cell(align:center, "Bytes"), "Bits relevantes"),
     [`U+00`#p(`0`)#o(`0`)], [`U+00`#p(`7`)#o(`F`)], [`0`#p(`yyy`)#o(`zzzz`)], "7 bits",
     [`U+0`#g(`0`)#p(`8`)#o(`0`)], [`U+0`#g(`7`)#p(`F`)#o(`F`)], [`110`#g(`xxx`)#p(`yy`) `10`#p(`yy`)#o(`zzzz`)], "11 bits",
     [`U+`#r(`0`)#g(`8`)#p(`0`)#o(`0`)],[`U+`#r(`F`)#g(`F`)#p(`F`)#o(`F`)], [`1110`#r(`wwww`) `10`#g(`xxxx`)#p(`yy`) `10`#p(`yy`)#o(`zzzz`)], "16 bits",
     [`U+`#b(`1`)#r(`0`)#g(`0`)#p(`0`)#o(`0`)], [`U+`#m(`1`)#b(`0`)#r(`F`)#g(`F`)#p(`F`)#o(`F`)] , [`11110`#m(`u`)#b(`vv`) `10`#b(`vv`)#r(`wwww`) `10`#g(`xxxx`)#p(`yy`) `10`#p(`yy`)#o(`zzzz`)], "21 bits",
 ))
 
-É importante notar que os primeiros 127 _code points_ são representados exatamente igual caracteres ASCII (#text(fill:red, "e sistemas extendidos")), algo extremamente desejável não apenas para retro compatibilidade com sistemas antigos, mas para recuperar parte da eficiência de espaço, perdida no UTF-16. Diferentemente do UTF-16, o UTF-8 também não possui ambiguidade de _endianness_, e portanto não precisa utilizar o BOM para distinguir; há apenas uma maneira de ordenar os bytes.
+É importante notar que os primeiros 127 _code points_ são representados exatamente igual caracteres ASCII (#text(fill:red, "e sistemas extendidos")), algo extremamente desejável não apenas para retro compatibilidade com sistemas antigos, mas para recuperar parte da eficiência de espaço perdida no UTF-16. Diferentemente do UTF-16, o UTF-8 também não possui ambiguidade de _endianness_, e portanto não precisa utilizar o BOM para distinguir; há apenas uma maneira de ordenar os bytes.
 
 O UTF-8 ainda precisa manter as limitações do UTF-16. Como _surrogate pairs_ não são mais utilizados para representar _code points_ estendidos, é necessário garantir que bytes do intervalo `D800..DFFF` não apareçam, já que não possuem significado.
 
 Além disso, apesar de conseguir codificar 21 bits (`U+0000..U+1FFFFF`), nem todos desses representam _code points_ válidos, visto que o padrão Unicode define-os baseando nos limites do UTF-16. Isso significa que o codificador deve assegurar de que todos _code points_ decodificados não sejam maior do que `U+10FFFF`.
 
-As primeiras versões da especificação do UTF-8 não faziam distinção de qual o tamanho deveria ser utilizado para codificar um _code point_. Por exemplo, o caracter `A` é representado por `U+0041`. Isso significa que ele pode ser representado em UTF-8 como qualquer uma das seguintes sequências:
+As primeiras versões da especificação do UTF-8 não faziam distinção de qual o tamanho deveria ser utilizado para codificar um _code point_. Por exemplo, o caractere `A` é representado por `U+0041`. Isso significa que ele podia ser representado em UTF-8 como qualquer uma das seguintes sequências:
 
 #align(center, table(columns: (auto, auto),
     align: (right, left),
@@ -135,10 +139,20 @@ As primeiras versões da especificação do UTF-8 não faziam distinção de qua
 ))
 
 // https://www.cve.org/CVERecord?id=CVE-2010-3870
+// https://kevinboone.me/overlong.html
 
-Permitir tais codificações causou inúmeras vulnerabilidades de segurança, visto que vários programas erroneamente ignoram a noção de _code points_ e tratam esses como sequências de bytes diretamente. Ao tentar proibir certos caracteres de aparecerem em uma certa string, os programas procuravam por sequências de bytes especificamente, ao invés de _code points_, e ignoravam que um _code point_ podia ser codificado de outra forma. Várias CVEs estão ligadas diretamente a má gestão dessas possíveis formas de codificar _code points_.
+Permitir tais codificações causou inúmeras vulnerabilidades de segurança, visto que vários programas erroneamente ignoram a noção de _code points_ e tratam esses como sequências de bytes diretamente. Ao tentar proibir certos caracteres de aparecerem em uma string, os programas procuravam por sequências de bytes especificamente, ao invés de _code points_, e ignoravam que um _code point_ podia ser codificado de outra forma. Várias CVEs estão ligadas diretamente à má gestão dessas possíveis formas de codificar _code points_ (#text(fill:red, "desenvolver mais")).
 
-O padrão Unicode então chamou esses bytes de _overlong encodings_, e fez com que a única codificação válida de um _code point_ em UTF-8 seja a menor possível. Isso adiciona ainda mais dificuldade na hora de decodificar os bytes, visto que o conteúdo do _code point_ deve ser observado, para checar se fora codificado do tamanho certo.
+O padrão Unicode nomeou esses casos como _overlong encodings_, e modificou especificações futuras para que a única codificação válida de um _code point_ em UTF-8 seja a menor possível. Isso adiciona ainda mais dificuldade na hora de decodificar os bytes, visto que o conteúdo do _code point_ deve ser observado, para checar se fora codificado do tamanho certo.
+
+Assim, validar que uma sequência de bytes é UTF-8 correto significa respeitar as seguintes propriedades:
+1. Nenhum byte está no intervalo de _code points_ de _surrogate pairs_ (`U+D800..U+DFFF`).
+2. Todo _code point_ lido é menor ou igual a `U+10FFFF`
+3. Todo _code point_ é escrito na menor quantidade de bytes necessária para expressá-lo, isto é, não há _overlong encoding_.
+4. Todo byte de início começa com o header correto (a depender do intervalo do byte).
+5. Todo byte de continuação começa com o header correto (`10`).
+
+Portanto, para escrever um programa que codifica UTF-8, precisamos mostrar que esse programa sempre respeita essas propriedades.
 
 
 
