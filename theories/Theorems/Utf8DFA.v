@@ -332,7 +332,7 @@ Qed.
 
 Theorem utf8_decoders_equal_strong : forall (bytes less: list byte),
     (List.length less) <= (List.length bytes) -> 
-    utf8_dfa_decode less = utf8_decode less.
+    ok (utf8_dfa_decode less) = ok (utf8_decode less).
 Proof.
   Opaque Byte.of_bits.
   intros bytes.
@@ -340,7 +340,14 @@ Proof.
   - inversion H. rewrite length_zero_iff_nil in H1. subst. reflexivity.
   - unfold utf8_dfa_decode, utf8_decode, all, all_aux. fold (all_aux parse_codepoint).   
     destruct less as [| byte byte_rest]; [ reflexivity | ].
-    unfold utf8_dfa_decode_rec. fold utf8_dfa_decode_rec.
+    destruct (parse_codepoint (byte::byte_rest)) as [[code rest] | err] eqn:P.
+    unfold bind.
+    rewrite ok_let_star with (res := all_aux parse_codepoint (Datatypes.length (byte :: byte_rest)) rest).
+    rewrite <- all_aux_saturation_aux with (n:= (S (S (Datatypes.length (rest))))).
+    fold (all parse_codepoint rest). fold (utf8_decode rest). rewrite <- IHbytes.
+    3: apply parse_codepoint_strong_progress.
+    2,3,4: apply parse_codepoint_strong_progress in P; simpl in *; lia.
+      
     unfold next_state.
     destruct (byte_range byte) eqn:ByteRangeByte;
       destruct (parse_codepoint (byte::byte_rest)) as [[code rest] | err] eqn:P;
@@ -354,9 +361,10 @@ Proof.
     5, 6: apply byte_range_90_9f_bits in ByteRangeByte; destruct ByteRangeByte as [b1 [b2 [b3 [b4 byte_bits]]]].
     7, 8: apply byte_range_a0_bf_bits in ByteRangeByte; destruct ByteRangeByte as [b1 [b2 [b3 [b4 [b5 byte_bits]]]]].
     9, 10: apply byte_range_c0_c1_bits in ByteRangeByte; destruct ByteRangeByte as [b1 byte_bits].
-    1,2, 3, 4, 5, 6, 7, 8: unfold parse_codepoint, parse_header, encoding_size_from_header, extract_7_bits in *; rewrite byte_bits in P; repeat rewrite if_redundant in P; inversion P; try reflexivity; rewrite byte_bits; reflexivity.
-    1, 2: unfold parse_codepoint, parse_header, encoding_size_from_header in P; rewrite byte_bits in P; simpl in P; destruct (parse_continuation byte_rest) as [[v rest2] | err2] eqn: P_cont_br; inversion P. reflexivity. 
-    
+    1,2, 3, 4, 5, 6, 7, 8: unfold parse_codepoint, parse_header, encoding_size_from_header, extract_7_bits in *; rewrite byte_bits in P; repeat rewrite if_redundant in P; inversion P; try reflexivity; rewrite byte_bits. 
+    1, 2: unfold parse_codepoint, parse_header, encoding_size_from_header in P; rewrite byte_bits in P; simpl in P; destruct (parse_continuation byte_rest) as [[v rest2] | err2] eqn: P_cont_br; inversion P.
+    reflexivity.
+    unfold parse_continuation in P_cont_br. rewrite parser_map_correct in P_cont_br. destruct byte_rest; inversion P_cont_br. subst. 
     
     (* destruct (parse_codepoint (byte :: byte_rest)) as [[val rest] | err] eqn:P_byte_byte_rest. *)
     (* rewrite <- all_aux_saturation_aux with (n:= (S (S (Datatypes.length (rest))))). *)
