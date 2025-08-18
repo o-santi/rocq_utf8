@@ -7,7 +7,7 @@
         email: "leonardors@dcc.ufrj.br",
         affiliation: "UFRJ",
     ),),
-    abstract: [O sistema de codificação #emph("Unicode") é imprescindível para a comunicação global, permitindo que inúmeras linguagens utilizem a mesma representação para transmitir todas os caracteres, eliminando a necessidade de conversão. Três formatos para serializar #emph("codepoints") em bytes existem, UTF-8, UTF-16 e UTF-32; entretanto, o formato mais ubíquito é UTF-8, pela sua retro compatibilidade com ASCII, e a capacidade de economizar bytes. Apesar disso, vários problemas aparecem ao implementar um programa codificador e decodificador de UTF-8 semânticamente correto, e inúmeras vulnerabilidades estão associadas a isso. Neste trabalho será utilizada verificação formal através de tipos dependentes, não apenas para enumerar todas as propriedades dadas na especificação do UTF-8, mas principalmente para desenvolver implementações e provar que estas estão corretasg. Primeiro, uma implementação simplificada será desenvolvida, focando em provar todas as propriedades, depois uma implementação focada em eficiência e performance será dada, junto com provas de que as duas são equivalentes, e por fim essa implementação será extraída para um programa executável.]
+    abstract: [O sistema de codificação #emph("Unicode") é imprescindível para a comunicação global, permitindo que inúmeras linguagens utilizem a mesma representação para transmitir todas os caracteres, eliminando a necessidade de conversão. Três formatos para serializar #emph("codepoints") em bytes existem, UTF-8, UTF-16 e UTF-32; entretanto, o formato mais ubíquito é UTF-8, pela sua retro compatibilidade com ASCII, e a capacidade de economizar bytes. Apesar disso, vários problemas aparecem ao implementar um programa codificador e decodificador de UTF-8 semânticamente correto, e inúmeras vulnerabilidades estão associadas a isso. Neste trabalho será utilizada verificação formal através de tipos dependentes, não apenas para enumerar todas as propriedades dadas na especificação do UTF-8, mas principalmente para desenvolver implementações e provar que estas estão corretas. Primeiro, uma implementação simplificada será desenvolvida, focando em provar todas as propriedades, depois uma implementação focada em eficiência e performance será dada, junto com provas de que as duas são equivalentes, e por fim essa implementação será extraída para um programa executável.]
 )
 
 = Introdução
@@ -53,6 +53,13 @@ O padrão Unicode fora criado então para que um único sistema de codificação
 
 == UCS-2 e UTF-16
 
+#let r(t) = text(fill: red, t)
+#let g(t) = text(fill: green, t)
+#let b(t) = text(fill: blue, t)
+#let o(t) = text(fill: orange, t)
+#let p(t) = text(fill: purple, t)
+#let m(t) = text(fill: maroon, t)
+
 Para entender a razão por trás do formato moderno do Unicode, faz-se necessário entender a história por trás de sua criação. Em 1991, a versão 1.0 do Unicode fora lançado como uma codificação de tamanho fixo de 16 bits, chamada de UCS-2 -- _Universal Coding System_ -- capaz de representar 65536 caracteres, chamados de _code points_, das mais diversas línguas.
 
 Tal quantidade, apesar de muito maior do que os antigos 256, rapidamente provou-se não suficiente para todas as linguagens. Quando isso fora percebido, o sistema UCS-2 já estava em amplo uso, e trocá-lo por outro sistema já não era mais possível. Assim, para estendê-lo mantendo-o retro compatível, decidiram reservar parte da tabela para que dois _code points_ distintos (32 bits) representem um único _code point_, isto é, pares de _code units_, denominados _surrogate pairs_, representando um único caractere. Dessa forma, o sistema deixou de ter um tamanho fixo de 16 bits, e passou a ter um tamanho variável, dependendo de quais _code points_ são codificados.
@@ -61,23 +68,22 @@ Tal quantidade, apesar de muito maior do que os antigos 256, rapidamente provou-
 
 O padrão UCS-2 estendido com _surrogate pairs_ é o padrão conhecido como UTF-16, que rapidamente obteve adoção de sistemas de grande relevância, como as linguagens Java e JavaScript, o sistema de UI Qt e até mesmo as APIs do Windows.
 
-Para determinar se uma sequência de bytes é válida em UTF-16, faz se necessário determinar se os dois primeiros bytes representam o início de um _surrogate pair_, representado por bytes entre `D800` e `DBFF`, seguido de bytes que representam o fim de um _surrogate pair_, entre `DC00` e `DFFF`. 
-#align(center,```
-      High Surrogate          Low Surrogate
-        D800..DBFF               DC00..DFFF
-   byte 1      byte 2      byte 3      byte 4    
-| 1101 10?? | ???? ???? | 1101 11?? | ???? ???? |
-```)
+Para determinar se uma sequência de bytes é válida em UTF-16, faz se necessário determinar se os dois primeiros bytes representam o início de um _surrogate pair_, representado por bytes entre `D800` e `DBFF`, seguido de bytes que representam o fim de um _surrogate pair_, entre `DC00` e `DFFF`. O esquema de serialização pode ser visto da seguinte forma:
 
-Iniciar um _surrogate pair_ (`D800..DBFF`) e não terminá-lo com um byte no intervalo correto (`DC00..DFFF`) é considerado um erro, e é inválido segundo a especificação. Assim, determinar se uma sequência de bytes deixou de ser uma tarefa trivial, e tornou-se um possível lugar onde erros de segurança podem acontecer. De fato, CVE-2008-2938 e CVE-2012-2135 são exemplos de vulnerabilidades encontradas em funções relacionadas à decodificação em UTF-16, em projetos grandes e bem estabelecidas (python e APACHE, respectivamente, #text(fill:red, "mais detalhes")).
+#align(center, table(columns: (auto, auto, auto, auto),
+    align: (right, right, right, auto),
+    stroke: none,
+    table.header(table.cell(colspan: 2, align:center, "Início..Fim"), table.cell(align:center, "Bytes"), "Bits relevantes"),
+    [`U+0000`], [`U+FFFF`], [`wwwwxxxx` `yyyyzzzz`], "16 bits",
+    [`U+10000`],  [`U+10FFFF`], [`110110vv` `vv wwwwxx` `110111xx` `xxyyyyzz`], "20 bits",
+))
 
-// https://nvd.nist.gov/vuln/detail/CVE-2008-2938
-// https://nvd.nist.gov/vuln/detail/CVE-2012-2135
+Assim, para que a decodificação de UTF-16 seja não ambígua, é necessário que _code points_ do primeiro intervalo, que não possuem cabeçalho para diferenciá-los, não possam começar com a sequência de bits `11011`. Além disso, iniciar um _surrogate pair_ (`D800..DBFF`) e não terminá-lo com um byte no intervalo correto (`DC00..DFFF`) é considerado um erro, e é inválido segundo a especificação. De fato, o padrão Unicode explicita que *nenhum* _code point_ pode ser representado pelo intervalo `U+D800..U+DFFF`, de forma que todos os outros sistemas de codificação -- UTF-8, UTF-32 -- tenham que desenvolver sistemas para evitar que esses sejam considerados _code points_ válidos.
 
-Assim, o sistema UTF-16, e consequentemente o próprio Unicode, consegue expressar $1.112.064$ _code points_. Esse número pode ser enxergado da seguinte forma:
+A quantidade de _code points_ definidos pelo Unicode está diretamente ligada à essas limitações do padrão UTF-16, que consegue expressar $1.112.064$ _code points_. Esse número pode ser enxergado da seguinte forma:
 #align(center, table(columns: (auto, auto, auto),
     stroke: none,
-    table.header("Intervalo", "Tamanho", "Descrição"),
+    table.header("Inicio..Fim", "Tamanho", "Descrição"),
     `U+0000..U+FFFF`, $2^16$, "Basic Multilingual Plane, Plane 0",
     `U+D800..U+DFFF`, $2^11$, "Surrogate Pairs",
     `U+10000..U+10FFFF`, $2^20$, "Higher Planes, Planes 1-16",
@@ -85,26 +91,26 @@ Assim, o sistema UTF-16, e consequentemente o próprio Unicode, consegue express
     [`U+0000..U+10FFFF` #sym.without `U+D800..U+DFFF`], $2^20 + 2^16 - 2^11$, "Codepoints representáveis"
 ))
 
-O padrão Unicode explicita que *nenhum* _code point_ pode ser representado pelo intervalo `U+D800..U+DFFF`, de forma que todos os outros sistemas de codificação -- UTF-8, UTF-32 -- tenham que desenvolver sistemas para evitar que esses sejam considerados _code points_ válidos.
+Disso, pode-se inferir que um _code point_ *válido* é um número de 21 bits que:
+1. Não está no intervalo `D800..DFFF`.
+2. Não ultrapassa `10FFFF`.
+
+// https://nvd.nist.gov/vuln/detail/CVE-2008-2938
+// https://nvd.nist.gov/vuln/detail/CVE-2012-2135
 
 Vale notar que há ambiguidade na forma de serializar UTF-16 para bytes, visto que não é especificado se o primeiro byte de um _code point_ deve ser o mais significativo -- Big Endian -- ou o menos significativo -- Little Endian. Para distinguir, é comum o uso do caractere `U+FEFF`, conhecido como _Byte Order Mark_ (BOM), como o primeiro caractere de uma mensagem ou arquivo. No caso de Big Endian, o BOM aparece como `FEFF`, e no caso de Little Endian, aparece como `FFFE`.
 
 Essa distinção é o que faz com que UTF-16 possa ser divido em duas sub linguagens, UTF-16BE (Big Endian) e UTF-16LE (Little Endian), adicionando ainda mais complexidade à tarefa de codificar e decodificar os caracteres corretamente.
 
+Com essas complexidades, implementar codificação e decodificação de UTF-16 corretamente tornou-se muito mais complicado. Determinar se uma sequência de bytes deixou de ser uma tarefa trivial, e tornou-se um possível lugar onde erros de segurança podem acontecer. De fato, CVE-2008-2938 e CVE-2012-2135 são exemplos de vulnerabilidades encontradas em funções relacionadas à decodificação em UTF-16, em projetos grandes e bem estabelecidas (python e APACHE, respectivamente, #text(fill:red, "mais detalhes")).
+
 Apesar de extremamente útil, o UTF-16 utiliza 2 bytes para cada caractere, então não é eficiente para linguagens que utilizam ASCII (1 byte por caractere), bem como para formatos como HTML e JSON utilizados na internet, que usam muitos caracteres nos primeiros 127 _code points_ -- `<`, `>`, `{`, `:`. Por isso, fez-se necessário achar outra forma de codificá-los que fosse mais eficiente para a comunicação digital.
 
 == UTF-8
 
-Criado por Rob Pike e Ken Thompson, o UTF-8 surgiu como uma alternativa ao UTF-16 que utiliza menos bytes. A principal mudança para que isso fosse possível foi de abandonar a ideia de codificação de tamanho fixo desde o início, que imensamente facilita escrever os programas decodificadores, preferindo uma codificação de tamanho variável.
+Criado por Rob Pike e Ken Thompson, o UTF-8 surgiu como uma alternativa ao UTF-16 que utiliza menos bytes. A principal mudança para que isso fosse possível foi de abandonar a ideia de codificação de tamanho fixo desde o início, que imensamente facilita escrever os programas decodificadores, preferindo uma codificação de tamanho variável, e utilizando cabeçalhos em todos os bytes para evitar que haja ambiguidade.
 
-#let r(t) = text(fill: red, t)
-#let g(t) = text(fill: green, t)
-#let b(t) = text(fill: blue, t)
-#let o(t) = text(fill: orange, t)
-#let p(t) = text(fill: purple, t)
-#let m(t) = text(fill: maroon, t)
-
-A quantidade de bytes necessárias para representar um _code point_ em UTF-8 é uma função do intervalo que esse _code point_ se encontra. Ao invés de serializar os _code points_ diretamente, como o UTF-16 fazia para _code points_ no BMP, agora todos os bytes contém cabeçalhos, que indicam o tamanho do _code point_ -- isto é, a quantidade de bytes a seguir.
+A quantidade de bytes necessários para representar um _code point_ em UTF-8 é uma função do intervalo que esse _code point_ se encontra. Ao invés de serializar os _code points_ diretamente, como o UTF-16 fazia para _code points_ no BMP, agora todos os bytes contém cabeçalhos, que indicam o tamanho da serialização do _code point_ -- isto é, a quantidade de bytes a seguir.
 
 Para _code points_ no intervalo `U+0000..U+007F`, apenas 1 byte é usado, e esse deve começar com o bit `0`. Para _code points_ no intervalo `U+0080..07FF`, dois bytes são usados, o primeiro começando com os bits `110`, e o segundo sendo um byte de continuação, que começa sempre com `10`. Para aqueles no intervalo `U+0800..U+FFFF`, o primeiro byte deve começar com `1110`, seguido de dois bytes de continuação, e por fim, aqueles no intervalo `U+10000..U+10FFFF`, o primeiro byte deve começar com `11110`, seguido de três bytes de continuação.
 
@@ -124,9 +130,9 @@ Considerando que um _code point_ precisa de 21 bits para ser armazenado, podemos
 
 O UTF-8 ainda precisa manter as limitações do UTF-16. Como _surrogate pairs_ não são mais utilizados para representar _code points_ estendidos, é necessário garantir que bytes do intervalo `D800..DFFF` não apareçam, já que não possuem significado.
 
-Além disso, apesar de conseguir codificar 21 bits (`U+0000..U+1FFFFF`), nem todos desses representam _code points_ válidos, visto que o padrão Unicode define-os baseando nos limites do UTF-16. Isso significa que o codificador deve assegurar de que todos _code points_ decodificados não sejam maior do que `U+10FFFF`.
+Além disso, apesar de conseguir codificar 21 bits no caso com maior capacidade (`U+0000..U+1FFFFF`), nem todos desses representam _code points_ válidos, visto que o padrão Unicode define-os baseando nos limites do UTF-16. Isso significa que o codificador deve assegurar de que todos _code points_ decodificados não sejam maior do que `U+10FFFF`.
 
-As primeiras versões da especificação do UTF-8 não faziam distinção de qual o tamanho deveria ser utilizado para codificar um _code point_. Por exemplo, o caractere `A` é representado por `U+0041`. Isso significa que ele podia ser representado em UTF-8 como qualquer uma das seguintes sequências:
+As primeiras versões da especificação do UTF-8 não faziam distinção de qual o tamanho deveria ser utilizado para codificar um _code point_. Por exemplo, o caractere `A` é representado por `U+0041 = `#r(`1000001`). Isso significa que ele podia ser representado em UTF-8 como qualquer uma das seguintes sequências:
 
 #align(center, table(columns: (auto, auto),
     align: (right, left),
@@ -146,13 +152,16 @@ Permitir tais codificações causou inúmeras vulnerabilidades de segurança, vi
 O padrão Unicode nomeou esses casos como _overlong encodings_, e modificou especificações futuras para que a única codificação válida de um _code point_ em UTF-8 seja a menor possível. Isso adiciona ainda mais dificuldade na hora de decodificar os bytes, visto que o conteúdo do _code point_ deve ser observado, para checar se fora codificado do tamanho certo.
 
 Assim, validar que uma sequência de bytes é UTF-8 correto significa respeitar as seguintes propriedades:
-1. Nenhum byte está no intervalo de _code points_ de _surrogate pairs_ (`U+D800..U+DFFF`).
+1. Nenhum byte está no intervalo de _code points_ de _surrogate pairs_ (`U+D800..U+DFFF`), e consequentemente, nenhum _code point_ deve ocupar esse intervalo também.
 2. Todo _code point_ lido é menor ou igual a `U+10FFFF`
 3. Todo _code point_ é escrito na menor quantidade de bytes necessária para expressá-lo, isto é, não há _overlong encoding_.
-4. Todo byte de início começa com o header correto (a depender do intervalo do byte).
+4. Todo byte de início começa com o header correto (a depender do intervalo do _codepoint_).
 5. Todo byte de continuação começa com o header correto (`10`).
 
-Portanto, para escrever um programa que codifica UTF-8, precisamos mostrar que esse programa sempre respeita essas propriedades.
+Portanto, para escrever um programa que codifica e decodifica UTF-8 corretamente, precisamos mostrar que esse programa sempre respeita essas propriedades.
+
+= Formalização
+
 
 
 
