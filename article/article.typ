@@ -20,11 +20,13 @@
 
 O processo de desenvolvimento de software pode ser separado em dois problemas distintos: o de validação, que pretende assegurar que o programa a ser desenvolvido resolve um problema desejado, e o de verificação, que assegura que o programa desenvolvido implementa as especificações formadas na fase de validação.
 
-Validação é tópico de estudo das práticas de modelagem de software, que tem como produção gráficos conceituais, modelos e regras de negócio, que devem ser utilizados para desenvolver o programa.
+Validação é o principal tópico de estudo das práticas de modelagem de software, que tem como produção gráficos conceituais, modelos e regras de negócio, que devem ser utilizados para desenvolver o programa. O objetivo dessas é gerar um conjunto de objetivos e propriedades que programas devem satisfazer para que atinjam algum fim no mundo real, conferindo semântica à resultados e implementações, e construindo pontes tangíveis entre modelos teóricos e a realidade prática.
 
-Dessa forma, verificação formal de software descreve o conjunto de axiomas, regras e práticas que permitem construir provas sobre o comportamento de programas de computador. Através do formalismo matemático, torna-se possível conferir a um software fortes garantias de corretude, assegurando-se que está conforme as especificações.
+Assegurar que dada implementação segue as regras de negócio geradas na fase da validação é tópico de estudo da área de verificação. Dela, inúmeras práticas comuns na área de programação são derivadas, como desenvolvimento de testes, garantias de qualidade (QA) e checagens de tipo. Apesar das inúmeras práticas, preencher a lacuna entre a semântica dos modelos teóricos e as implementações em código é extremamente difícil, visto que pela natureza dos testes, não há como checarem com totalidade que o programa está correto, visto que teriam de ter um número impraticável de casos  -- muitas vezes infinito. Por isso, é cotidiano que erros e _bugs_ passem desapercebidos por baterias gigantescas de testes, especialmente quando ocorrem em combinações muito específicas da entrada, já que não conseguem cobrir todos os possíveis casos.
 
-O compilador de C _CompCert_ (@2006-Leroy-compcert) é um dos maiores expoentes dessa área. Ao desenvolver um modelo formal de memória contendo ponteiros, o compilador permite não somente descrever transformações entre programas, mas também provar matematicamente que tais transformações preservam a semântica do programa original. Dessa forma, torna-se trivial introduzir otimizações que simplificam o programa, garantindo que essas não introduzem _bugs_ no programa original. De fato, @Yang2011 mostraram que, dentre todos os compiladores de C tradicionais, incluindo `gcc` e `clang`, o _CompCert_ fora o único a não apresentar sequer um _bug_ de compilação após testes minuciosos.
+Verificação formal de software denomina a área da verificação que oferece diretrizes para raciocinar formalmente sobre um programa, descrevendo axiomas, regras e práticas que permitem construir provas sobre o comportamento desse. Ao estruturar o programa para permitir o raciocínio matemático, torna-se possível atribuir uma semântica a um software, conferindo fortes garantias de corretude, e assegurando-se que esse está conforme as especificações da semântica. Para auxiliar nesse processo, várias ferramentas foram desenvolvidas, como _model checkers_, que tentam gerar provas automaticamente a partir de modelos fornecidos, e provadores de teorema interativos, que permitem o desenvolvedor de elaborar provas sobre programas utilizando linguagens específicas para construí-las.
+
+O compilador de C _CompCert_ (@2006-Leroy-compcert) é um dos maiores expoentes dessa área. Ao desenvolver um modelo formal de memória contendo ponteiros, o compilador permite não somente descrever transformações entre programas, mas também provar matematicamente que tais transformações preservam a semântica do programa original. Dessa forma, torna-se trivial introduzir otimizações que simplificam o programa, garantindo que essas não introduzem _bugs_. De fato, @Yang2011 mostraram que, dentre todos os compiladores de C tradicionais, incluindo `gcc` e `clang`, o _CompCert_ fora o único a não apresentar sequer um _bug_ de compilação após testes minuciosos.
 
 O microkernel _seL4_ (@Klein2014) é o primeiro e único microkernel de propósito geral que possue uma prova de corretude de funcionalidade, isto é, que seu código em _C_ implementa o modelo abstrato de sua especificação, o que o torna livre de problemas de _stack overflow_, _deadlocks_, erros de aritmética e outros problemas de implementação. Além disso, provas de garantia de disponibilidade, integridade, e performance no pior caso são todas formalmente verificadas, fazendo com que esse micro-kernel tenha ampla adoção em casos de uso de missão crítica.
 
@@ -32,9 +34,9 @@ O algoritmo de consenso _Raft_ é um exemplo de algoritmo implementado utilizand
 
 Além de útil para produção de software e algoritmos corretos, as ferramentas de verificação formal são ótimos fundamentos para o desenvolvimento da matemática. @FourColorTheorem completamente formalizaram a prova do teorema das 4 cores no provador interativo Coq, cuja prova inicial, por @Appel1977, era extremamente complicada e sofria críticas por sua complexidade. @Gonthier2013 formalizaram o teorema de Feit-Thompson, cuja prova manual contém mais de 10 mil páginas. Mais recentemente, em 2024, o valor de $"BusyBeaver"(5)$ fora calculado como $47.176.870$ utilizando Coq (@BBchallenge2024), cujo processo consiste em decidir dentre todas as máquinas de Turing de tamanho 5 que terminam, a que leva o maior número de passos para terminar.
 
-Assim, este trabalho tem o objetivo de utilizar a linguagem Coq para desenvolver um programa que le bytes no padrão UTF-8 e formalizar uma prova de que esse programa não aceita bytes inválidos de acordo com a especificação. Isso será feito através de dois programas complementares, um que aceita bytes e retorna _codepoints_ (decodificador), e seu programa dual, que aceita _codepoints_ e retorna _bytes_ (codificador). Além provar propriedades importantes sobre cada um dos programas, o cerne da corretude está na prova de que todo resultado válido de um dos programas é aceito corretamente pelo outro.
+Assim, este trabalho tem o objetivo de utilizar a linguagem Coq para desenvolver um programa que codifica e decodifica bytes no padrão UTF-8 e formalizar uma prova de que esse programa não aceita bytes inválidos de acordo com a especificação. Isso será feito através de dois programas complementares, um que aceita bytes e retorna _codepoints_ (decodificador), e seu programa dual, que aceita _codepoints_ e retorna _bytes_ (codificador). Além provar propriedades importantes sobre cada um dos programas, o cerne da corretude está na prova de que todo resultado válido de um dos programas é aceito corretamente pelo outro.
 
-Performance e eficiência do programa final também serão considerados, com o objetivo de mostrar que não é necessario descartar a eficiência para obter um programa correto. Para tal, uma implementação do codificador baseada em autômatos finitos será desenvolvida, bem como uma prova de que esse é exatamente equivalente ao codificador original correto.
+Performance e eficiência do programa final também serão considerados, com o objetivo de mostrar que não é necessario descartar a eficiência para obter um programa correto. Para tal, uma implementação do codificador baseada em autômatos finitos será desenvolvida, bem como uma prova de que esse é exatamente equivalente ao codificador correto.
 
 = Trabalhos relacionados
 
@@ -68,7 +70,7 @@ Tal quantidade, apesar de muito maior do que os antigos 256, rapidamente provou-
 
 O padrão UCS-2 estendido com _surrogate pairs_ é o padrão conhecido como UTF-16, que rapidamente obteve adoção de sistemas de grande relevância, como as linguagens Java e JavaScript, o sistema de UI Qt e até mesmo as APIs do Windows.
 
-Para determinar se uma sequência de bytes é válida em UTF-16, faz se necessário determinar se os dois primeiros bytes representam o início de um _surrogate pair_, representado por bytes entre `D800` e `DBFF`, seguido de bytes que representam o fim de um _surrogate pair_, entre `DC00` e `DFFF`. O esquema de serialização pode ser visto da seguinte forma:
+Para determinar se uma sequência de bytes é válida em UTF-16, faz se necessário determinar se o primeiro byte representa o início de um _surrogate pair_, representado por bytes entre `D800` e `DBFF`, seguido de bytes que representam o fim de um _surrogate pair_, entre `DC00` e `DFFF`. O esquema de serialização pode ser visto da seguinte forma:
 
 #align(center, table(columns: (auto, auto, auto, auto),
     align: (right, right, right, auto),
@@ -80,7 +82,7 @@ Para determinar se uma sequência de bytes é válida em UTF-16, faz se necessá
 
 Assim, para que a decodificação de UTF-16 seja não ambígua, é necessário que _code points_ do primeiro intervalo, que não possuem cabeçalho para diferenciá-los, não possam começar com a sequência de bits `11011`. Além disso, iniciar um _surrogate pair_ (`D800..DBFF`) e não terminá-lo com um byte no intervalo correto (`DC00..DFFF`) é considerado um erro, e é inválido segundo a especificação. De fato, o padrão Unicode explicita que *nenhum* _code point_ pode ser representado pelo intervalo `U+D800..U+DFFF`, de forma que todos os outros sistemas de codificação -- UTF-8, UTF-32 -- tenham que desenvolver sistemas para evitar que esses sejam considerados _code points_ válidos.
 
-A quantidade de _code points_ definidos pelo Unicode está diretamente ligada à essas limitações do padrão UTF-16, que consegue expressar $1.112.064$ _code points_. Esse número pode ser enxergado da seguinte forma:
+A quantidade de _code points_ definidos pelo Unicode está diretamente ligada à essas limitações do padrão UTF-16, que consegue expressar $1.112.064$ _code points_. Esse número pode ser calculado da seguinte forma:
 #align(center, table(columns: (auto, auto, auto),
     stroke: none,
     table.header("Inicio..Fim", "Tamanho", "Descrição"),
@@ -134,14 +136,16 @@ Além disso, apesar de conseguir codificar 21 bits no caso com maior capacidade 
 
 As primeiras versões da especificação do UTF-8 não faziam distinção de qual o tamanho deveria ser utilizado para codificar um _code point_. Por exemplo, o caractere `A` é representado por `U+0041 = `#r(`1000001`). Isso significa que ele podia ser representado em UTF-8 como qualquer uma das seguintes sequências:
 
+#let gr(t) = text(fill: gray, t)
+
 #align(center, table(columns: (auto, auto),
     align: (right, left),
     stroke: none,
     table.header("Sequência de bits", "Hexadecimal"),
     [`0`#r(`1000001`)], `41`,
-    [`1100000`#r(`1`) `10`#r(`000001`)], `C1 81`,
-    [`11100000 1000000`#r(`1`) `10`#r(`000001`)], `E0 81 81`,
-    [`11110000 10000000 1000000`#r(`1`) `10`#r(`000001`)], `F0 80 81 81`,
+    [`110`#gr(`0000`)#r(`1`) `10`#r(`000001`)], `C1 81`,
+    [`1110`#gr(`0000`) `10`#gr(`00000`)#r(`1`) `10`#r(`000001`)], `E0 81 81`,
+    [`11110`#gr(`000`) `10`#gr(`000000`) `10`#gr(`00000`)#r(`1`) `10`#r(`000001`)], `F0 80 81 81`,
 ))
 
 // https://www.cve.org/CVERecord?id=CVE-2010-3870
@@ -151,7 +155,7 @@ Permitir tais codificações causou inúmeras vulnerabilidades de segurança, vi
 
 O padrão Unicode nomeou esses casos como _overlong encodings_, e modificou especificações futuras para que a única codificação válida de um _code point_ em UTF-8 seja a menor possível. Isso adiciona ainda mais dificuldade na hora de decodificar os bytes, visto que o conteúdo do _code point_ deve ser observado, para checar se fora codificado do tamanho certo.
 
-Assim, validar que uma sequência de bytes é UTF-8 correto significa respeitar as seguintes propriedades:
+Assim, validar que uma sequência de bytes representa UTF-8 válido significa respeitar as seguintes propriedades:
 1. Nenhum byte está no intervalo de _code points_ de _surrogate pairs_ (`U+D800..U+DFFF`), e consequentemente, nenhum _code point_ deve ocupar esse intervalo também.
 2. Todo _code point_ lido é menor ou igual a `U+10FFFF`
 3. Todo _code point_ é escrito na menor quantidade de bytes necessária para expressá-lo, isto é, não há _overlong encoding_.
@@ -161,8 +165,6 @@ Assim, validar que uma sequência de bytes é UTF-8 correto significa respeitar 
 Portanto, para escrever um programa que codifica e decodifica UTF-8 corretamente, precisamos mostrar que esse programa sempre respeita essas propriedades.
 
 = Formalização
-
-
 
 
 #bibliography("references.bib", style: "associacao-brasileira-de-normas-tecnicas")
