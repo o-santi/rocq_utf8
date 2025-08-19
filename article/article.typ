@@ -18,11 +18,11 @@
 // https://tonsky.me/blog/unicode/
 // https://en.wikipedia.org/wiki/Han_unification
 
-O processo de desenvolvimento de software pode ser separado em dois problemas distintos: o de validação, que pretende assegurar que o programa a ser desenvolvido resolve um problema desejado, e o de verificação, que assegura que o programa desenvolvido implementa as especificações formadas na fase de validação.
+O processo de desenvolvimento de software pode ser separado em dois problemas distintos: o de validação, que pretende desenvolver especificações necessárias para que um programa que resolve um problema no mundo real, e o de verificação, que assegura que o programa desenvolvido implementa essas especificações.
 
 Validação é o principal tópico de estudo das práticas de modelagem de software, que tem como produção gráficos conceituais, modelos e regras de negócio, que devem ser utilizados para desenvolver o programa. O objetivo dessas é gerar um conjunto de objetivos e propriedades que programas devem satisfazer para que atinjam algum fim no mundo real, conferindo semântica à resultados e implementações, e construindo pontes tangíveis entre modelos teóricos e a realidade prática.
 
-Assegurar que dada implementação segue as regras de negócio geradas na fase da validação é tópico de estudo da área de verificação. Dela, inúmeras práticas comuns na área de programação são derivadas, como desenvolvimento de testes, garantias de qualidade (QA) e checagens de tipo. Apesar das inúmeras práticas, preencher a lacuna entre a semântica dos modelos teóricos e as implementações em código é extremamente difícil, visto que pela natureza dos testes, não há como checarem com totalidade que o programa está correto, visto que teriam de ter um número impraticável de casos  -- muitas vezes infinito. Por isso, é cotidiano que erros e _bugs_ passem desapercebidos por baterias gigantescas de testes, especialmente quando ocorrem em combinações muito específicas da entrada, já que não conseguem cobrir todos os possíveis casos.
+Assegurar que dada implementação segue as regras de negócio geradas na fase da validação é tópico de estudo da área de verificação. Dela, inúmeras práticas comuns na área de programação são derivadas, como desenvolvimento de testes, garantias de qualidade (QA) e checagens de tipo. Apesar das inúmeras práticas, preencher a lacuna entre a semântica dos modelos teóricos e as implementações em código é extremamente difícil, visto que pela natureza das práticas tradicionais, baseadas em testes unitários, não há como checarem com totalidade que o programa está correto, visto que teriam de ter um número impraticável de casos  -- muitas vezes infinito. Por isso, é cotidiano que erros e _bugs_ passem desapercebidos por baterias gigantescas de testes, especialmente quando ocorrem em combinações muito específicas da entrada.
 
 Verificação formal de software denomina a área da verificação que oferece diretrizes para raciocinar formalmente sobre um programa, descrevendo axiomas, regras e práticas que permitem construir provas sobre o comportamento desse. Ao estruturar o programa para permitir o raciocínio matemático, torna-se possível atribuir uma semântica a um software, conferindo fortes garantias de corretude, e assegurando-se que esse está conforme as especificações da semântica. Para auxiliar nesse processo, várias ferramentas foram desenvolvidas, como _model checkers_, que tentam gerar provas automaticamente a partir de modelos fornecidos, e provadores de teorema interativos, que permitem o desenvolvedor de elaborar provas sobre programas utilizando linguagens específicas para construí-las.
 
@@ -39,6 +39,25 @@ Assim, este trabalho tem o objetivo de utilizar a linguagem Coq para desenvolver
 Performance e eficiência do programa final também serão considerados, com o objetivo de mostrar que não é necessario descartar a eficiência para obter um programa correto. Para tal, uma implementação do codificador baseada em autômatos finitos será desenvolvida, bem como uma prova de que esse é exatamente equivalente ao codificador correto.
 
 = Trabalhos relacionados
+
+// https://www.swift.org/blog/utf8-string/
+// https://github.com/rust-lang/rust/blob/master/library/core/src/str/validations.rs#L126
+// TODO: figure out whatever the hack swift does for UTF-8 validation:
+// https://github.com/swiftlang/swift/blob/89b43dccf31d5331cd7fe1336d44e6407e08eadc/stdlib/public/core/UTF8.swift#L14
+
+A literatura relacionada a implementação de codificadores binários formalmente verificados é extremamente extensa, motivados especialmente pela falta de confiança em ferramentas de geração de código para esses usos. 
+
+Fundamentados pela falta de confiança, @Delaware2019 desenvolveram uma biblioteca em Rocq, _Narcissus_, que permite o usuário de descrever formatos binários de mensagens em uma DSL. A principal contribuição do artigo é utilizar o maquinário nativo de Rocq para derivar tanto as implementações e as provas utilizando táticas -- uma espécie de macro para gerar provas -- de forma que o sistema seja extremamente expressivo. Em casos que a biblioteca não é forte o suficiente para gerar as provas, o usuário é capaz de fornecer provas manualmente escritas para a corretude, de forma a estender as capacidades do sistema.
+
+@Koprowski2010 forneceram uma implementação similar para linguagens que podem ser descritas por PEGs em Coq, junto de exemplos práticos de implementações de parsers de XML e da linguagem Java. @vanGeest2017 desenvolveram uma biblioteca em Agda para descrever pacotes em formários abitrários, focando no caso de uso dos padrões ASN.1, fornecendo uma formalização de formato IPV4.
+
+@Ye2019 descrevem o processo de implementar em Coq um gerador do par codificador/decodificador para Protobuf. Como o protocolo permite que o usuário gere formatos binários baseado em arquivos de configuração, os autores oferecem uma formalização da semântica para os arquivos _protocol buffers_, e utilizam-a para gerar programas que codificam e decodicam os formatos específicos do arquivo, junto das provas de que os programas gerados devem obedecer a essa semântica corretamente.
+
+@PulseParse2025 desenvolveram uma biblioteca parecida chamada _PulseParse_ na linguagem F\*, para implementar serializadores e desserializadores para vários formatos: CBOR, um formato binário inspirado em JSON, e CDDL, uma linguagem que especifica formatos estáticos CBOR. Utilizando essa biblioteca, os autores fornecem uma semântica ao CDDL e provam a corretude de programas gerados em cima desse conforme essa semântica.
+
+O sistema de verificação formal não foi usado apenas nesse contexto, e é possível encontrar formalizações de algoritmos mais complexos. #text(fill:red, "Laurent Théry") formalizou uma implementação do algoritmo de Huffman, frequentemente utilizado em padrões de compressão sem perda de dados. Similarmente, @DeflateInCoq2016 construiram uma implementação completa do algoritmo de Deflate, usado em formatos como PNG e GZIP.
+
+Apesar de não fornecerem provas de corretude, @Lemire2020 desenvolveram um algoritmo para validar UTF-8 utilizando SIMD, 10 vezes mais rápido do que outros algoritmos da época. Como implementações padrões de validações de UTF-8, temos também as bibliotecas padrões de Rust e Swift, cuja principal implementação de `String` sempre valida que seus bytes são UTF-8 (#text(fill: red, "deveria citar isso aqui?")). 
 
 = Unicode
 
@@ -77,7 +96,7 @@ Para determinar se uma sequência de bytes é válida em UTF-16, faz se necessá
     stroke: none,
     table.header(table.cell(colspan: 2, align:center, "Início..Fim"), table.cell(align:center, "Bytes"), "Bits relevantes"),
     [`U+0000`], [`U+FFFF`], [`wwwwxxxx` `yyyyzzzz`], "16 bits",
-    [`U+10000`],  [`U+10FFFF`], [`110110vv` `vv wwwwxx` `110111xx` `xxyyyyzz`], "20 bits",
+    [`U+10000`],  [`U+10FFFF`], [`110110vv` `vvwwwwxx` `110111xx` `yyyyzzzz`], "20 bits",
 ))
 
 Assim, para que a decodificação de UTF-16 seja não ambígua, é necessário que _code points_ do primeiro intervalo, que não possuem cabeçalho para diferenciá-los, não possam começar com a sequência de bits `11011`. Além disso, iniciar um _surrogate pair_ (`D800..DBFF`) e não terminá-lo com um byte no intervalo correto (`DC00..DFFF`) é considerado um erro, e é inválido segundo a especificação. De fato, o padrão Unicode explicita que *nenhum* _code point_ pode ser representado pelo intervalo `U+D800..U+DFFF`, de forma que todos os outros sistemas de codificação -- UTF-8, UTF-32 -- tenham que desenvolver sistemas para evitar que esses sejam considerados _code points_ válidos.
@@ -165,6 +184,5 @@ Assim, validar que uma sequência de bytes representa UTF-8 válido significa re
 Portanto, para escrever um programa que codifica e decodifica UTF-8 corretamente, precisamos mostrar que esse programa sempre respeita essas propriedades.
 
 = Formalização
-
 
 #bibliography("references.bib", style: "associacao-brasileira-de-normas-tecnicas")
