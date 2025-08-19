@@ -21,7 +21,9 @@ Inductive range :=
 | Range_C0_C1
 | Range_C2_DF
 | Byte_E0 
-| Range_E1_EF
+| Range_E1_EC
+| Byte_ED
+| Range_EE_EF
 | Byte_F0
 | Range_F1_F3
 | Byte_F4
@@ -33,6 +35,7 @@ Inductive parsing_state :=
 | Expecting_1_80_BF
 | Expecting_2_80_BF
 | Expecting_3_80_BF
+| Expecting_2_80_9F
 | Expecting_2_A0_BF
 | Expecting_3_90_BF
 | Expecting_3_80_8F.
@@ -59,7 +62,9 @@ Definition byte_range (b: byte) : range :=
   | xc2 | xc3 | xc4 | xc5 | xc6 | xc7 | xc8 | xc9 | xca | xcb | xcc | xcd | xce | xcf
   | xd0 | xd1 | xd2 | xd3 | xd4 | xd5 | xd6 | xd7 | xd8 | xd9 | xda | xdb | xdc | xdd | xde | xdf => Range_C2_DF
   | xe0 => Byte_E0
-  | xe1 | xe2 | xe3 | xe4 | xe5 | xe6 | xe7 | xe8 | xe9 | xea | xeb | xec | xed | xee | xef => Range_E1_EF
+  | xe1 | xe2 | xe3 | xe4 | xe5 | xe6 | xe7 | xe8 | xe9 | xea | xeb | xec  => Range_E1_EC
+  | xed => Byte_ED
+  | xee | xef => Range_EE_EF
   | xf0 => Byte_F0
   | xf1 | xf2 | xf3 => Range_F1_F3
   | xf4 => Byte_F4
@@ -93,18 +98,21 @@ Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @res
   | (Initial, Range_00_7F) => Ok (Finished (extract_7_bits b))
   | (Initial, Range_C2_DF) => Ok (More Expecting_1_80_BF (extract_5_bits b))
   | (Initial, Byte_E0)     => Ok (More Expecting_2_A0_BF (extract_4_bits b))
-  | (Initial, Range_E1_EF) => Ok (More Expecting_2_80_BF (extract_5_bits b))
+  | (Initial, Range_E1_EC)
+  | (Initial, Range_EE_EF) => Ok (More Expecting_2_80_BF (extract_5_bits b))
+  | (Initial, Byte_ED)     => Ok (More Expecting_2_80_9F (extract_5_bits b))
   | (Initial, Byte_F0)     => Ok (More Expecting_3_90_BF (extract_3_bits b))
   | (Initial, Range_F1_F3) => Ok (More Expecting_3_80_BF (extract_3_bits b))
   | (Initial, Byte_F4)     => Ok (More Expecting_3_80_8F (extract_3_bits b))
-  | (Initial, Range_C0_C1) => Err OverlongEncoding
   | (Initial, _) => Err (InvalidStartHeader (Some b))
-  | (Expecting_1_80_BF,  Range_A0_BF)
-  | (Expecting_1_80_BF,  Range_90_9F)
-  | (Expecting_1_80_BF,  Range_80_8F) => Ok (Finished (push_bottom_bits carry b))
-  | (Expecting_2_80_BF,  Range_80_8F)
-  | (Expecting_2_80_BF,  Range_90_9F)
-  | (Expecting_2_80_BF,  Range_A0_BF) => Ok (More Expecting_1_80_BF (push_bottom_bits carry b))
+  | (Expecting_1_80_BF, Range_A0_BF)
+  | (Expecting_1_80_BF, Range_90_9F)
+  | (Expecting_1_80_BF, Range_80_8F) => Ok (Finished (push_bottom_bits carry b))
+  | (Expecting_2_80_BF, Range_80_8F)
+  | (Expecting_2_80_BF, Range_90_9F)
+  | (Expecting_2_80_9F, Range_80_8F)
+  | (Expecting_2_80_9F, Range_90_9F)
+  | (Expecting_2_80_BF, Range_A0_BF) => Ok (More Expecting_1_80_BF (push_bottom_bits carry b))
   | (Expecting_3_80_BF, Range_80_8F)
   | (Expecting_3_80_BF, Range_90_9F)
   | (Expecting_3_80_BF, Range_A0_BF)
