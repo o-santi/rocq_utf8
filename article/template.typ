@@ -1,3 +1,22 @@
+#let hex(n) = {
+    let array = ()
+    while true {
+        let digit = calc.rem-euclid(n, 0x10)
+        n = int(n / 0x10)
+
+        array.push(digit)
+        if n == 0 {
+            break
+        }
+    }
+
+    while array.len() > 0 {
+        let digit = array.pop()
+        str(("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F").at(digit))
+    }
+}
+
+
 #let buildMainHeader(mainHeadingContent) = {
     align(center, smallcaps(mainHeadingContent))
     line(length: 100%)

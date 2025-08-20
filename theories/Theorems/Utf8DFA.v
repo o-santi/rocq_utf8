@@ -114,10 +114,10 @@ Lemma byte_range_c2_df_bits : forall b,
     byte_range b = Range_C2_DF ->
     exists b1 b2 b3 b4 b5,
       (Byte.to_bits b = (b1, (b2, (b3, (b4, (b5, (0, (1, 1))))))) /\
-       (b3 = 0 /\ b4 = 0 /\ b5 = 0 -> b2 = 1)).
+       (b3 = 1 \/ b4 = 1 \/ b5 = 1 \/ b2 = 1)).
 Proof.
   intros.
-  destruct b; inversion H; repeat eexists; intros G; destruct G as [P1 [P2 P3]]; try discriminate; reflexivity.
+  destruct b; inversion H; repeat eexists; auto. 
 Qed.
 
 Lemma byte_e0_bits : forall b,
@@ -128,10 +128,29 @@ Proof.
   destruct b; inversion H; reflexivity.
 Qed.
 
-Lemma byte_range_e1_ef_bits : forall b,
-    byte_range b = Range_E1_EF ->
+Lemma byte_range_e1_ec_bits : forall b,
+    byte_range b = Range_E1_EC ->
     exists b1 b2 b3 b4,
       Byte.to_bits b = (b1, (b2, (b3, (b4, (0, (1, (1, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists.
+Qed.
+
+
+Lemma byte_ed_bits : forall b,
+    byte_range b = Byte_ED ->
+    (Byte.to_bits b = (1, (0, (1, (1, (0, (1, (1, 1)))))))).
+Proof.
+  intros.
+  destruct b; inversion H; reflexivity.
+Qed.
+
+
+Lemma byte_range_ee_ef_bits : forall b,
+    byte_range b = Range_EE_EF ->
+    exists bit,
+      Byte.to_bits b = (bit, (1, (1, (1, (0, (1, (1, 1))))))).
 Proof.
   intros.
   destruct b; inversion H; repeat eexists.
@@ -173,6 +192,31 @@ Proof.
   destruct b; inversion H; repeat eexists.
 Qed.
 
+Lemma byte_range_of_bits_00_7f: forall b1 b2 b3 b4 b5 b6 b7,
+    byte_range (of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, 0)))))))) = Range_00_7F.
+Proof.
+  intros.
+  destruct (of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, 0)))))))) eqn:H;
+    apply (f_equal Byte.to_bits) in H;
+    rewrite Byte.to_bits_of_bits in H;
+    inversion H;
+    reflexivity.
+Qed.
+
+Lemma byte_range_of_bits_c2_df: forall b1 b2 b3 b4 b5,
+    (b2 = 1 \/ b3 = 1 \/ b4 = 1 \/ b5 = 1) ->
+    byte_range (of_bits (b1, (b2, (b3, (b4, (b5, (0, (1, 1)))))))) = Range_C2_DF.
+Proof.
+  intros.
+  destruct (of_bits (b1, (b2, (b3, (b4, (b5, (0, (1, 1)))))))) eqn:H2;
+    apply (f_equal Byte.to_bits) in H2;
+    rewrite Byte.to_bits_of_bits in H2;
+    inversion H2;
+    try reflexivity; destruct H as [G | [G | [G | G]]]; subst;
+    match goal with
+    | [F: 1 = 0 |- _] => apply Bool.diff_true_false in F; destruct F
+    end.
+Qed.
 
 Lemma byte_range_of_bits_a0_bf: forall b1 b2 b3 b4 b5,
     byte_range (of_bits (b1, (b2, (b3, (b4, (b5, (1, (0, 1)))))))) = Range_A0_BF.
@@ -195,6 +239,22 @@ Proof.
     inversion H;
     auto.
 Qed.
+
+
+Lemma byte_range_of_bits_80_9f: forall (b1 b2 b3 b4 b5: bool),
+    let b := of_bits (b1, (b2, (b3, (b4, (b5, (0, (0, 1))))))) in
+    (byte_range b = Range_80_8F) \/
+      (byte_range b = Range_90_9F).
+Proof.
+  intros.
+  destruct b eqn:H;
+    apply (f_equal Byte.to_bits) in H;
+    subst b;
+    rewrite Byte.to_bits_of_bits in H;
+    inversion H;
+    auto.
+Qed.
+
 
 Lemma byte_range_of_bits_80_bf: forall (b1 b2 b3 b4 b5 b6: bool),
     let b := of_bits (b1, (b2, (b3, (b4, (b5, (b6, (0, 1))))))) in
@@ -222,6 +282,151 @@ Proof.
     rewrite Byte.to_bits_of_bits in H;
     inversion H;
     auto.
+Qed.
+
+
+Lemma byte_range_of_bits_ee_ef: forall (bit: bool),
+    let b := of_bits (bit, (1, (1, (1, (0, (1, (1, 1))))))) in
+    byte_range b = Range_EE_EF.
+Proof.
+  intros.
+  destruct b eqn:H;
+    apply (f_equal Byte.to_bits) in H;
+    subst b;
+    rewrite Byte.to_bits_of_bits in H;
+    inversion H;
+    auto.
+Qed.
+
+Create HintDb next_state_hintdb.
+
+Lemma next_state_initial_00_7f :
+  forall b1 b2 b3 b4 b5 b6 b7,
+    let b := (of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, 0)))))))) in
+    next_state Initial Utf8DFA.zero_codep b
+    = Ok (Finished (0, b4_zero, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7))).
+Proof.
+  intros.
+  unfold next_state. subst b.
+  pose proof (byte_range_of_bits_00_7f b7 b6 b5 b4 b3 b2 b1) as G.
+  rewrite G.
+  unfold extract_7_bits.
+  rewrite Byte.to_bits_of_bits.
+  reflexivity.
+Qed.
+
+Lemma next_state_initial_c2_df :
+  forall b1 b2 b3 b4 b5, (b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) ->
+    let b := (of_bits (b5, (b4, (b3, (b2, (b1, (0, (1, 1)))))))) in
+    next_state Initial Utf8DFA.zero_codep b
+    = Ok (More Expecting_1_80_BF (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, b1), (b2, b3, b4, b5))).
+Proof.
+  intros.
+  unfold next_state. subst b.
+  pose proof (byte_range_of_bits_c2_df b5 b4 b3 b2 b1) as G.
+  rewrite G.
+  unfold extract_5_bits.
+  rewrite Byte.to_bits_of_bits.
+  reflexivity.
+  destruct H as [F | [F | [F | F]]]; auto.
+Qed.
+
+Lemma next_state_initial_e1_ec :
+  forall b1 b2 b3 b4,
+    ((b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) /\ (b3 = 0 \/ b4 = 0 \/ (b1 = 0 /\ b2 = 0))) ->
+  let b := (of_bits (b1, (b2, (b3, (b4, (0, (1, (1, 1)))))))) in
+  next_state Initial Utf8DFA.zero_codep b
+  = Ok (More Expecting_2_80_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (b4, b3, b2, b1))).
+Proof.
+  intros.
+  unfold next_state,  extract_4_bits. destruct b eqn:B; subst b;
+    apply (f_equal Byte.to_bits) in B; rewrite Byte.to_bits_of_bits in B; try discriminate; inversion B; try reflexivity;
+    destruct H as [[G1 | [G1 | [G1 | G1]]] [G2 | [G2 | [G2 G3]]]]; subst;
+    match goal with
+      | [F: 0 = 1 |- _] => symmetry in F; apply Bool.diff_true_false in F; destruct F
+      | [F: 1 = 0 |- _] => apply Bool.diff_true_false in F; destruct F
+      end.
+Qed.
+
+Lemma next_state_initial_e0 :
+    let b := (of_bits (0, (0, (0, (0, (0, (1, (1, 1)))))))) in
+    next_state Initial Utf8DFA.zero_codep b
+    = Ok (More Expecting_2_A0_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0))).
+Proof.
+  intros.
+  unfold next_state. destruct b eqn:B; subst b;
+  apply (f_equal Byte.to_bits) in B; rewrite Byte.to_bits_of_bits in B; try discriminate.
+  unfold extract_4_bits.
+  reflexivity.
+Qed.
+
+  
+Lemma next_state_initial_ed :
+    let b := (of_bits (1, (0, (1, (1, (0, (1, (1, 1)))))))) in
+    next_state Initial Utf8DFA.zero_codep b
+    = Ok (More Expecting_2_80_9F (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0), (1, 1, 0, 1))).
+Proof.
+  intros.
+  unfold next_state. destruct b eqn:B; subst b;
+  apply (f_equal Byte.to_bits) in B; rewrite Byte.to_bits_of_bits in B; try discriminate.
+  unfold extract_4_bits.
+  reflexivity.
+Qed.
+
+Lemma next_state_initial_ee_ef :
+  forall bit, 
+    let b := (of_bits (bit, (1, (1, (1, (0, (1, (1, 1)))))))) in
+    next_state Initial Utf8DFA.zero_codep b
+    = Ok (More Expecting_2_80_BF (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0), (1, 1, 1, bit))).
+Proof.
+  intros.
+  unfold next_state. subst b.
+  pose proof (byte_range_of_bits_ee_ef bit) as G.
+  rewrite G.
+  unfold extract_4_bits.
+  rewrite Byte.to_bits_of_bits.
+  reflexivity.
+Qed.
+
+Lemma next_state_initial_f1_f3 :
+  forall b1 b2, (b2 = 1 \/ b1 = 1) ->
+    let b := (of_bits (b1, (b2, (0, (0, (1, (1, (1, 1)))))))) in
+    next_state Initial Utf8DFA.zero_codep b
+    = Ok (More Expecting_3_80_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, b2, b1))).
+Proof.
+  intros.
+  unfold next_state. destruct b eqn:B; subst b;
+  apply (f_equal Byte.to_bits) in B; rewrite Byte.to_bits_of_bits in B; try discriminate;
+    unfold extract_3_bits;
+    inversion B; subst;
+    try reflexivity; destruct H; match goal with
+      | [F: 0 = 1 |- _] => symmetry in F; apply Bool.diff_true_false in F; destruct F
+      | [F: 1 = 0 |- _] => apply Bool.diff_true_false in F; destruct F
+      end.
+Qed.
+
+Lemma next_state_initial_f0 :
+  let b := (of_bits (0, (0, (0, (0, (1, (1, (1, 1)))))))) in
+  next_state Initial Utf8DFA.zero_codep b
+  = Ok (More Expecting_3_90_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0))).
+Proof.
+  intros.
+  unfold next_state. destruct b eqn:B; subst b;
+  apply (f_equal Byte.to_bits) in B; rewrite Byte.to_bits_of_bits in B; try discriminate.
+  unfold extract_3_bits.
+  reflexivity.
+Qed.
+
+Lemma next_state_initial_f4 :
+  let b := (of_bits (0, (0, (1, (0, (1, (1, (1, 1)))))))) in
+  next_state Initial Utf8DFA.zero_codep b
+  = Ok (More Expecting_3_80_8F (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 1, 0, 0))).
+Proof.
+  intros.
+  unfold next_state. destruct b eqn:B; subst b;
+  apply (f_equal Byte.to_bits) in B; rewrite Byte.to_bits_of_bits in B; try discriminate.
+  unfold extract_3_bits.
+  reflexivity.
 Qed.
 
 Lemma next_state_expecting_1_80_bf :
@@ -252,6 +457,20 @@ Proof.
     rewrite Byte.to_bits_of_bits; reflexivity.
 Qed.
 
+
+Lemma next_state_expecting_2_80_9f :
+  forall c1 c2 c3 c4 c5 c6
+    b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b17 b18 b19 b20 b21,
+    let b := (of_bits (b21, (b20, (b19, (b18, (b17, (0, (0, 1)))))))) in 
+    next_state Expecting_2_80_9F (c1, (c2, c3, c4, c5), (c6, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11), (b12, b13, b14, b15)) b
+    = Ok (More Expecting_1_80_BF (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, 0, b17), (b18, b19, b20, b21))).
+Proof.
+  intros.
+  unfold next_state. subst b.
+  pose proof (byte_range_of_bits_80_9f b21 b20 b19 b18 b17) as [G | G]; rewrite G;
+    unfold push_bottom_bits;
+    rewrite Byte.to_bits_of_bits; reflexivity.
+Qed.
 
 Lemma next_state_expecting_3_80_bf :
   forall c1 c2 c3 c4 c5 c6
@@ -330,128 +549,116 @@ Proof.
   destruct b; reflexivity.
 Qed.
 
-Theorem utf8_decoders_equal_strong : forall (bytes less: list byte),
-    (List.length less) <= (List.length bytes) -> 
-    ok (utf8_dfa_decode less) = ok (utf8_decode less).
+Ltac next_state_DFA_run :=
+  unfold b4_zero;
+  match goal with
+  | [ |- context[next_state Initial           ?code (of_bits (?b1, (?b2, (?b3, (?b4, (?b5, (?b6, (?b7, 0))))))))]] => rewrite next_state_initial_00_7f; simpl
+  | [ |- context[next_state Expecting_1_80_BF ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (?b5, (0, 1))))))))]]   => rewrite next_state_expecting_1_80_bf; simpl
+  | [ |- context[next_state Initial           ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (0, (1, 1))))))))]]     => rewrite next_state_initial_c2_df; auto; simpl; next_state_DFA_run
+  | [ |- context[next_state Initial           ?code (of_bits (0, (0, (0, (0, (0, (1, (1, 1))))))))]]               => rewrite next_state_initial_e0; simpl; next_state_DFA_run
+  | [ |- context[next_state Initial           ?code (of_bits (1, (0, (1, (1, (0, (1, (1, 1))))))))]]               => rewrite next_state_initial_ed; simpl; next_state_DFA_run
+  | [ |- context[next_state Initial           ?code (of_bits (?b, (1, (1, (1, (0, (1, (1, 1))))))))]]              => rewrite next_state_initial_ee_ef; simpl; next_state_DFA_run
+  | [ |- context[next_state Initial           ?code (of_bits (?b0, (?b1, (?b2, (?b3, (0, (1, (1, 1))))))))]]       => rewrite next_state_initial_e1_ec; auto; simpl; next_state_DFA_run
+  | [ |- context[next_state Initial           ?code (of_bits (0, (0, (0, (0, (1, (1, (1, 1))))))))]]               => rewrite next_state_initial_f0; simpl; next_state_DFA_run
+  | [ |- context[next_state Initial           ?code (of_bits (0, (0, (1, (0, (1, (1, (1, 1))))))))]]               => rewrite next_state_initial_f4; simpl; next_state_DFA_run
+  | [ |- context[next_state Initial           ?code (of_bits (?b0, (?b1, (0, (0, (1, (1, (1, 1))))))))]]           => rewrite next_state_initial_f1_f3; auto; simpl; next_state_DFA_run
+  | [ |- context[next_state Expecting_2_80_9F ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (0, (0, 1))))))))]]     => rewrite next_state_expecting_2_80_9f; simpl; next_state_DFA_run
+  | [ |- context[next_state Expecting_2_A0_BF ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (1, (0, 1))))))))]]     => rewrite next_state_expecting_2_a0_bf; simpl; next_state_DFA_run
+  | [ |- context[next_state Expecting_2_80_BF ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (?b5, (0, 1))))))))]]   => rewrite next_state_expecting_2_80_bf; simpl; next_state_DFA_run
+  | [ |- context[next_state Expecting_3_80_8F ?code (of_bits (?b0, (?b1, (?b2, (?b3, (0, (0, (0, 1))))))))]]       => rewrite next_state_expecting_3_80_8f; simpl; next_state_DFA_run
+  | [ |- context[next_state Expecting_3_90_BF ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (1, (0, 1))))))))]]     => rewrite next_state_expecting_3_90_bf_p1; simpl; next_state_DFA_run
+  | [ |- context[next_state Expecting_3_90_BF ?code (of_bits (?b0, (?b1, (?b2, (?b3, (1, (0, (0, 1))))))))]]       => rewrite next_state_expecting_3_90_bf_p2; simpl; next_state_DFA_run
+  | [ |- context[next_state Expecting_3_80_BF ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (?b5, (0, 1))))))))]]   => rewrite next_state_expecting_3_80_bf; simpl; next_state_DFA_run
+  | _                                                                                                             => idtac
+  end.
+
+Theorem utf8_decoders_equal_left_strong : forall (bytes less: list byte) code rest,
+    (List.length less) <= (List.length bytes) ->
+    utf8_decode less = Ok (code, rest) -> utf8_dfa_decode less = Ok (code, rest).
 Proof.
   Opaque Byte.of_bits.
   intros bytes.
-  induction bytes; intros.
-  - inversion H. rewrite length_zero_iff_nil in H1. subst. reflexivity.
-  - unfold utf8_dfa_decode, utf8_decode, all, all_aux. fold (all_aux parse_codepoint).   
-    destruct less as [| byte byte_rest]; [ reflexivity | ].
-    destruct (parse_codepoint (byte::byte_rest)) as [[code rest] | err] eqn:P.
-    unfold bind.
-    rewrite ok_let_star with (res := all_aux parse_codepoint (Datatypes.length (byte :: byte_rest)) rest).
-    rewrite <- all_aux_saturation_aux with (n:= (S (S (Datatypes.length (rest))))).
-    fold (all parse_codepoint rest). fold (utf8_decode rest). rewrite <- IHbytes.
-    3: apply parse_codepoint_strong_progress.
-    2,3,4: apply parse_codepoint_strong_progress in P; simpl in *; lia.
-      
-    unfold next_state.
-    destruct (byte_range byte) eqn:ByteRangeByte;
-      destruct (parse_codepoint (byte::byte_rest)) as [[code rest] | err] eqn:P;
-      try rewrite <- all_aux_saturation_aux with (n:= (S (S (Datatypes.length (rest)))));
-      try (fold (all parse_codepoint rest); fold (utf8_decode rest));
-      try apply parse_codepoint_strong_progress;
-      try rewrite <- IHbytes;
-      try (apply parse_codepoint_strong_progress in P; simpl in *; lia).
-    1, 2: apply byte_range_00_7f_bits in ByteRangeByte; destruct ByteRangeByte as [b1 [b2 [b3 [b4 [b5 [b6 [b7 byte_bits]]]]]]].
-    3, 4: apply byte_range_80_8f_bits in ByteRangeByte; destruct ByteRangeByte as [b1 [b2 [b3 [b4 byte_bits]]]].
-    5, 6: apply byte_range_90_9f_bits in ByteRangeByte; destruct ByteRangeByte as [b1 [b2 [b3 [b4 byte_bits]]]].
-    7, 8: apply byte_range_a0_bf_bits in ByteRangeByte; destruct ByteRangeByte as [b1 [b2 [b3 [b4 [b5 byte_bits]]]]].
-    9, 10: apply byte_range_c0_c1_bits in ByteRangeByte; destruct ByteRangeByte as [b1 byte_bits].
-    1,2, 3, 4, 5, 6, 7, 8: unfold parse_codepoint, parse_header, encoding_size_from_header, extract_7_bits in *; rewrite byte_bits in P; repeat rewrite if_redundant in P; inversion P; try reflexivity; rewrite byte_bits. 
-    1, 2: unfold parse_codepoint, parse_header, encoding_size_from_header in P; rewrite byte_bits in P; simpl in P; destruct (parse_continuation byte_rest) as [[v rest2] | err2] eqn: P_cont_br; inversion P.
-    reflexivity.
-    unfold parse_continuation in P_cont_br. rewrite parser_map_correct in P_cont_br. destruct byte_rest; inversion P_cont_br. subst. 
-    
-    (* destruct (parse_codepoint (byte :: byte_rest)) as [[val rest] | err] eqn:P_byte_byte_rest. *)
-    (* rewrite <- all_aux_saturation_aux with (n:= (S (S (Datatypes.length (rest))))). *)
-    (* fold (all parse_codepoint rest). fold (utf8_decode rest). rewrite <- IHbytes. *)
-    (* 3: apply parse_codepoint_strong_progress. *)
-    (* 2,3,4: simpl in H; apply parse_codepoint_strong_progress in P_byte_byte_rest; simpl in P_byte_byte_rest; simpl; lia. *)
-    (* simpl. *)
-    (* unfold parse_codepoint, parse_header, encoding_size_from_header in P_byte_byte_rest. *)
-    (* unfold next_state, extract_3_bits, extract_4_bits, extract_5_bits, extract_7_bits. *)
-    (* destruct (byte_range byte) eqn:B; [ *)
-    (*     apply byte_range_00_7f_bits in B as byte_bits; destruct byte_bits as [b1 [b2 [b3 [b4 [b5 [b6 [b7 byte_bits]]]]]]] *)
-    (*   | apply byte_range_80_8f_bits in B as byte_bits; destruct byte_bits as [b1 [b2 [b3 [b4 byte_bits]]]] *)
-    (*   | apply byte_range_90_9f_bits in B as byte_bits; destruct byte_bits as [b1 [b2 [b3 [b4 byte_bits]]]] *)
-    (*   | apply byte_range_a0_bf_bits in B as byte_bits; destruct byte_bits as [b1 [b2 [b3 [b4 [b5 byte_bits]]]]] *)
-    (*   | apply byte_range_c0_c1_bits in B as byte_bits; destruct byte_bits as [b1 byte_bits] *)
-    (*   | apply byte_range_c2_df_bits in B as byte_bits; destruct byte_bits as [b1 [b2 [b3 [b4 [b5 [byte_bits not_c0_c1]]]]]] *)
-    (*   | apply byte_e0_bits in B as byte_bits *)
-    (*   | apply byte_range_e1_ef_bits in B as byte_bits; destruct byte_bits as [b1 [b2 [b3 [b4 byte_bits]]]] *)
-    (*   | apply byte_f0_bits in B as byte_bits *)
-    (*   | apply byte_range_f1_f3_bits in B as byte_bits; destruct byte_bits as [b1 [b2 byte_bits]] *)
-    (*   | apply byte_f4_bits in B as byte_bits *)
-    (*   | apply byte_range_f5_ff_bits in B as byte_bits; destruct byte_bits as [b1 [b2 [b3 [b4 byte_bits]]]] *)
-    (*   ]; rewrite byte_bits in *; simpl in *; try (crush_bits; simpl in *; inversion P_byte_byte_rest; subst; reflexivity). *)
-    (* * destruct (parse_continuation byte_rest) as [[r byte_rest2] | err]; try discriminate. *)
-    (* * repeat rewrite if_redundant in P_byte_byte_rest. *)
-    (*   simpl in *; destruct (parse_continuation byte_rest) as [[r byte_rest2] | err] eqn:P_cont_byte_rest; try discriminate. *)
-    (*   simpl in P_byte_byte_rest; to_bits r; inversion P_byte_byte_rest; subst. *)
-    (*   destruct byte_rest; try discriminate; *)
-    (*     destruct_parse_continuation; inversion P_cont_byte_rest; subst; *)
-    (*     crush_bits; simpl; unfold b4_zero; *)
-    (*     rewrite next_state_expecting_1_80_bf; simpl; inversion H1; subst; reflexivity. *)
-    (* * destruct (parse_continuation byte_rest) as [[snd rest2] | err] eqn:P_cont_byte_rest; try discriminate. simpl in P_byte_byte_rest. *)
-    (*   destruct (parse_continuation rest2) as [[trd rest3] | err] eqn:P_cont_rest2; try discriminate. simpl in P_byte_byte_rest. to_bits snd; to_bits trd. *)
-    (*   crush_bits; try discriminate. *)
-    (*   repeat destruct_parse_continuation. inversion P_cont_byte_rest; inversion P_cont_rest2; inversion P_byte_byte_rest; subst. *)
-    (*   simpl. unfold b4_zero. rewrite next_state_expecting_2_a0_bf. simpl. *)
-    (*   rewrite next_state_expecting_1_80_bf. simpl. reflexivity. *)
-    (* * rewrite if_redundant in P_byte_byte_rest. *)
-    (*   simpl in *. *)
-    (*   destruct (parse_continuation byte_rest) as [[snd rest2] | err] eqn:P_cont_byte_rest; try discriminate. simpl in P_byte_byte_rest. *)
-    (*   destruct (parse_continuation rest2) as [[trd rest3] | err] eqn:P_cont_rest2; try discriminate. simpl in P_byte_byte_rest. to_bits snd; to_bits trd. *)
-    (*   repeat destruct_parse_continuation. *)
-    (*   crush_bits; inversion P_cont_byte_rest; inversion P_cont_rest2; inversion P_byte_byte_rest; simpl; subst; *)
-    (*   unfold b4_zero; *)
-    (*   rewrite next_state_expecting_2_80_bf; simpl; *)
-    (*   rewrite next_state_expecting_1_80_bf; reflexivity. *)
-    (* * destruct (parse_continuation byte_rest) as [[snd rest2] | err] eqn:P_cont_byte_rest; try discriminate. simpl in P_byte_byte_rest. *)
-    (*   destruct (parse_continuation rest2) as [[trd rest3] | err] eqn:P_cont_rest2; try discriminate. simpl in P_byte_byte_rest. to_bits snd; to_bits trd. *)
-    (*   destruct (parse_continuation rest3) as [[frth rest4] | err] eqn:P_cont_rest3; try discriminate. simpl in P_byte_byte_rest. to_bits frth. *)
-    (*   crush_bits; simpl; repeat destruct_parse_continuation; *)
-    (*     inversion P_cont_byte_rest; inversion P_cont_rest2; inversion P_cont_rest3; inversion P_byte_byte_rest; subst; *)
-    (*     simpl; unfold b4_zero; *)
-    (*     try rewrite next_state_expecting_3_90_bf_p1; try rewrite next_state_expecting_3_90_bf_p2; simpl; *)
-    (*          rewrite next_state_expecting_2_80_bf; simpl; *)
-    (*          rewrite next_state_expecting_1_80_bf; reflexivity. *)
-    (* * destruct (parse_continuation byte_rest) as [[snd rest2] | err] eqn:P_cont_byte_rest; try discriminate. simpl in P_byte_byte_rest. *)
-    (*   destruct (parse_continuation rest2) as [[trd rest3] | err] eqn:P_cont_rest2; try discriminate. simpl in P_byte_byte_rest. to_bits snd; to_bits trd. *)
-    (*   destruct (parse_continuation rest3) as [[frth rest4] | err] eqn:P_cont_rest3; try discriminate. simpl in P_byte_byte_rest. to_bits frth. unfold b4_zero. *)
-    (*   crush_bits; simpl; repeat destruct_parse_continuation; *)
-    (*     inversion P_cont_byte_rest; inversion P_cont_rest2; inversion P_cont_rest3; inversion P_byte_byte_rest; subst; simpl; *)
-    (*     rewrite next_state_expecting_3_80_bf; simpl; *)
-    (*     rewrite next_state_expecting_2_80_bf; simpl; *)
-    (*     rewrite next_state_expecting_1_80_bf; reflexivity. *)
-    (*  * destruct (parse_continuation byte_rest) as [[snd rest2] | err] eqn:P_cont_byte_rest; try discriminate. simpl in P_byte_byte_rest. *)
-    (*   destruct (parse_continuation rest2) as [[trd rest3] | err] eqn:P_cont_rest2; try discriminate. simpl in P_byte_byte_rest. to_bits snd; to_bits trd. *)
-    (*   destruct (parse_continuation rest3) as [[frth rest4] | err] eqn:P_cont_rest3; try discriminate. simpl in P_byte_byte_rest. to_bits frth. unfold b4_zero. *)
-    (*   repeat destruct_parse_continuation. *)
-    (*   crush_bits; try discriminate. *)
-    (*     inversion P_cont_byte_rest; inversion P_cont_rest2; inversion P_cont_rest3; inversion P_byte_byte_rest; subst. simpl. unfold b4_zero. *)
-    (*   rewrite next_state_expecting_3_80_8f; simpl; *)
-    (*     rewrite next_state_expecting_2_80_bf; simpl; *)
-    (*     rewrite next_state_expecting_1_80_bf; reflexivity. *)
-    (*  * destruct byte; try discriminate B; inversion byte_bits; subst; simpl in P_byte_byte_rest; *)
-    (*    destruct (parse_continuation byte_rest) as [[snd rest2] | err] eqn:P_cont_byte_rest; try discriminate; simpl in P_byte_byte_rest; *)
-    (*   destruct (parse_continuation rest2) as [[trd rest3] | err] eqn:P_cont_rest2; try discriminate; simpl in P_byte_byte_rest; to_bits snd; to_bits trd; *)
-    (*      destruct (parse_continuation rest3) as [[frth rest4] | err] eqn:P_cont_rest3; try discriminate. *)
+  induction bytes; intros less code rest LessLesser Utf8DecodeOk; [ inversion LessLesser; rewrite List.length_zero_iff_nil in H0; subst; inversion Utf8DecodeOk; reflexivity  | ].
+  destruct less; [ inversion Utf8DecodeOk; reflexivity | ].
+  unfold utf8_decode, all, all_aux in Utf8DecodeOk. fold (all_aux parse_codepoint).
+  destruct (parse_codepoint (b:: less)) as [[parsed_code unparsed_rest] | err] eqn:ParseB; [ | discriminate Utf8DecodeOk].
+  rewrite <- all_aux_saturation_aux with (n := (S (S (Datatypes.length unparsed_rest)))) in Utf8DecodeOk.
+  2: apply parse_codepoint_strong_progress.
+  2, 3: apply parse_codepoint_strong_progress in ParseB; simpl in *; lia.
+  fold (all parse_codepoint unparsed_rest) in Utf8DecodeOk. fold (utf8_decode unparsed_rest) in Utf8DecodeOk.
+  destruct (utf8_decode unparsed_rest) as [[parsed_rest_codes unparsed_rest_rest] | err] eqn:Utf8DecodeRestOk; [| discriminate Utf8DecodeOk].
+  inversion Utf8DecodeOk; subst.
+  apply IHbytes in Utf8DecodeRestOk. 2: apply parse_codepoint_strong_progress in ParseB; simpl in *; lia.
 
-    (*  * unfold parse_codepoint, parse_header, encoding_size_from_header in P_byte_byte_rest. simpl in P_byte_byte_rest. to_bits byte. simpl. *)
-    (*    assert (next_state Initial Utf8DFA.zero_codep (of_bits (b, (b0, (b1, (1, (1, (1, (b5, 1)))))))) = Err (Error (InvalidStartHeader (Some (of_bits (b, (b0, (b1, (1, (1, (1, (b5, 1)))))))))))). *)
-    (*    { unfold next_state. *)
-    (*      destruct (of_bits (b, (b0, (b1, (1, (1, (1, (b5, 1)))))))) eqn:B; *)
-    (*        apply (f_equal Byte.to_bits) in B; *)
-    (*        rewrite Byte.to_bits_of_bits in B; *)
-    (*        try discriminate; reflexivity. } *)
-    (*    crush_bits; try discriminate; simpl in *. *)
-    (* + rewrite byte_bits; rewrite H0; inversion P_byte_byte_rest; subst; reflexivity. *)
-    (* + rewrite byte_bits. destruct (parse_continuation byte_rest) as [[val rest] | err2] eqn:P_cont_byte_rest. *)
-      
-         
-         
+  unfold parse_codepoint, parse_header, encoding_size_from_header in ParseB. to_bits b.
+  unfold utf8_dfa_decode, utf8_dfa_decode_rec.
+  fold utf8_dfa_decode_rec. fold (utf8_dfa_decode less).
+
+  crush_bits; try discriminate; simpl in ParseB; rewrite byte_bits;
+    try (inversion ParseB; subst; next_state_DFA_run; rewrite Utf8DecodeRestOk; reflexivity).
+  1,3,5: destruct_parse_continuation; inversion ParseB; subst; next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); rewrite Utf8DecodeRestOk; reflexivity. 
+  1,3: destruct (parse_continuation less) as [[snd less_rest] | err] eqn:ParseContLess; try discriminate; simpl in ParseB;
+      destruct (parse_continuation less_rest) as [[trd less_rest2] | err] eqn:ParseContLessRest; try discriminate; simpl in ParseB;
+      repeat destruct_parse_continuation; to_bits snd; to_bits trd;
+      crush_bits; inversion ParseB; inversion ParseContLess; inversion ParseContLessRest; subst;
+      next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); try (rewrite Utf8DecodeRestOk; reflexivity). 
+  - destruct (parse_continuation less) as [[snd less_rest] | err] eqn:ParseContLess; [| discriminate]. simpl in ParseB.
+    destruct (parse_continuation less_rest) as [[trd less_rest2] | err] eqn:ParseContLessRest; [| discriminate]. simpl in ParseB.
+    destruct (parse_continuation less_rest2) as [[frth less_rest3] | err] eqn:ParseContLessRest2; [| discriminate]. simpl in ParseB.
+    to_bits snd. to_bits trd. to_bits frth. repeat destruct_parse_continuation.
+    inversion ParseContLess. inversion ParseContLessRest. inversion ParseContLessRest2.
+    crush_bits; inversion ParseB; subst; next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); rewrite Utf8DecodeRestOk; reflexivity.
+  - destruct_parse_continuation. crush_bits; inversion ParseB; inversion Utf8DecodeOk; subst; next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); rewrite Utf8DecodeRestOk; reflexivity.
+Qed.
+
+Ltac destruct_bits B :=
+  match type of B with
+  | exists (b: bool), ?P => let bit := fresh "b" in let P := fresh "byte_bits" in destruct B as [bit P]; destruct_bits P
+  | ?A /\ ?C => let p := fresh "Pred" in let b := fresh "byte_bits" in destruct B as [b p]; destruct_bits b
+  | to_bits ?b = _ => apply (f_equal Byte.of_bits) in B; rewrite Byte.of_bits_to_bits in B; rewrite B in *
+  end.
+
+Ltac byte_range_bits ByteRange :=
+  let new := fresh "_byte_bits" in
+  match type of ByteRange with
+  | byte_range ?byte = Range_00_7F => apply byte_range_00_7f_bits in ByteRange as new
+  | byte_range ?byte = Range_80_8F => apply byte_range_80_8f_bits in ByteRange as new
+  | byte_range ?byte = Range_90_9F => apply byte_range_90_9f_bits in ByteRange as new
+  | byte_range ?byte = Range_A0_BF => apply byte_range_a0_bf_bits in ByteRange as new
+  | byte_range ?byte = Range_C2_DF => apply byte_range_c2_df_bits in ByteRange as new
+  | byte_range ?byte = Byte_E0     => apply byte_e0_bits          in ByteRange as new
+  | byte_range ?byte = Range_E1_EC => apply byte_range_e1_ec_bits in ByteRange as new
+  | byte_range ?byte = Byte_ED     => apply byte_ed_bits          in ByteRange as new
+  | byte_range ?byte = Range_EE_EF => apply byte_range_ee_ef_bits in ByteRange as new
+  | byte_range ?byte = Byte_F0     => apply byte_f0_bits          in ByteRange as new
+  | byte_range ?byte = Range_F1_F3 => apply byte_range_f1_f3_bits in ByteRange as new
+  | byte_range ?byte = Byte_F4     => apply byte_f4_bits          in ByteRange as new
+  end; destruct_bits new.
+
+Hint Unfold extract_7_bits.
+Hint Unfold extract_5_bits.
+
+Theorem utf8_decoders_equal_right_strong : forall (bytes less: list byte) code rest,
+    (List.length less) <= (List.length bytes) ->
+    utf8_dfa_decode less = Ok (code, rest) -> utf8_decode less = Ok (code, rest).
+Proof.
+  intros bytes.
+  induction bytes; intros less code rest LessLesser Utf8DfaDecodeOk; [ inversion LessLesser; rewrite List.length_zero_iff_nil in H0; subst; inversion Utf8DfaDecodeOk; reflexivity  | ].
+  destruct less; [ inversion Utf8DfaDecodeOk; reflexivity | ].
+  unfold utf8_decode, all, all_aux, parse_codepoint. fold parse_codepoint. unfold parse_header, encoding_size_from_header.
+  unfold utf8_dfa_decode in Utf8DfaDecodeOk. simpl in Utf8DfaDecodeOk. unfold next_state in Utf8DfaDecodeOk.
+  destruct (byte_range b) eqn:ByteRangeB; try discriminate; byte_range_bits ByteRangeB; rewrite Byte.to_bits_of_bits; unfold bind, codepoint_range_to_codepoint; simpl in Utf8DfaDecodeOk; repeat rewrite if_redundant.
+  - fold (utf8_dfa_decode less) in Utf8DfaDecodeOk. inversion Utf8DfaDecodeOk.
+    destruct (utf8_dfa_decode less) as [[parsed_code unparsed_rest] | err] eqn:Utf8DfaDecodeLess; [| discriminate].
+    rewrite <- all_aux_saturation_aux with (n := (S (S (Datatypes.length less)))). fold (all parse_codepoint less).
+    2: apply parse_codepoint_strong_progress. 2, 3: simpl in *; lia.
+    fold (utf8_decode less). apply IHbytes in Utf8DfaDecodeLess; [ | simpl in *; lia].
+    rewrite Utf8DfaDecodeLess. unfold extract_7_bits. rewrite Byte.to_bits_of_bits. reflexivity.
+  - unfold extract_5_bits in Utf8DfaDecodeOk. rewrite Byte.to_bits_of_bits in Utf8DfaDecodeOk.
+    destruct less; [discriminate |].
+    simpl in Utf8DfaDecodeOk. unfold next_state in Utf8DfaDecodeOk.
+    destruct (byte_range b5) eqn:ByteRangeB5; try discriminate; byte_range_bits ByteRangeB5; simpl in Utf8DfaDecodeOk; rewrite Byte.to_bits_of_bits in Utf8DfaDecodeOk; fold (utf8_dfa_decode less) in Utf8DfaDecodeOk; destruct (utf8_dfa_decode less) as [[codes unparsed_rest] | err]; try discriminate; inversion Utf8DfaDecodeOk; rewrite parse_continuation_spec.
+    rewrite <- all_aux_saturation_aux with (n := (S (S (Datatypes.length less)))). fold (all parse_codepoint less).
+    2: apply parse_codepoint_strong_progress. 2, 3: apply parse_continuation_strong_progress in ParseContLess; simpl in *; lia.
+    unfold utf8_dfa_decode_rec in Utf8DfaDecodeOk.
+    fold utf8_dfa_decode_rec in Utf8DfaDecodeOk.

@@ -99,8 +99,8 @@ Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @res
   | (Initial, Range_C2_DF) => Ok (More Expecting_1_80_BF (extract_5_bits b))
   | (Initial, Byte_E0)     => Ok (More Expecting_2_A0_BF (extract_4_bits b))
   | (Initial, Range_E1_EC)
-  | (Initial, Range_EE_EF) => Ok (More Expecting_2_80_BF (extract_5_bits b))
-  | (Initial, Byte_ED)     => Ok (More Expecting_2_80_9F (extract_5_bits b))
+  | (Initial, Range_EE_EF) => Ok (More Expecting_2_80_BF (extract_4_bits b))
+  | (Initial, Byte_ED)     => Ok (More Expecting_2_80_9F (extract_4_bits b))
   | (Initial, Byte_F0)     => Ok (More Expecting_3_90_BF (extract_3_bits b))
   | (Initial, Range_F1_F3) => Ok (More Expecting_3_80_BF (extract_3_bits b))
   | (Initial, Byte_F4)     => Ok (More Expecting_3_80_8F (extract_3_bits b))
@@ -128,7 +128,11 @@ Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @res
 Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state)
   : @result (unicode_str * (list byte)) unicode_decode_error :=
   match bytes with
-  | nil => Ok (nil, nil)
+  | nil =>
+      match state with
+      | Initial => Ok (nil, nil)
+      | _ => Err (InvalidContinuationHeader None)
+      end 
   | cons b rest =>
       let* next := next_state state carry b in
       match next with
