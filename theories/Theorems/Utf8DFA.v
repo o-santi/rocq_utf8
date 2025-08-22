@@ -131,10 +131,10 @@ Qed.
 Lemma byte_range_e1_ec_bits : forall b,
     byte_range b = Range_E1_EC ->
     exists b1 b2 b3 b4,
-      Byte.to_bits b = (b1, (b2, (b3, (b4, (0, (1, (1, 1))))))).
+      Byte.to_bits b = (b1, (b2, (b3, (b4, (0, (1, (1, 1))))))) /\ ((b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) /\ (b3 = 0 \/ b4 = 0 \/ (b1 = 0 /\ b2 = 0))).
 Proof.
   intros.
-  destruct b; inversion H; repeat eexists.
+  destruct b; inversion H; repeat eexists; auto.
 Qed.
 
 
@@ -168,10 +168,11 @@ Qed.
 Lemma byte_range_f1_f3_bits : forall b,
     byte_range b = Range_F1_F3 ->
     exists b1 b2,
-      Byte.to_bits b = (b1, (b2, (0, (0, (1, (1, (1, 1))))))).
+      Byte.to_bits b = (b1, (b2, (0, (0, (1, (1, (1, 1))))))) /\
+        (b2 = 1 \/ b1 = 1).
 Proof.
   intros.
-  destruct b; inversion H; repeat eexists.
+  destruct b; inversion H; repeat eexists; auto.
 Qed.
 
 Lemma byte_f4_bits : forall b,
@@ -635,8 +636,26 @@ Ltac byte_range_bits ByteRange :=
   | byte_range ?byte = Byte_F4     => apply byte_f4_bits          in ByteRange as new
   end; destruct_bits new.
 
-Hint Unfold extract_7_bits.
-Hint Unfold extract_5_bits.
+Ltac for_all_valid_byte_ranges:=
+  match goal with
+  | [U: context[let* (_, _) := utf8_dfa_decode_rec ?list ?code Initial in _] |- _] =>
+      let parsed_code := fresh "parsed_codes" in
+      let unparsed_rest := fresh "unparsed_bytes" in
+      fold (utf8_dfa_decode list) in U; destruct (utf8_dfa_decode list) as [[parsed_codes unparsed_rest] | err] eqn:Utf8DfaDecodeLessOk; try discriminate; inversion U
+  | [U: context[utf8_dfa_decode_rec (?byte :: ?byte_rest) ?code ?state] |- _] =>
+      let byte_eqn := fresh "ByteRange" in
+      simpl in U; unfold next_state, extract_7_bits, extract_5_bits, extract_4_bits, extract_3_bits in U;
+      destruct (byte_range byte) eqn:byte_eqn; try discriminate; byte_range_bits byte_eqn; simpl in U; try rewrite Byte.to_bits_of_bits in U; simpl in U; for_all_valid_byte_ranges
+  | [U: context[utf8_dfa_decode_rec ?bytes Utf8DFA.zero_codep Initial] |- _] =>
+      let parsed_name := fresh "parsed_code" in
+      let unparsed_bytes_name := fresh "unparsed_bytes" in
+      fold (utf8_dfa_decode bytes) in U; destruct (utf8_dfa_decode bytes) as [[parsed_name unparsed_bytes_name] | _err] eqn:Utf8DfaDecodeLess; [| discriminate];
+      fold (utf8_decode bytes)
+  | [U: context[utf8_dfa_decode_rec ?list ?code ?state] |- _] =>
+      let byte_name := fresh "byte" in
+      let byte_rest_name := fresh "byte_rest" in
+        destruct list as [| byte_name byte_rest_name]; [ try discriminate | for_all_valid_byte_ranges  ]
+  end.
 
 Theorem utf8_decoders_equal_right_strong : forall (bytes less: list byte) code rest,
     (List.length less) <= (List.length bytes) ->
@@ -644,21 +663,36 @@ Theorem utf8_decoders_equal_right_strong : forall (bytes less: list byte) code r
 Proof.
   intros bytes.
   induction bytes; intros less code rest LessLesser Utf8DfaDecodeOk; [ inversion LessLesser; rewrite List.length_zero_iff_nil in H0; subst; inversion Utf8DfaDecodeOk; reflexivity  | ].
+  unfold utf8_dfa_decode in Utf8DfaDecodeOk.
   destruct less; [ inversion Utf8DfaDecodeOk; reflexivity | ].
-  unfold utf8_decode, all, all_aux, parse_codepoint. fold parse_codepoint. unfold parse_header, encoding_size_from_header.
-  unfold utf8_dfa_decode in Utf8DfaDecodeOk. simpl in Utf8DfaDecodeOk. unfold next_state in Utf8DfaDecodeOk.
-  destruct (byte_range b) eqn:ByteRangeB; try discriminate; byte_range_bits ByteRangeB; rewrite Byte.to_bits_of_bits; unfold bind, codepoint_range_to_codepoint; simpl in Utf8DfaDecodeOk; repeat rewrite if_redundant.
-  - fold (utf8_dfa_decode less) in Utf8DfaDecodeOk. inversion Utf8DfaDecodeOk.
-    destruct (utf8_dfa_decode less) as [[parsed_code unparsed_rest] | err] eqn:Utf8DfaDecodeLess; [| discriminate].
-    rewrite <- all_aux_saturation_aux with (n := (S (S (Datatypes.length less)))). fold (all parse_codepoint less).
-    2: apply parse_codepoint_strong_progress. 2, 3: simpl in *; lia.
-    fold (utf8_decode less). apply IHbytes in Utf8DfaDecodeLess; [ | simpl in *; lia].
-    rewrite Utf8DfaDecodeLess. unfold extract_7_bits. rewrite Byte.to_bits_of_bits. reflexivity.
-  - unfold extract_5_bits in Utf8DfaDecodeOk. rewrite Byte.to_bits_of_bits in Utf8DfaDecodeOk.
-    destruct less; [discriminate |].
-    simpl in Utf8DfaDecodeOk. unfold next_state in Utf8DfaDecodeOk.
-    destruct (byte_range b5) eqn:ByteRangeB5; try discriminate; byte_range_bits ByteRangeB5; simpl in Utf8DfaDecodeOk; rewrite Byte.to_bits_of_bits in Utf8DfaDecodeOk; fold (utf8_dfa_decode less) in Utf8DfaDecodeOk; destruct (utf8_dfa_decode less) as [[codes unparsed_rest] | err]; try discriminate; inversion Utf8DfaDecodeOk; rewrite parse_continuation_spec.
-    rewrite <- all_aux_saturation_aux with (n := (S (S (Datatypes.length less)))). fold (all parse_codepoint less).
-    2: apply parse_codepoint_strong_progress. 2, 3: apply parse_continuation_strong_progress in ParseContLess; simpl in *; lia.
-    unfold utf8_dfa_decode_rec in Utf8DfaDecodeOk.
-    fold utf8_dfa_decode_rec in Utf8DfaDecodeOk.
+  for_all_valid_byte_ranges;
+    unfold utf8_decode, all, all_aux; unfold parse_codepoint; fold parse_codepoint; unfold parse_header;
+    try rewrite enc_one_spec; try rewrite enc_two_spec; try rewrite enc_three_spec; try rewrite enc_four_spec;
+    unfold bind, codepoint_range_to_codepoint; repeat rewrite parse_continuation_spec.
+  all: repeat match goal with
+         | [ B: ?a \/ ?b |- _ ] => let G1 := fresh "G" in let G2 := fresh "G" in destruct B as [ G1 | G2]
+         | [ B: ?a /\ ?b |- _ ] => let G1 := fresh "G" in let G2 := fresh "G" in destruct B as [ G1 G2]
+         end; subst; try match goal with
+                     | [C: 0 = 1 |- _] => symmetry in G; apply Bool.diff_true_false in C; destruct C
+                     | [C: 1 = 0 |- _] => apply Bool.diff_true_false in C; destruct C
+                     end;
+   repeat rewrite if_redundant.
+  all: match goal with
+       | [ |- context[match _ codepoint byte unicode_decode_error parse_codepoint ?len ?bytes with _ => _  end]] =>
+           rewrite <- all_aux_saturation_aux with (n := (S (S (Datatypes.length bytes))));
+           apply IHbytes in Utf8DfaDecodeLessOk;
+           try apply parse_codepoint_strong_progress; try (simpl in *; lia);
+           fold (all parse_codepoint bytes);
+           fold (utf8_decode bytes);
+           rewrite Utf8DfaDecodeLessOk; subst; reflexivity
+       end.
+Qed.
+
+Theorem utf8_decoders_equal : forall bytes code rest,
+    utf8_decode bytes = Ok (code, rest) <-> utf8_dfa_decode bytes = Ok (code, rest).
+Proof.
+  intros bytes code rest.
+  split; intros Utf8DecodeOk.
+  apply (utf8_decoders_equal_left_strong bytes bytes) in Utf8DecodeOk; auto.
+  apply (utf8_decoders_equal_right_strong bytes bytes) in Utf8DecodeOk; auto.
+Qed.
