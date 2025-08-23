@@ -299,12 +299,10 @@ Proof.
     auto.
 Qed.
 
-Create HintDb next_state_hintdb.
-
 Lemma next_state_initial_00_7f :
   forall b1 b2 b3 b4 b5 b6 b7,
     let b := (of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, 0)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial zero_codep b
     = Ok (Finished (0, b4_zero, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7))).
 Proof.
   intros.
@@ -319,7 +317,7 @@ Qed.
 Lemma next_state_initial_c2_df :
   forall b1 b2 b3 b4 b5, (b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) ->
     let b := (of_bits (b5, (b4, (b3, (b2, (b1, (0, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial zero_codep b
     = Ok (More Expecting_1_80_BF (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, b1), (b2, b3, b4, b5))).
 Proof.
   intros.
@@ -336,7 +334,7 @@ Lemma next_state_initial_e1_ec :
   forall b1 b2 b3 b4,
     ((b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) /\ (b3 = 0 \/ b4 = 0 \/ (b1 = 0 /\ b2 = 0))) ->
   let b := (of_bits (b1, (b2, (b3, (b4, (0, (1, (1, 1)))))))) in
-  next_state Initial Utf8DFA.zero_codep b
+  next_state Initial zero_codep b
   = Ok (More Expecting_2_80_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (b4, b3, b2, b1))).
 Proof.
   intros.
@@ -351,7 +349,7 @@ Qed.
 
 Lemma next_state_initial_e0 :
     let b := (of_bits (0, (0, (0, (0, (0, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial zero_codep b
     = Ok (More Expecting_2_A0_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0))).
 Proof.
   intros.
@@ -363,12 +361,11 @@ Qed.
 
   
 Lemma next_state_initial_ed :
-    let b := (of_bits (1, (0, (1, (1, (0, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial zero_codep (of_bits (1, (0, (1, (1, (0, (1, (1, 1))))))))
     = Ok (More Expecting_2_80_9F (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0), (1, 1, 0, 1))).
 Proof.
   intros.
-  unfold next_state. destruct b eqn:B; subst b;
+  unfold next_state. destruct (of_bits (1, (0, (1, (1, (0, (1, (1, 1)))))))) eqn:B;
   apply (f_equal Byte.to_bits) in B; rewrite Byte.to_bits_of_bits in B; try discriminate.
   unfold extract_4_bits.
   reflexivity.
@@ -377,7 +374,7 @@ Qed.
 Lemma next_state_initial_ee_ef :
   forall bit, 
     let b := (of_bits (bit, (1, (1, (1, (0, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial zero_codep b
     = Ok (More Expecting_2_80_BF (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0), (1, 1, 1, bit))).
 Proof.
   intros.
@@ -392,7 +389,7 @@ Qed.
 Lemma next_state_initial_f1_f3 :
   forall b1 b2, (b2 = 1 \/ b1 = 1) ->
     let b := (of_bits (b1, (b2, (0, (0, (1, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial zero_codep b
     = Ok (More Expecting_3_80_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, b2, b1))).
 Proof.
   intros.
@@ -408,7 +405,7 @@ Qed.
 
 Lemma next_state_initial_f0 :
   let b := (of_bits (0, (0, (0, (0, (1, (1, (1, 1)))))))) in
-  next_state Initial Utf8DFA.zero_codep b
+  next_state Initial zero_codep b
   = Ok (More Expecting_3_90_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0))).
 Proof.
   intros.
@@ -420,7 +417,7 @@ Qed.
 
 Lemma next_state_initial_f4 :
   let b := (of_bits (0, (0, (1, (0, (1, (1, (1, 1)))))))) in
-  next_state Initial Utf8DFA.zero_codep b
+  next_state Initial zero_codep b
   = Ok (More Expecting_3_80_8F (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 1, 0, 0))).
 Proof.
   intros.
@@ -552,7 +549,7 @@ Qed.
 
 Ltac next_state_DFA_run :=
   unfold b4_zero;
-  match goal with
+  lazymatch goal with
   | [ |- context[next_state Initial           ?code (of_bits (?b1, (?b2, (?b3, (?b4, (?b5, (?b6, (?b7, 0))))))))]] => rewrite next_state_initial_00_7f; simpl
   | [ |- context[next_state Expecting_1_80_BF ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (?b5, (0, 1))))))))]]   => rewrite next_state_expecting_1_80_bf; simpl
   | [ |- context[next_state Initial           ?code (of_bits (?b0, (?b1, (?b2, (?b3, (?b4, (0, (1, 1))))))))]]     => rewrite next_state_initial_c2_df; auto; simpl; next_state_DFA_run
@@ -597,12 +594,16 @@ Proof.
 
   crush_bits; try discriminate; simpl in ParseB; rewrite byte_bits;
     try (inversion ParseB; subst; next_state_DFA_run; rewrite Utf8DecodeRestOk; reflexivity).
-  1,3,5: destruct_parse_continuation; inversion ParseB; subst; next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); rewrite Utf8DecodeRestOk; reflexivity. 
+  1,3,5: destruct_parse_continuation; inversion ParseB; subst; next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); rewrite Utf8DecodeRestOk; reflexivity.
+  1: { destruct (parse_continuation less) as [[snd less_rest] | err] eqn:ParseContLess; try discriminate; simpl in ParseB;
+      destruct (parse_continuation less_rest) as [[trd less_rest2] | err] eqn:ParseContLessRest; try discriminate; simpl in ParseB;
+       repeat destruct_parse_continuation; to_bits snd; to_bits trd.
+      crush_bits; inversion ParseB; inversion ParseContLess; inversion ParseContLessRest; subst. 2: { Show. rewrite next_state_initial_ed.
   1,3: destruct (parse_continuation less) as [[snd less_rest] | err] eqn:ParseContLess; try discriminate; simpl in ParseB;
       destruct (parse_continuation less_rest) as [[trd less_rest2] | err] eqn:ParseContLessRest; try discriminate; simpl in ParseB;
       repeat destruct_parse_continuation; to_bits snd; to_bits trd;
       crush_bits; inversion ParseB; inversion ParseContLess; inversion ParseContLessRest; subst;
-      next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); try (rewrite Utf8DecodeRestOk; reflexivity). 
+      next_state_DFA_run; fold (utf8_dfa_decode unparsed_rest); rewrite Utf8DecodeRestOk; reflexivity. 
   - destruct (parse_continuation less) as [[snd less_rest] | err] eqn:ParseContLess; [| discriminate]. simpl in ParseB.
     destruct (parse_continuation less_rest) as [[trd less_rest2] | err] eqn:ParseContLessRest; [| discriminate]. simpl in ParseB.
     destruct (parse_continuation less_rest2) as [[frth less_rest3] | err] eqn:ParseContLessRest2; [| discriminate]. simpl in ParseB.
@@ -641,20 +642,20 @@ Ltac for_all_valid_byte_ranges:=
   | [U: context[let* (_, _) := utf8_dfa_decode_rec ?list ?code Initial in _] |- _] =>
       let parsed_code := fresh "parsed_codes" in
       let unparsed_rest := fresh "unparsed_bytes" in
-      fold (utf8_dfa_decode list) in U; destruct (utf8_dfa_decode list) as [[parsed_codes unparsed_rest] | err] eqn:Utf8DfaDecodeLessOk; try discriminate; inversion U
+      fold (utf8_dfa_decode list) in U; destruct (utf8_dfa_decode list) as [[parsed_codes unparsed_rest] | err] eqn:Utf8DfaDecodeLessOk; try discriminate U; inversion U
   | [U: context[utf8_dfa_decode_rec (?byte :: ?byte_rest) ?code ?state] |- _] =>
       let byte_eqn := fresh "ByteRange" in
       simpl in U; unfold next_state, extract_7_bits, extract_5_bits, extract_4_bits, extract_3_bits in U;
-      destruct (byte_range byte) eqn:byte_eqn; try discriminate; byte_range_bits byte_eqn; simpl in U; try rewrite Byte.to_bits_of_bits in U; simpl in U; for_all_valid_byte_ranges
-  | [U: context[utf8_dfa_decode_rec ?bytes Utf8DFA.zero_codep Initial] |- _] =>
+      destruct (byte_range byte) eqn:byte_eqn; try discriminate U; byte_range_bits byte_eqn; simpl in U; try rewrite Byte.to_bits_of_bits in U; simpl in U; for_all_valid_byte_ranges
+  | [U: context[utf8_dfa_decode_rec ?bytes zero_codep Initial] |- _] =>
       let parsed_name := fresh "parsed_code" in
       let unparsed_bytes_name := fresh "unparsed_bytes" in
-      fold (utf8_dfa_decode bytes) in U; destruct (utf8_dfa_decode bytes) as [[parsed_name unparsed_bytes_name] | _err] eqn:Utf8DfaDecodeLess; [| discriminate];
+      fold (utf8_dfa_decode bytes) in U; destruct (utf8_dfa_decode bytes) as [[parsed_name unparsed_bytes_name] | _err] eqn:Utf8DfaDecodeLess; [| discriminate U];
       fold (utf8_decode bytes)
   | [U: context[utf8_dfa_decode_rec ?list ?code ?state] |- _] =>
       let byte_name := fresh "byte" in
       let byte_rest_name := fresh "byte_rest" in
-        destruct list as [| byte_name byte_rest_name]; [ try discriminate | for_all_valid_byte_ranges  ]
+        destruct list as [| byte_name byte_rest_name]; [ try discriminate U | for_all_valid_byte_ranges  ]
   end.
 
 Theorem utf8_decoders_equal_right_strong : forall (bytes less: list byte) code rest,
@@ -665,10 +666,11 @@ Proof.
   induction bytes; intros less code rest LessLesser Utf8DfaDecodeOk; [ inversion LessLesser; rewrite List.length_zero_iff_nil in H0; subst; inversion Utf8DfaDecodeOk; reflexivity  | ].
   unfold utf8_dfa_decode in Utf8DfaDecodeOk.
   destruct less; [ inversion Utf8DfaDecodeOk; reflexivity | ].
+  unfold utf8_decode, all, all_aux. unfold parse_codepoint; fold parse_codepoint; unfold parse_header.
   for_all_valid_byte_ranges;
-    unfold utf8_decode, all, all_aux; unfold parse_codepoint; fold parse_codepoint; unfold parse_header;
-    try rewrite enc_one_spec; try rewrite enc_two_spec; try rewrite enc_three_spec; try rewrite enc_four_spec;
+    rewrite enc_four_spec || rewrite enc_three_spec || rewrite enc_two_spec || rewrite enc_one_spec;
     unfold bind, codepoint_range_to_codepoint; repeat rewrite parse_continuation_spec.
+  
   all: repeat match goal with
          | [ B: ?a \/ ?b |- _ ] => let G1 := fresh "G" in let G2 := fresh "G" in destruct B as [ G1 | G2]
          | [ B: ?a /\ ?b |- _ ] => let G1 := fresh "G" in let G2 := fresh "G" in destruct B as [ G1 G2]
