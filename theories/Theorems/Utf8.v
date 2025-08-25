@@ -125,12 +125,6 @@ Ltac to_bits byte :=
       rewrite Byte.of_bits_to_bits in eqn_name
   end.
 
-Ltac no_overlongs :=
-  match goal with
-  | [ H: ?bit = true \/ ?b |- _] => destruct H; no_overlongs
-  | [ G: ?bit = true |- context[if ?bit then _ else _] ] => rewrite G
-  | |- context[if ?bit then _ else _] => destruct bit; [ no_overlongs | no_overlongs ]
-  end.
 
 
 Ltac crush_bits :=
