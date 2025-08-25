@@ -10,7 +10,10 @@
       nixpkgs.lib.genAttrs [
         "x86_64-linux"
         "aarch64-darwin"
-      ] (system: f nixpkgs.legacyPackages.${system});
+      ] (system: f (import nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      }));
   in {
     devShells = for-all-systems (pkgs: {
       default = pkgs.mkShell {
@@ -20,7 +23,7 @@
         '';
         packages = with pkgs; [
           coq_8_20
-          # coqPackages_8_20.VST
+          coqPackages_8_20.VST
           # (texlive.combine {
           #   inherit (texlive) scheme-basic collection-fontsrecommended
           #   dvisvgm dvipng # for preview and export as html
