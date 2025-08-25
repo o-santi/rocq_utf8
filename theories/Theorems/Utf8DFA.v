@@ -695,3 +695,13 @@ Proof.
   apply (utf8_decoders_equal_left_strong bytes bytes) in Utf8DecodeOk; auto.
   apply (utf8_decoders_equal_right_strong bytes bytes) in Utf8DecodeOk; auto.
 Qed.
+
+Theorem utf8_dfa_spec : forall bytes codepoints,
+    utf8_dfa_decode bytes = Ok (codepoints, []) -> Forall valid_codepoint codepoints.
+Proof.
+  intros.
+  apply utf8_decoders_equal in H.
+  apply utf8_decode_valid_codepoints in H.
+  apply H.
+Qed.
+

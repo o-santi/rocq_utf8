@@ -8,5 +8,5 @@
 *.vok
 src/.*
 *CoqMakefile*
-Makefile.coq
-Makefile.coq.conf
+Makefile.*
+.Makefile.*
