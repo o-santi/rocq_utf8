@@ -1,8 +1,8 @@
-From Stdlib Require Import Strings.String.
-From Stdlib Require Import Strings.Ascii.
-From Stdlib Require Import Strings.Byte.
+From Coq Require Import Strings.String.
+From Coq Require Import Strings.Ascii.
+From Coq Require Import Strings.Byte.
 
-From Stdlib Require Import Lists.List. Import ListNotations.
+From Coq Require Import Lists.List. Import ListNotations.
 
 Require Import Utf8.Parser.
 

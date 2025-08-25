@@ -1,7 +1,7 @@
-From Stdlib Require Import Strings.String.
-From Stdlib Require Import ZArith.
-From Stdlib Require Import Lia.
-From Stdlib Require Import Lists.List. Import ListNotations.
+From Coq Require Import Strings.String.
+From Coq Require Import ZArith.
+From Coq Require Import Lia.
+From Coq Require Import Lists.List. Import ListNotations.
 
 Require Import Utf8.Parser.
 Require Import Utf8.Theorems.Parser.
@@ -16,7 +16,7 @@ Open Scope string_scope.
 (*     41 E2 89 A2 CE 91 2E *)
 (*     --+--------+-----+-- *)
 
-From Stdlib.Strings Require Import Byte.
+From Coq.Strings Require Import Byte.
 Definition test1 :
   (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [x41; xe2; x89; xa2; xce; x91; x2e]))
   = Ok (["U+0041"%string; "U+2262"%string; "U+0391"%string; "U+002E"%string], []).

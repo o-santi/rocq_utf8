@@ -1,8 +1,8 @@
-From Stdlib Require Import Strings.Byte.
+From Coq Require Import Strings.Byte.
 
 Require Import Utf8.Utf8.
 Require Import Utf8.Parser.
-From Stdlib Require Import Lia.
+From Coq Require Import Lia.
 
 Local Notation "0" := false.
 Local Notation "1" := true.

@@ -4,10 +4,10 @@ Require Import Utf8.Utf8DFA.
 Require Import Utf8.Theorems.Parser.
 Require Import Utf8.Theorems.Utf8.
 
-From Stdlib Require Import Strings.Byte.
-From Stdlib Require Import Lists.List. Import ListNotations.
-From Stdlib Require Import Strings.String.
-From Stdlib Require Import Lia.
+From Coq Require Import Strings.Byte.
+From Coq Require Import Lists.List. Import ListNotations.
+From Coq Require Import Strings.String.
+From Coq Require Import Lia.
 
 Local Notation "0" := false.
 Local Notation "1" := true.
