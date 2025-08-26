@@ -204,4 +204,26 @@ Portanto, para escrever um programa que codifica e decodifica UTF-8 corretamente
 
 = Formalização
 
+Como dito anteriormente, a formalização é dada pela implementação de um codificador e decodificador de forma conjunta, já que representam a ação de desfazer a ação do outro. Enquanto o codificador recebe uma sequência de _code points_ e retorna uma sequência de bytes ou um erro, o decodificador recebe uma sequência de bytes e retorna uma sequência de _code points_ ou um erro. O cerne da corretude, e o motivo de desenvolver o projeto dessa forma, está em mostrar a seguinte propriedade dos programas: uma sequência de bytes `b` é aceita pelo decodificador como a sequência de _code points_ `c`, se, e somente se, o codificador retornar bytes `b` ao receber _code points_ `c`.
+
+Além disso, é necessário mostrar que bytes só são aceitos pelo decodificador quando _code points_ resultantes são válidos, e da mesma forma, que _code points_ só são aceitos pelo codificador quando são válidos. É importante ressaltar que a noção de validade de _code point_ é a descrita anteriormente: um _code point_ é *UTF-8 válido* quando o número representado é menor do que `U+10FFFF`, e não está no intervalo `U+DB00..U+DFFF`. Da mesma forma, uma sequência de bytes é tida como *UTF-8 válida* se essa representa a serialização de um _code point_ *válido*, e é a menor possível para o respectivo intervalo do _code point_.
+
+
+
+Das três propriedades principais podemos concluir que:
+1. Todo _code point_ *válido* possui uma sequência de bytes *válida* correspondente.
+2. Toda sequência de bytes *válida* possui um _code point_ *válido* correspondente.
+3. Para tanto o codificador quanto o decodificador, se dado o valor `v` a implementação retorna corretamente uma sequência `s`, a outra sempre é capaz de converter essa sequência `s` no valor `v` de volta. 
+
+Além dessas propriedades, para mostrar a corretude da decodificação faz-se necessário mostrar que 
+
+Dessa forma, há de se mostrar como implementar esses programas em Coq, bem como traduzir tais propriedades para código checável por máquina.
+
+== Combinadores monádicos
+
+
+
+
+
+
 #bibliography("references.bib", style: "associacao-brasileira-de-normas-tecnicas")

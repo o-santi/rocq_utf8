@@ -35,6 +35,8 @@ An industry use case of software correctness for security. An ASN.1 compiler tha
 
 Another DSL for describing formats of binary schemas, of which one can derive encoding and decoding. The authors also show their DSL to be efficient by way of deriving a correct IPV4 implementation, according to the specification.
 
+** [[https://gitlab.inria.fr/flocq/flocq/-/tree/master?ref_type=heads][Floq: formalization of floating point IEEE-754 arithmetic]] :coq:
+
 * Speed based binary techniques
 
 ** [[file:parsing_gb_of_json.pdf][Parsing GB of JSON per second]]
