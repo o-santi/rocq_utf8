@@ -26,7 +26,7 @@ Notation "'let*' p ':=' c1 'in' c2" :=
 Definition fmap { A B E } (f: A -> B) (r: @result A E) : @result B E :=
   bind r (fun x => Ok (f x)).
 
-Definition parser (T: Type) {I E: Type} := list I -> @result (T * (list I)) E.
+Definition parser (T: Type) {C E: Type} := list C -> @result (T * (list C)) E.
 
 Definition parser_map {A B I E} (f: A -> B) (p: @parser A I E) : @parser B I E :=
   fun s =>
