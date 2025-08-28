@@ -5,6 +5,7 @@ From Coq Require Import Strings.Byte.
 From Coq Require Import Lists.List. Import ListNotations.
 
 Require Import Utf8.Parser.
+Require Import Utf8.Spec.
 
 (* ============================================== *)
 (* UTF-8 encoding and decoding                    *)
@@ -12,21 +13,6 @@ Require Import Utf8.Parser.
 
 Local Notation "0" := false.
 Local Notation "1" := true.
-
-Definition b3 : Type := bool * bool * bool.
-Definition b4 : Type := bool * bool * bool * bool.
-Definition b5 : Type := bool * bool * bool * bool * bool.
-Definition b6 : Type := bool * bool * bool * bool * bool * bool.
-Definition b7 : Type := bool * bool * bool * bool * bool * bool * bool.
-
-Definition b4_zero: b4 := (false, false, false, false).
-
-Open Scope bool_scope.
-
-Definition b4_equal (a b: b4) : bool :=
-  let '(a1, a2, a3, a4) := a in
-  let '(b1, b2, b3, b4) := b in
-  (Bool.eqb a1 b1) && (Bool.eqb a2 b2) && (Bool.eqb a3 b3) && (Bool.eqb a4 b4).
 
 Inductive hex : Type :=
 | H0 | H1 | H2 | H3
@@ -80,20 +66,12 @@ Inductive codepoint_range :=
 | ThirdRange (fst: b4) (snd: b6) (trd: b6)
 | FourthRange (fst: b3) (snd: b6) (trd: b6) (frth: b6).
 
-Inductive unicode_decode_error :=
-| OverlongEncoding
-| InvalidSurrogatePair
-| CodepointTooBig
-| InvalidContinuationHeader (x: option byte)
-| InvalidStartHeader (x: option byte).
 
 Inductive encoding_size :=
 | OneByte (b: b7)
 | TwoBytes (b: b5)
 | ThreeBytes (b: b4)
 | FourBytes (b: b3).
-
-Definition codepoint : Type := bool * b4 * b4 *b4 * b4 * b4.
 
 Definition show_codepoint (c: codepoint) : string :=
   let p := fun (b: b4) => hex_to_ascii (b4_to_hex b) in
@@ -139,9 +117,6 @@ Definition codepoint_eqb (a b: codepoint) : bool :=
 Definition from_ascii (c: ascii) : codepoint :=
   let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, _))))))) := to_bits (byte_of_ascii c) in
   (0, b4_zero, b4_zero, b4_zero, (false, b7, b6, b5), (b4, b3, b2, b1)).
-
-Definition unicode_str : Type := list codepoint.
-
 
 (* Char. number range  |        UTF-8 octet sequence *)
 (*    (hexadecimal)    |              (binary) *)
@@ -212,10 +187,6 @@ Definition utf8_decode : @parser unicode_str byte unicode_decode_error :=
 Definition to_unicode (s: string) : @result unicode_str unicode_decode_error :=
   let bytes := List.map byte_of_ascii (list_ascii_of_string s) in
   fmap (fun '(v, _) => v) (utf8_decode bytes).
-
-Inductive unicode_encode_error :=
-| EncodingCodepointTooBig (c: codepoint)
-| IllegalSurrogatePair (c: codepoint).
 
 (* The definition of UTF-8 prohibits encoding character numbers between *)
 (*    U+D800 and U+DFFF

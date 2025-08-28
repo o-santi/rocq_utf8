@@ -5,9 +5,11 @@ From Coq Require Import Lists.List. Import ListNotations.
 
 Require Import Utf8.Parser.
 Require Import Utf8.Theorems.Parser.
+Require Import Utf8.Spec.
 Require Import Utf8.Utf8.
 
 Open Scope string_scope.
+Open Scope bool_scope.
 
 (* The character sequence U+0041 U+2262 U+0391 U+002E "A<NOT IDENTICAL 
    TO><ALPHA>." is encoded in UTF-8 as follows: *)
@@ -61,7 +63,6 @@ Definition test4 :
   reflexivity.
 Qed.
 
-
 Ltac destruct_parse_continuation :=
   match goal with
   | [G: context[parse_continuation (?a::?b)] |- _] => idtac
@@ -101,20 +102,20 @@ Ltac to_bits byte :=
     end
   in 
   match type of byte with
-  | Utf8.codepoint =>
-      unfold Utf8.codepoint, Utf8.b4 in byte;
+  | Spec.codepoint =>
+      unfold Spec.codepoint, Spec.b4 in byte;
       destruct byte as [[[[[b b4_1] b4_2] b4_3] b4_4] b4_5];
       break_bit b4_1; break_bit b4_2; break_bit b4_3; break_bit b4_4; break_bit b4_5
-  | Utf8.b7 =>
-      unfold Utf8.b7 in byte; break_bit byte
-  | Utf8.b6 =>
-      unfold Utf8.b6 in byte; break_bit byte
-  | Utf8.b5 =>
-      unfold Utf8.b5 in byte; break_bit byte
-  | Utf8.b4 =>
-      unfold Utf8.b4 in byte; break_bit byte
-  | Utf8.b3 =>
-      unfold Utf8.b3 in byte; break_bit byte
+  | Spec.b7 =>
+      unfold Spec.b7 in byte; break_bit byte
+  | Spec.b6 =>
+      unfold Spec.b6 in byte; break_bit byte
+  | Spec.b5 =>
+      unfold Spec.b5 in byte; break_bit byte
+  | Spec.b4 =>
+      unfold Spec.b4 in byte; break_bit byte
+  | Spec.b3 =>
+      unfold Spec.b3 in byte; break_bit byte
   | Byte.byte =>
       let B := fresh "B" in
       let eqn_name := fresh "byte_bits" in
@@ -347,7 +348,7 @@ Theorem parse_codepoint_encode_correct : forall c bytes rest,
     parse_codepoint (bytes ++ rest)%list = Ok (c, rest).
 Proof.
   Opaque Byte.of_bits.
-  intros.
+  intros. 
   for_all_valid_utf8_encodings c; try (rewrite H in A; discriminate); [
       apply utf8_encode_codepoint_one_correct in _rest as c_eq
     | apply utf8_encode_codepoint_two_correct in _rest as G; destruct G as [c_eq no_overlongs]
@@ -515,24 +516,6 @@ Proof.
   intros.
   apply decode_encode_correct_strong with (bytes:= bytes) (bytes_rest:=rest). lia. apply H.
 Defined.
-
-Local Notation "0" := false.
-Local Notation "1" := true.
-
-Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
-  match code with
-  | (0, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) => True
-  | (1, (0,  0,  0,  0), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) => True
-  | _ => False
-  end.
-
-Definition codepoint_is_not_surrogate (code: codepoint) : Prop :=
-  match code with
-  | (0, (0, 0, 0, 0), (1, 1, 0, 1), (1, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16)) => False
-  | _ => True
-  end.
-
-Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code.
 
 Theorem encode_valid_codepoint : forall code,
     valid_codepoint code <->

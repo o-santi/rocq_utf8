@@ -1,6 +1,7 @@
 Require Import Utf8.Parser.
+Require Import Utf8.Spec.
 Require Import Utf8.Utf8.
-Require Import Utf8.Utf8DFA.
+Require Import Utf8.DFA.
 Require Import Utf8.Theorems.Parser.
 Require Import Utf8.Theorems.Utf8.
 
@@ -303,7 +304,7 @@ Create HintDb next_state_hintdb.
 Lemma next_state_initial_00_7f :
   forall b1 b2 b3 b4 b5 b6 b7,
     let b := (of_bits (b7, (b6, (b5, (b4, (b3, (b2, (b1, 0)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial DFA.zero_codep b
     = Ok (Finished (0, b4_zero, b4_zero, b4_zero, (0, b1, b2, b3), (b4, b5, b6, b7))).
 Proof.
   intros.
@@ -318,7 +319,7 @@ Qed.
 Lemma next_state_initial_c2_df :
   forall b1 b2 b3 b4 b5, (b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) ->
     let b := (of_bits (b5, (b4, (b3, (b2, (b1, (0, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial DFA.zero_codep b
     = Ok (More Expecting_1_80_BF (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, b1), (b2, b3, b4, b5))).
 Proof.
   intros.
@@ -335,7 +336,7 @@ Lemma next_state_initial_e1_ec :
   forall b1 b2 b3 b4,
     ((b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) /\ (b3 = 0 \/ b4 = 0 \/ (b1 = 0 /\ b2 = 0))) ->
   let b := (of_bits (b1, (b2, (b3, (b4, (0, (1, (1, 1)))))))) in
-  next_state Initial Utf8DFA.zero_codep b
+  next_state Initial DFA.zero_codep b
   = Ok (More Expecting_2_80_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (b4, b3, b2, b1))).
 Proof.
   intros.
@@ -350,7 +351,7 @@ Qed.
 
 Lemma next_state_initial_e0 :
     let b := (of_bits (0, (0, (0, (0, (0, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial DFA.zero_codep b
     = Ok (More Expecting_2_A0_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0))).
 Proof.
   intros.
@@ -363,7 +364,7 @@ Qed.
   
 Lemma next_state_initial_ed :
     let b := (of_bits (1, (0, (1, (1, (0, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial DFA.zero_codep b
     = Ok (More Expecting_2_80_9F (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0), (1, 1, 0, 1))).
 Proof.
   intros.
@@ -376,7 +377,7 @@ Qed.
 Lemma next_state_initial_ee_ef :
   forall bit, 
     let b := (of_bits (bit, (1, (1, (1, (0, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial DFA.zero_codep b
     = Ok (More Expecting_2_80_BF (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0), (1, 1, 1, bit))).
 Proof.
   intros.
@@ -391,7 +392,7 @@ Qed.
 Lemma next_state_initial_f1_f3 :
   forall b1 b2, (b2 = 1 \/ b1 = 1) ->
     let b := (of_bits (b1, (b2, (0, (0, (1, (1, (1, 1)))))))) in
-    next_state Initial Utf8DFA.zero_codep b
+    next_state Initial DFA.zero_codep b
     = Ok (More Expecting_3_80_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, b2, b1))).
 Proof.
   intros.
@@ -407,7 +408,7 @@ Qed.
 
 Lemma next_state_initial_f0 :
   let b := (of_bits (0, (0, (0, (0, (1, (1, (1, 1)))))))) in
-  next_state Initial Utf8DFA.zero_codep b
+  next_state Initial DFA.zero_codep b
   = Ok (More Expecting_3_90_BF (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 0, 0, 0))).
 Proof.
   intros.
@@ -419,7 +420,7 @@ Qed.
 
 Lemma next_state_initial_f4 :
   let b := (of_bits (0, (0, (1, (0, (1, (1, (1, 1)))))))) in
-  next_state Initial Utf8DFA.zero_codep b
+  next_state Initial DFA.zero_codep b
   = Ok (More Expecting_3_80_8F (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, 1, 0, 0))).
 Proof.
   intros.
@@ -645,7 +646,7 @@ Ltac for_all_valid_byte_ranges:=
       let byte_eqn := fresh "ByteRange" in
       simpl in U; unfold next_state, extract_7_bits, extract_5_bits, extract_4_bits, extract_3_bits in U;
       destruct (byte_range byte) eqn:byte_eqn; try discriminate; byte_range_bits byte_eqn; simpl in U; try rewrite Byte.to_bits_of_bits in U; simpl in U; for_all_valid_byte_ranges
-  | [U: context[utf8_dfa_decode_rec ?bytes Utf8DFA.zero_codep Initial] |- _] =>
+  | [U: context[utf8_dfa_decode_rec ?bytes DFA.zero_codep Initial] |- _] =>
       let parsed_name := fresh "parsed_code" in
       let unparsed_bytes_name := fresh "unparsed_bytes" in
       fold (utf8_dfa_decode bytes) in U; destruct (utf8_dfa_decode bytes) as [[parsed_name unparsed_bytes_name] | _err] eqn:Utf8DfaDecodeLess; [| discriminate];

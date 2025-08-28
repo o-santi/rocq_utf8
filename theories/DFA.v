@@ -1,6 +1,6 @@
 From Coq Require Import Strings.Byte.
 
-Require Import Utf8.Utf8.
+Require Import Utf8.Spec.
 Require Import Utf8.Parser.
 From Coq Require Import Lia.
 
