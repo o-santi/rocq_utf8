@@ -1,4 +1,5 @@
 From Coq Require Import Strings.Byte.
+From Coq Require Import Lia.
 
 Require Import Utf8.Parser.
 Require Import Utf8.Spec.
@@ -246,8 +247,6 @@ Ltac validate_utf8_bytes :=
         destruct bits as [byte_bits | [byte_bits | byte_bits]]; rewrite byte_bits
     end.
 
-From Coq Require Import Lia.
-
 Theorem valid_bytes_concat_strong : forall (bytes_big bytes1 bytes2: list byte),
     (length bytes1) <= (length bytes_big) ->
     valid_utf8_bytes bytes1 ->
@@ -258,17 +257,17 @@ Proof.
   inversion lesser. apply List.length_zero_iff_nil in H0. subst. apply bytes2_valid.
   destruct bytes1 as [| byte1 rest1]; auto.
   simpl in bytes1_valid |- *.
-  destruct (byte_range byte1); auto.
-  + apply IHbytes_big. simpl in lesser; lia. 1,2: assumption.
-  + destruct rest1 as [|byte2 rest2].
-    simpl in bytes1_valid. destruct bytes1_valid.
-    simpl in bytes1_valid |- *. destruct bytes1_valid as [byte2_in_range rest2_valid].
-    split. apply byte2_in_range. 
-    apply IHbytes_big. simpl in lesser. lia. 1,2: assumption.
-  + destruct rest1 as [|byte2 rest2].
-    simpl in bytes1_valid. destruct bytes1_valid.
-    simpl in bytes1_valid |- *. destruct bytes1_valid as [byte2_in_range rest2_valid].
-    split. apply byte2_in_range.
-    destruct rest2 as [|byte3 rest3]; simpl in rest2_valid. easy.
-    apply IHbytes_big. simpl in lesser. lia. 1,2: assumption.
-  
+  destruct (byte_range byte1); auto;
+  let rec prove_concat :=
+    match goal with
+    | |- valid_utf8_bytes (?b1 ++ ?b2) =>
+        apply IHbytes_big; simpl in lesser; try lia; assumption
+    | [G: expect ?byte_pred1 ?rest_pred1 ?b1 |- expect ?byte_pred2 ?rest_pred2 (?b1 ++ ?b2)] =>
+        let byte := fresh "byte_in_range" in
+        let rest := fresh "rest_pred" in
+        simpl in G |- *; destruct b1; simpl in G |- *; try easy;
+        destruct G as [byte rest];
+        split; try apply byte; prove_concat
+  end
+  in prove_concat.
+Qed.  
