@@ -120,3 +120,24 @@ Proof.
       }
     + reflexivity.
 Qed.
+
+Theorem all_pred_forall : forall A I E fuel text elems rest processor (pred: A -> Prop),
+    (forall suffix response text, processor text = Ok (response, suffix) ->  pred response) ->
+    @all_aux A I E processor fuel text = Ok (elems, rest) ->
+    Forall pred elems.
+Proof.
+  intros A I E fuel. induction fuel; intros text elems rest processor pred PredHolds AllOk.
+  - inversion AllOk. constructor.
+  - simpl in AllOk.
+    destruct text.
+    + inversion AllOk. constructor.
+    + destruct (processor (i :: text)) as [[val text_rest]| err] eqn:ProcessorText; [| discriminate].
+      destruct (all_aux processor fuel text_rest) as [[vals text_rest2]| err] eqn:AllAuxTextRest; [| discriminate].
+      inversion AllOk.
+      apply Forall_cons_iff. apply PredHolds in ProcessorText. split.
+      * apply ProcessorText.
+      * apply IHfuel with (pred := pred) in AllAuxTextRest.
+        apply AllAuxTextRest.
+        apply PredHolds.
+Qed.
+      
