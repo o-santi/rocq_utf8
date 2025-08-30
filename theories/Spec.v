@@ -78,8 +78,8 @@ Inductive unicode_encode_error :=
 | EncodingCodepointTooBig (c: codepoint)
 | IllegalSurrogatePair (c: codepoint).
 
-Definition encoder_type := @parser (list Byte.byte) codepoint unicode_decode_error.
-Definition decoder_type := @parser (list codepoint) Byte.byte unicode_encode_error.
+Definition encoder_type := @parser (list Byte.byte) codepoint unicode_encode_error.
+Definition decoder_type := @parser (list codepoint) Byte.byte unicode_decode_error.
 
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
   match code with
@@ -141,7 +141,7 @@ Fixpoint valid_utf8_bytes (bytes: list Byte.byte) : Prop :=
       match byte_range byte1 with
       | Range_00_7F => valid_utf8_bytes rest
       | Range_C2_DF => expect in_range_80_bf valid_utf8_bytes rest
-      | Byte_E0     => expect in_range_a0_bf (expect in_range_80_8f valid_utf8_bytes) rest
+      | Byte_E0     => expect in_range_a0_bf (expect in_range_80_bf valid_utf8_bytes) rest
       | Range_E1_EC
       | Range_EE_EF => expect in_range_80_bf (expect in_range_80_bf valid_utf8_bytes) rest
       | Byte_ED     => expect in_range_80_9f (expect in_range_80_bf valid_utf8_bytes) rest
