@@ -193,6 +193,160 @@ Proof.
     auto.
 Qed.
 
+
+Lemma byte_f4_bits : forall b,
+    byte_range b = Byte_F4 ->
+    Byte.to_bits b = (0, (0, (1, (0, (1, (1, (1, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; reflexivity.
+Qed.
+
+Lemma byte_range_00_7f_bits : forall b,
+    byte_range b = Range_00_7F ->
+    exists b1 b2 b3 b4 b5 b6 b7,
+      Byte.to_bits b = (b1, (b2, (b3, (b4, (b5, (b6, (b7, 0))))))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists.
+Qed.
+
+Lemma byte_range_80_8f_bits : forall b,
+    byte_range b = Range_80_8F ->
+    exists b1 b2 b3 b4,
+      Byte.to_bits b = (b1, (b2, (b3, (b4, (0, (0, (0, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists.
+Qed.
+
+Lemma byte_range_90_9f_bits : forall b,
+    byte_range b = Range_90_9F ->
+    exists b1 b2 b3 b4,
+      Byte.to_bits b = (b1, (b2, (b3, (b4, (1, (0, (0, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists.
+Qed.
+
+Lemma byte_range_a0_bf_bits : forall b,
+    byte_range b = Range_A0_BF ->
+    exists b1 b2 b3 b4 b5,
+      Byte.to_bits b = (b1, (b2, (b3, (b4, (b5, (1, (0, 1))))))).
+Proof.
+  intros.
+  - destruct b; inversion H; repeat eexists.
+Qed.
+
+Lemma byte_range_c0_c1_bits : forall b,
+    byte_range b = Range_C0_C1 ->
+    exists b1,
+      Byte.to_bits b = (b1, (0, (0, (0, (0, (0, (1, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists.
+Qed.
+
+Lemma byte_range_c2_df_bits : forall b,
+    byte_range b = Range_C2_DF ->
+    exists b1 b2 b3 b4 b5,
+      (Byte.to_bits b = (b1, (b2, (b3, (b4, (b5, (0, (1, 1))))))) /\
+       (b3 = 1 \/ b4 = 1 \/ b5 = 1 \/ b2 = 1)).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists; auto. 
+Qed.
+
+Lemma byte_e0_bits : forall b,
+    byte_range b = Byte_E0 ->
+    (Byte.to_bits b = (0, (0, (0, (0, (0, (1, (1, 1)))))))).
+Proof.
+  intros.
+  destruct b; inversion H; reflexivity.
+Qed.
+
+Lemma byte_range_e1_ec_bits : forall b,
+    byte_range b = Range_E1_EC ->
+    exists b1 b2 b3 b4,
+      Byte.to_bits b = (b1, (b2, (b3, (b4, (0, (1, (1, 1))))))) /\ ((b1 = 1 \/ b2 = 1 \/ b3 = 1 \/ b4 = 1) /\ (b3 = 0 \/ b4 = 0 \/ (b1 = 0 /\ b2 = 0))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists; auto.
+Qed.
+
+
+Lemma byte_ed_bits : forall b,
+    byte_range b = Byte_ED ->
+    (Byte.to_bits b = (1, (0, (1, (1, (0, (1, (1, 1)))))))).
+Proof.
+  intros.
+  destruct b; inversion H; reflexivity.
+Qed.
+
+
+Lemma byte_range_ee_ef_bits : forall b,
+    byte_range b = Range_EE_EF ->
+    exists bit,
+      Byte.to_bits b = (bit, (1, (1, (1, (0, (1, (1, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists.
+Qed.
+
+Lemma byte_f0_bits : forall b,
+    byte_range b = Byte_F0 ->
+    Byte.to_bits b = (0, (0, (0, (0, (1, (1, (1, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; reflexivity.
+Qed.
+
+
+Lemma byte_range_f1_f3_bits : forall b,
+    byte_range b = Range_F1_F3 ->
+    exists b1 b2,
+      Byte.to_bits b = (b1, (b2, (0, (0, (1, (1, (1, 1))))))) /\
+        (b2 = 1 \/ b1 = 1).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists; auto.
+Qed.
+
+
+Lemma byte_range_f5_ff_bits : forall b,
+    byte_range b = Range_F5_FF ->
+    exists b1 b2 b3 b4,
+      Byte.to_bits b = (b1, (b2, (b3, (b4, (1, (1, (1, 1))))))).
+Proof.
+  intros.
+  destruct b; inversion H; repeat eexists.
+Qed.
+
+Ltac destruct_bits B :=
+  match type of B with
+  | exists (b: bool), ?P => let bit := fresh "b" in let P := fresh "byte_bits" in destruct B as [bit P]; destruct_bits P
+  | ?A /\ ?C => let p := fresh "Pred" in let b := fresh "byte_bits" in destruct B as [b p]; destruct_bits b
+  | to_bits ?b = _ => apply (f_equal Byte.of_bits) in B; rewrite Byte.of_bits_to_bits in B; rewrite B in *
+  end.
+
+
+Ltac byte_range_bits ByteRange :=
+  let new := fresh "_byte_bits" in
+  match type of ByteRange with
+  | byte_range ?byte = Range_00_7F => apply byte_range_00_7f_bits in ByteRange as new
+  | byte_range ?byte = Range_80_8F => apply byte_range_80_8f_bits in ByteRange as new
+  | byte_range ?byte = Range_90_9F => apply byte_range_90_9f_bits in ByteRange as new
+  | byte_range ?byte = Range_A0_BF => apply byte_range_a0_bf_bits in ByteRange as new
+  | byte_range ?byte = Range_C2_DF => apply byte_range_c2_df_bits in ByteRange as new
+  | byte_range ?byte = Byte_E0     => apply byte_e0_bits          in ByteRange as new
+  | byte_range ?byte = Range_E1_EC => apply byte_range_e1_ec_bits in ByteRange as new
+  | byte_range ?byte = Byte_ED     => apply byte_ed_bits          in ByteRange as new
+  | byte_range ?byte = Range_EE_EF => apply byte_range_ee_ef_bits in ByteRange as new
+  | byte_range ?byte = Byte_F0     => apply byte_f0_bits          in ByteRange as new
+  | byte_range ?byte = Range_F1_F3 => apply byte_range_f1_f3_bits in ByteRange as new
+  | byte_range ?byte = Byte_F4     => apply byte_f4_bits          in ByteRange as new
+  end; destruct_bits new.
+
 Ltac validate_utf8_bytes :=
   unfold valid_utf8_bytes; fold valid_utf8_bytes; unfold expect;
   repeat match goal with
@@ -247,7 +401,7 @@ Ltac validate_utf8_bytes :=
         destruct bits as [byte_bits | [byte_bits | byte_bits]]; rewrite byte_bits
     end.
 
-Theorem valid_bytes_concat_strong : forall (bytes_big bytes1 bytes2: list byte),
+Theorem valid_utf8_bytes_concat_strong : forall (bytes_big bytes1 bytes2: list byte),
     (length bytes1) <= (length bytes_big) ->
     valid_utf8_bytes bytes1 ->
     valid_utf8_bytes bytes2 ->
@@ -270,4 +424,15 @@ Proof.
         split; try apply byte; prove_concat
   end
   in prove_concat.
-Qed.  
+Qed.
+
+Theorem valid_utf8_bytes_concat : forall (bytes1 bytes2: list byte),
+    valid_utf8_bytes bytes1 ->
+    valid_utf8_bytes bytes2 ->
+    valid_utf8_bytes (bytes1 ++ bytes2).
+Proof.
+  intros bytes1 bytes2 valid_bytes1 valid_bytes2.
+  apply valid_utf8_bytes_concat_strong with (bytes_big := bytes1). lia.
+  1,2: assumption.
+Qed.
+  

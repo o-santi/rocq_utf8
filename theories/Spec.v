@@ -153,8 +153,8 @@ Fixpoint valid_utf8_bytes (bytes: list Byte.byte) : Prop :=
   end.
 
 Definition encoder_encode_valid_codes_correctly (encoder: encoder_type) := forall codes,
-    valid_codepoints codes ->
-    exists bytes, encoder codes = Ok (bytes, []).
+    valid_codepoints codes <->
+      exists bytes, encoder codes = Ok (bytes, []).
 
 Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := forall codes bytes,
     encoder codes = Ok (bytes, []) ->
@@ -167,8 +167,8 @@ Definition decoder_decode_correctly_implies_valid (decoder: decoder_type) := for
     valid_codepoints codes.
 
 Definition decoder_decode_valid_utf8_bytes_correctly (decoder: decoder_type) := forall bytes,
-    valid_utf8_bytes bytes ->
-    exists codes, decoder bytes = Ok (codes, []).
+    valid_utf8_bytes bytes <->
+      exists codes, decoder bytes = Ok (codes, []).
 
 Definition utf8_decoder_spec decoder := decoder_decode_correctly_implies_valid decoder /\ decoder_decode_valid_utf8_bytes_correctly decoder.
 
