@@ -6,6 +6,7 @@ From Coq Require Import Lists.List. Import ListNotations.
 Require Import Utf8.Parser.
 Require Import Utf8.Theorems.Parser.
 Require Import Utf8.Spec.
+Require Import Utf8.Theorems.Spec.
 Require Import Utf8.Utf8.
 
 Open Scope string_scope.
@@ -265,6 +266,73 @@ Ltac for_all_valid_utf8_encodings c :=
     end
   in f encodings.
 
+Theorem encode_valid_codepoint : forall code,
+    valid_codepoint code <->
+    exists bytes, utf8_encode_codepoint code = Ok bytes /\ valid_utf8_bytes bytes.
+Proof.
+  split; intros.
+  - pose (eq_refl (utf8_encode_codepoint code)) as Code.
+    unfold valid_codepoint in H. destruct H as [LessThan NotSurrogate].
+    to_bits code.
+    unfold codepoint_less_than_10ffff in LessThan.
+    unfold codepoint_is_not_surrogate in NotSurrogate.
+    crush_bits; try easy; simpl in Code.
+    10: crush_bits.
+    all: match type of Code with
+    | Ok ?bytes = Ok ?bytes => exists bytes
+         end; split; try easy; validate_utf8_bytes.
+  - destruct H as [bytes [utf8_enc bytes_valid]].
+    to_bits code. 
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate.
+    unfold utf8_encode_codepoint in utf8_enc. crush_bits; auto; discriminate.
+Qed.
+
+Theorem utf8_encode_valid_codepoints : forall codepoints,
+    valid_codepoints codepoints <->
+    exists bytes, utf8_encode codepoints = Ok (bytes, []).
+Proof.
+  split; intros.
+  induction H as [| code rest].
+  - repeat eexists. 
+  - unfold utf8_encode. apply encode_valid_codepoint in H.
+    destruct H.
+    rewrite H. destruct IHForall.
+    fold (utf8_encode rest). rewrite H1. repeat eexists.
+  - unfold valid_codepoints. generalize dependent H. induction codepoints; intros.
+    + auto.
+    + rewrite Forall_cons_iff. destruct H. unfold utf8_encode in H. fold utf8_encode in H.
+      destruct (utf8_encode_codepoint a) eqn:U; [ | discriminate].
+      split.
+      apply <- encode_valid_codepoint. exists x0. apply U.
+      destruct (utf8_encode codepoints) as [[code unicode_rest] | err] eqn:Utf8Encode; [| discriminate].
+      simpl in H. inversion H. subst. clear H.
+      apply IHcodepoints.
+      exists code. reflexivity.
+Qed.
+
+(* Theorem utf8_encoder_is_compliant : utf8_encoder_spec utf8_encode. *)
+(* Proof. *)
+(*   unfold utf8_encoder_spec. *)
+(*   split. *)
+(*   - unfold encoder_encode_correctly_implies_valid.  *)
+(*     intros. unfold utf8 *)
+
+Theorem utf8_encoder_implies_valid : forall (codes : list codepoint) (bytes : list byte),
+  utf8_encode codes = Ok (bytes, []) -> valid_utf8_bytes bytes.
+Proof.
+  intros codes; induction codes as [| code codes]; intros.
+  - now inversion H. 
+  - unfold utf8_encode in H. fold utf8_encode in H.
+    destruct (utf8_encode_codepoint code) as [bytes2| err] eqn:EncCode; [| discriminate].
+    destruct (utf8_encode codes) as [[bytes3 rest]| err] eqn:EncCodes; [| discriminate].
+    apply IHcodes in EncCodes.
+    inversion H.
+    for_all_valid_utf8_encodings code; subst; rewrite EncCode in *; try discriminate; inversion _rest; simpl.
+    + rewrite byte_range_
+    
+
+
+
 Theorem encoding_size_correct :
   (forall byte b1 b2 b3 b4 b5 b6 b7, byte = (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, false)))))))) <->
                                   encoding_size_from_header byte = Some (OneByte (b7, b6, b5, b4, b3, b2, b1)))
@@ -516,45 +584,7 @@ Proof.
   intros.
   apply decode_encode_correct_strong with (bytes:= bytes) (bytes_rest:=rest). lia. apply H.
 Defined.
-
-Theorem encode_valid_codepoint : forall code,
-    valid_codepoint code <->
-    exists bytes, utf8_encode_codepoint code = Ok bytes.
-Proof.
-  split; intros.
-  unfold utf8_encode_codepoint, valid_codepoint in *.
-  destruct H as [H1 H2].
-  to_bits code.
-  crush_bits; simpl in *; try easy; repeat eexists.
-  destruct H.
-  unfold utf8_encode_codepoint in H.
-  to_bits code.
-  crush_bits; try discriminate; easy.
-Qed.
-
-Theorem utf8_encode_valid_codepoints : forall codepoints,
-    Forall valid_codepoint codepoints <->
-    exists bytes, utf8_encode codepoints = Ok (bytes, []).
-Proof.
-  split; intros.
-  induction H as [| code rest].
-  - repeat eexists. 
-  - unfold utf8_encode. apply encode_valid_codepoint in H.
-    destruct H.
-    rewrite H. destruct IHForall.
-    fold (utf8_encode rest). rewrite H1. repeat eexists.
-  - generalize dependent H. induction codepoints; intros.
-    + auto.
-    + rewrite Forall_cons_iff. destruct H. unfold utf8_encode in H. fold utf8_encode in H.
-      destruct (utf8_encode_codepoint a) eqn:U; [ | discriminate].
-      split.
-      apply <- encode_valid_codepoint. exists x0. apply U.
-      destruct (utf8_encode codepoints) as [[code unicode_rest] | err] eqn:Utf8Encode; [| discriminate].
-      simpl in H. inversion H. subst. clear H.
-      apply IHcodepoints.
-      exists code. reflexivity.
-Qed.
-  
+ 
 Theorem parsed_codepoint_is_valid : forall code bytes rest,
     parse_codepoint bytes = Ok (code, rest) -> valid_codepoint code.
 Proof.

@@ -3,6 +3,7 @@ Require Import Utf8.Spec.
 Require Import Utf8.Utf8.
 Require Import Utf8.DFA.
 Require Import Utf8.Theorems.Parser.
+Require Import Utf8.Theorems.Spec.
 Require Import Utf8.Theorems.Utf8.
 
 From Coq Require Import Strings.Byte.
@@ -192,114 +193,6 @@ Proof.
   intros.
   destruct b; inversion H; repeat eexists.
 Qed.
-
-Lemma byte_range_of_bits_00_7f: forall b1 b2 b3 b4 b5 b6 b7,
-    byte_range (of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, 0)))))))) = Range_00_7F.
-Proof.
-  intros.
-  destruct (of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, 0)))))))) eqn:H;
-    apply (f_equal Byte.to_bits) in H;
-    rewrite Byte.to_bits_of_bits in H;
-    inversion H;
-    reflexivity.
-Qed.
-
-Lemma byte_range_of_bits_c2_df: forall b1 b2 b3 b4 b5,
-    (b2 = 1 \/ b3 = 1 \/ b4 = 1 \/ b5 = 1) ->
-    byte_range (of_bits (b1, (b2, (b3, (b4, (b5, (0, (1, 1)))))))) = Range_C2_DF.
-Proof.
-  intros.
-  destruct (of_bits (b1, (b2, (b3, (b4, (b5, (0, (1, 1)))))))) eqn:H2;
-    apply (f_equal Byte.to_bits) in H2;
-    rewrite Byte.to_bits_of_bits in H2;
-    inversion H2;
-    try reflexivity; destruct H as [G | [G | [G | G]]]; subst;
-    match goal with
-    | [F: 1 = 0 |- _] => apply Bool.diff_true_false in F; destruct F
-    end.
-Qed.
-
-Lemma byte_range_of_bits_a0_bf: forall b1 b2 b3 b4 b5,
-    byte_range (of_bits (b1, (b2, (b3, (b4, (b5, (1, (0, 1)))))))) = Range_A0_BF.
-Proof.
-  intros.
-  destruct (of_bits (b1, (b2, (b3, (b4, (b5, (1, (0, 1)))))))) eqn:H;
-    apply (f_equal Byte.to_bits) in H;
-    rewrite Byte.to_bits_of_bits in H;
-    inversion H;
-    reflexivity.
-Qed.
-
-Lemma byte_range_of_bits_80_8f: forall (b1 b2 b3 b4: bool),
-    byte_range (of_bits (b1, (b2, (b3, (b4, (0, (0, (0, 1)))))))) = Range_80_8F.
-Proof.
-  intros.
-  destruct (of_bits (b1, (b2, (b3, (b4, (0, (0, (0, 1)))))))) eqn:H;
-    apply (f_equal Byte.to_bits) in H;
-    rewrite Byte.to_bits_of_bits in H;
-    inversion H;
-    auto.
-Qed.
-
-
-Lemma byte_range_of_bits_80_9f: forall (b1 b2 b3 b4 b5: bool),
-    let b := of_bits (b1, (b2, (b3, (b4, (b5, (0, (0, 1))))))) in
-    (byte_range b = Range_80_8F) \/
-      (byte_range b = Range_90_9F).
-Proof.
-  intros.
-  destruct b eqn:H;
-    apply (f_equal Byte.to_bits) in H;
-    subst b;
-    rewrite Byte.to_bits_of_bits in H;
-    inversion H;
-    auto.
-Qed.
-
-
-Lemma byte_range_of_bits_80_bf: forall (b1 b2 b3 b4 b5 b6: bool),
-    let b := of_bits (b1, (b2, (b3, (b4, (b5, (b6, (0, 1))))))) in
-    (byte_range b = Range_80_8F) \/
-      (byte_range b = Range_90_9F) \/
-      (byte_range b = Range_A0_BF).
-Proof.
-  intros.
-  destruct b eqn:H;
-    apply (f_equal Byte.to_bits) in H;
-    subst b;
-    rewrite Byte.to_bits_of_bits in H;
-    inversion H;
-    auto.
-Qed.
-
-Lemma byte_range_of_bits_90_9f: forall (b1 b2 b3 b4: bool),
-    let b := of_bits (b1, (b2, (b3, (b4, (1, (0, (0, 1))))))) in
-    (byte_range b = Range_90_9F).
-Proof.
-  intros.
-  destruct b eqn:H;
-    apply (f_equal Byte.to_bits) in H;
-    subst b;
-    rewrite Byte.to_bits_of_bits in H;
-    inversion H;
-    auto.
-Qed.
-
-
-Lemma byte_range_of_bits_ee_ef: forall (bit: bool),
-    let b := of_bits (bit, (1, (1, (1, (0, (1, (1, 1))))))) in
-    byte_range b = Range_EE_EF.
-Proof.
-  intros.
-  destruct b eqn:H;
-    apply (f_equal Byte.to_bits) in H;
-    subst b;
-    rewrite Byte.to_bits_of_bits in H;
-    inversion H;
-    auto.
-Qed.
-
-Create HintDb next_state_hintdb.
 
 Lemma next_state_initial_00_7f :
   forall b1 b2 b3 b4 b5 b6 b7,
