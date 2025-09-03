@@ -158,23 +158,40 @@ Definition encoder_encode_valid_codes_correctly (encoder: encoder_type) := foral
 
 Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := forall codes codes_suffix bytes,
     encoder codes = (bytes, codes_suffix) ->
-    valid_utf8_bytes bytes /\ exists codes_prefix, codes = codes_prefix ++ codes_suffix.
+    
+    (valid_utf8_bytes bytes
+     /\ exists codes_prefix,
+        (codes = codes_prefix ++ codes_suffix /\ encoder codes_prefix = (bytes, nil))).
 
-Definition utf8_encoder_spec encoder := encoder_encode_correctly_implies_valid encoder /\ encoder_encode_valid_codes_correctly encoder.
+Definition encoder_injective (encoder: encoder_type) := forall codes1 codes2 bytes codes_rest,
+    encoder codes1 = (bytes, codes_rest) ->
+    encoder codes2 = (bytes, codes_rest) ->
+    codes1 = codes2.
+
+Definition utf8_encoder_spec encoder :=
+  encoder_encode_correctly_implies_valid encoder
+  /\ encoder_encode_valid_codes_correctly encoder
+  /\ encoder_injective encoder.
 
 Definition decoder_decode_correctly_implies_valid (decoder: decoder_type) := forall codes bytes bytes_suffix,
     decoder bytes = (codes, bytes_suffix) ->
-    valid_codepoints codes /\ exists bytes_prefix, bytes = bytes_prefix ++ bytes_suffix.
+    valid_codepoints codes /\
+      (exists bytes_prefix,
+          (bytes = bytes_prefix ++ bytes_suffix) /\ (decoder bytes_prefix = (codes, nil))).
 
 Definition decoder_decode_valid_utf8_bytes_correctly (decoder: decoder_type) := forall bytes,
     valid_utf8_bytes bytes <->
       exists codes, decoder bytes = (codes, []).
 
-Definition utf8_decoder_spec decoder := decoder_decode_correctly_implies_valid decoder /\ decoder_decode_valid_utf8_bytes_correctly decoder.
+Definition decoder_injective (decoder: decoder_type) := forall bytes1 bytes2 codes bytes_rest,
+    decoder bytes1 = (codes, bytes_rest) ->
+    decoder bytes2 = (codes, bytes_rest) ->
+    bytes1 = bytes2.
 
-Definition decoder_encoder_inverses (encoder: encoder_type) (decoder: decoder_type) := forall bytes codes,
-    (exists bytes_rest, encoder bytes = (codes, bytes_rest)) <-> (exists codes_rest, decoder codes = (bytes, codes_rest)).
+Definition utf8_decoder_spec decoder :=
+  decoder_decode_correctly_implies_valid decoder
+  /\ decoder_decode_valid_utf8_bytes_correctly decoder
+  /\ decoder_injective decoder.
 
 Definition utf8_spec encoder decoder :=
-  utf8_encoder_spec encoder /\ utf8_decoder_spec decoder /\
-    decoder_encoder_inverses encoder decoder.
+  utf8_encoder_spec encoder /\ utf8_decoder_spec decoder.

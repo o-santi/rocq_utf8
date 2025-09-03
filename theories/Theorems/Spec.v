@@ -251,7 +251,7 @@ Lemma byte_range_c2_df_bits : forall b,
     byte_range b = Range_C2_DF ->
     exists b1 b2 b3 b4 b5,
       (Byte.to_bits b = (b1, (b2, (b3, (b4, (b5, (0, (1, 1))))))) /\
-       (b3 = 1 \/ b4 = 1 \/ b5 = 1 \/ b2 = 1)).
+       (b2 = 1 \/ b3 = 1 \/ b4 = 1 \/ b5 = 1)).
 Proof.
   intros.
   destruct b; inversion H; repeat eexists; auto. 
@@ -306,7 +306,7 @@ Lemma byte_range_f1_f3_bits : forall b,
     byte_range b = Range_F1_F3 ->
     exists b1 b2,
       Byte.to_bits b = (b1, (b2, (0, (0, (1, (1, (1, 1))))))) /\
-        (b2 = 1 \/ b1 = 1).
+        (b1 = 1 \/ b2 = 1).
 Proof.
   intros.
   destruct b; inversion H; repeat eexists; auto.
@@ -346,6 +346,43 @@ Ltac byte_range_bits ByteRange :=
   | byte_range ?byte = Range_F1_F3 => apply byte_range_f1_f3_bits in ByteRange as new
   | byte_range ?byte = Byte_F4     => apply byte_f4_bits          in ByteRange as new
   end; destruct_bits new.
+
+
+Ltac rewrite_bits_in_hypothesis B :=
+  unfold valid_utf8_bytes in B; fold valid_utf8_bytes in B; unfold expect in B;
+  unfold in_range_80_bf, in_range_80_8f, in_range_a0_bf, in_range_90_bf, in_range_80_9f in B;
+  match type of B with
+  | valid_utf8_bytes ?bytes =>
+      idtac
+  | True => idtac
+  | context[byte_range (of_bits (?b1, (?b2, (?b3, (?b4, (?b5, (?b6, (?b7, 0))))))))] =>
+      rewrite byte_range_of_bits_00_7f in B
+  | context[byte_range (of_bits (?b1, (?b2, (?b3, (?b4, (?b5, (0, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_c2_df in B; auto
+  | context[byte_range (of_bits (?b1, (?b2, (?b3, (?b4, (?b5, (1, (0, 1))))))))] =>
+      rewrite byte_range_of_bits_a0_bf in B
+  | context[byte_range (of_bits (?b1, (?b2, (?b3, (?b4, (0, (0, (0, 1))))))))] =>
+      rewrite byte_range_of_bits_80_8f in B
+  | context[byte_range (of_bits (?b1, (?b2, (?b3, (?b4, (1, (0, (0, 1))))))))] =>
+      rewrite byte_range_of_bits_90_9f in B
+  | context[byte_range (of_bits (0, (0, (0, (0, (0, (1, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_e0 in B
+  | context[byte_range (of_bits (1, (0, (1, (1, (0, (1, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_ed in B
+  | context[byte_range (of_bits (?bit, (1, (1, (1, (0, (1, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_ee_ef in B
+  | context[byte_range (of_bits (?b1, (?b2, (?b3, (?b4, (0, (1, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_e1_ec in B; auto
+  | context[byte_range (of_bits (0, (0, (1, (0, (1, (1, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_f4 in B
+  | context[byte_range (of_bits (0, (0, (0, (0, (1, (1, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_f0 in B
+  | context[byte_range (of_bits (?b1, (?b2, (0, (0, (1, (1, (1, 1))))))))] =>
+      rewrite byte_range_of_bits_f1_f3 in B; auto
+  | ?a /\ ?b =>
+      let P1 := fresh "P1" in let P2 := fresh "P2" in
+                              destruct B as [P1 P2]; rewrite_bits_in_hypothesis P1; rewrite_bits_in_hypothesis P2
+  end.
 
 Ltac validate_utf8_bytes :=
   unfold valid_utf8_bytes; fold valid_utf8_bytes; unfold expect;
@@ -401,6 +438,28 @@ Ltac validate_utf8_bytes :=
         destruct bits as [byte_bits | [byte_bits | byte_bits]]; rewrite byte_bits
     end.
 
+Ltac destruct_valid_bytes R :=
+  match type of R with
+  | valid_utf8_bytes ?bytes =>
+      idtac
+  | context[byte_range ?byte] =>
+      let r := fresh "ByteRange" in
+      destruct (byte_range byte) eqn:r; try easy; byte_range_bits r;
+      destruct_valid_bytes R
+  | expect ?pred ?bytes_pred ?bytes =>
+      let b := fresh "byte" in
+      let bs := fresh "bytes" in
+      let pred := fresh "pred" in
+      let pred_rest := fresh "bytes_valid" in
+      destruct bytes as [| b bs]; try easy; simpl in R;
+      destruct R as [pred pred_rest];
+      unfold in_range_80_bf, in_range_80_8f, in_range_a0_bf, in_range_90_bf, in_range_80_9f in pred;
+      destruct_valid_bytes pred;
+      destruct_valid_bytes pred_rest
+  | True => idtac
+  end.
+
+
 Theorem valid_utf8_bytes_concat_strong : forall (bytes_big bytes1 bytes2: list byte),
     (length bytes1) <= (length bytes_big) ->
     valid_utf8_bytes bytes1 ->
@@ -435,4 +494,53 @@ Proof.
   apply valid_utf8_bytes_concat_strong with (bytes_big := bytes1). lia.
   1,2: assumption.
 Qed.
-  
+
+Theorem valid_utf8_decompose_strong : forall (bytes_big bytes1 bytes2: list byte),
+    (length bytes1) <= (length bytes_big) -> 
+    valid_utf8_bytes (bytes1 ++ bytes2) ->
+    valid_utf8_bytes bytes1 ->
+    valid_utf8_bytes bytes2.
+Proof.
+  intros bytes_big.
+  induction bytes_big.
+  - intros. inversion H. rewrite List.length_zero_iff_nil in H3. subst. simpl in H0. apply H0.
+  - intros bytes1 bytes2 LessThan bytes_concat_valid bytes1_valid.
+    destruct bytes1.
+    + apply bytes_concat_valid.
+    + simpl in bytes1_valid. Opaque Byte.of_bits.
+      destruct_valid_bytes bytes1_valid; simpl in bytes_concat_valid; repeat rewrite_bits_in_hypothesis bytes_concat_valid; try contradiction.
+      all: match goal with
+      | [G: valid_utf8_bytes (?bytes1 ++ ?bytes2) |- _ ]  => apply (IHbytes_big bytes1 bytes2); repeat assumption; simpl in LessThan |- *; try lia
+      end. 
+Qed.
+
+(* Theorem decode_encode_spec_compliant_inverses : forall encoder decoder, *)
+(*     utf8_encoder_spec encoder -> *)
+(*     utf8_decoder_spec decoder -> *)
+(*     (forall codes bytes codes_suffix, *)
+(*         encoder codes = (bytes, codes_suffix) -> *)
+(*         exists codes_prefix, decoder bytes = (codes_prefix, nil) /\ codes = (codes_prefix ++ codes_suffix)%list) *)
+(*     /\ *)
+(*       (forall bytes codes bytes_suffix, *)
+(*           decoder bytes = (codes, bytes_suffix) -> *)
+(*           exists bytes_prefix, encoder codes = (bytes_prefix, nil) /\ bytes = (bytes_prefix ++ bytes_suffix)%list). *)
+(* Proof. *)
+(*   intros encoder decoder encoder_spec_compliant decoder_spec_compliant. *)
+(*   unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_injective in encoder_spec_compliant. *)
+(*   destruct encoder_spec_compliant as [enc_implies_valid [valid_implies_enc enc_injective]]. *)
+(*   unfold utf8_decoder_spec, decoder_decode_correctly_implies_valid, decoder_decode_valid_utf8_bytes_correctly, decoder_injective in decoder_spec_compliant. *)
+(*   destruct decoder_spec_compliant as [dec_implies_valid [valid_implies_dec dec_injective]]. *)
+(*   split. *)
+(*   - intros codes bytes codes_rest encoder_bytes. *)
+(*     apply enc_implies_valid in encoder_bytes as G. *)
+(*     destruct G as [valid_bytes [codes_prefix [codes_eq encoder_prefix]]]. *)
+(*     apply valid_implies_dec in valid_bytes. *)
+(*     destruct valid_bytes as [codes2 codes2_eq]. *)
+(*     apply dec_implies_valid in codes2_eq as G. *)
+(*     destruct G as [codes2_valid [bytes_prefix [bytes_prefix_eq decode_bytes_prefix]]]. *)
+(*     apply valid_implies_enc in codes2_valid. *)
+(*     destruct codes2_valid as [bytes2 bytes2_enc]. *)
+(*     subst.  *)
+(*     exists codes2. subst. split. apply codes2_eq.  *)
+(*     apply List.app_inv_tail_iff. *)
+        
