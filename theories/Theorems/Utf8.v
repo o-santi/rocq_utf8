@@ -21,8 +21,9 @@ Open Scope bool_scope.
 
 From Coq.Strings Require Import Byte.
 Definition test1 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [x41; xe2; x89; xa2; xce; x91; x2e]))
-  = Ok (["U+0041"%string; "U+2262"%string; "U+0391"%string; "U+002E"%string], []).
+  let '(codes, _) := utf8_decode [x41; xe2; x89; xa2; xce; x91; x2e] in
+  List.map show_codepoint codes
+  = ["U+0041"%string; "U+2262"%string; "U+0391"%string; "U+002E"%string].
   reflexivity.
 Qed.
 
@@ -33,8 +34,9 @@ Qed.
 (*     ED 95 9C EA B5 AD EC 96 B4 *)
 (*     --------+--------+-------- *)
 Definition test2 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xed; x95; x9c; xea; xb5; xad; xec; x96; xb4]))
-  = Ok (["U+D55C"%string; "U+AD6D"%string; "U+C5B4"%string], []).
+  let '(codes, _) := utf8_decode [xed; x95; x9c; xea; xb5; xad; xec; x96; xb4] in
+  List.map show_codepoint codes
+  = ["U+D55C"%string; "U+AD6D"%string; "U+C5B4"%string].
   reflexivity.
 Qed.
 
@@ -45,8 +47,9 @@ Qed.
 (*     E6 97 A5 E6 9C AC E8 AA 9E *)
 (*     --------+--------+-------- *)
 Definition test3 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xe6; x97; xa5; xe6; x9c; xac; xe8; xaa; x9e]))
-  = Ok (["U+65E5"%string; "U+672C"%string; "U+8A9E"%string], []).
+  let '(codes, _) := utf8_decode [xe6; x97; xa5; xe6; x9c; xac; xe8; xaa; x9e] in
+  List.map show_codepoint codes
+  = ["U+65E5"%string; "U+672C"%string; "U+8A9E"%string].
   reflexivity.
 Qed.
 
@@ -58,8 +61,9 @@ Qed.
 (*     --------+----------- *)
 
 Definition test4 :
-  (fmap (fun '(s, r) => (List.map show_codepoint s, r)) (utf8_decode [xef; xbb; xbf; xf0; xa3; x8e; xb4]))
-  = Ok (["U+FEFF"%string; "U+0233B4"%string], []).
+  let '(codes, _) := utf8_decode [xef; xbb; xbf; xf0; xa3; x8e; xb4] in
+  List.map show_codepoint codes
+  = ["U+FEFF"%string; "U+0233B4"%string].
   simpl.
   reflexivity.
 Qed.
@@ -311,7 +315,7 @@ Qed.
 
 Theorem utf8_encode_valid_codepoints : forall codepoints,
     valid_codepoints codepoints <->
-    exists bytes, utf8_encode codepoints = Ok (bytes, []).
+    exists bytes, utf8_encode codepoints = (bytes, []).
 Proof.
   split; intros.
   induction H as [| code rest].
@@ -326,37 +330,41 @@ Proof.
       destruct (utf8_encode_codepoint a) eqn:U; [ | discriminate].
       split.
       apply encode_ok_implies_valid_codepoint in U. apply U.
-      destruct (utf8_encode codepoints) as [[code unicode_rest] | err] eqn:Utf8Encode; [| discriminate].
+      destruct (utf8_encode codepoints) as [bytes unicode_rest].
       simpl in H. inversion H. subst. clear H.
       apply IHcodepoints.
-      exists code. reflexivity.
+      exists bytes. reflexivity.
 Qed.
 
-Theorem utf8_encoder_implies_valid_bytes_strong : forall (codes_big codes: list codepoint) (bytes : list byte) rest,
+Theorem utf8_encoder_implies_valid_bytes_strong : forall (codes_big codes: list codepoint) (bytes : list byte) codes_suffix,
     (length codes) <= (length codes_big) ->
-    utf8_encode codes = Ok (bytes, rest)
-    -> valid_utf8_bytes bytes.
+    utf8_encode codes = (bytes, codes_suffix) ->
+    valid_utf8_bytes bytes /\ exists codes_prefix, codes = (codes_prefix ++ codes_suffix)%list.
 Proof.
   intros codes_big; induction codes_big; intros codes bytes rest LessThan EncodeOk.
-  inversion LessThan. rewrite length_zero_iff_nil in H0. subst. now inversion EncodeOk.
-  destruct codes as [| code code_rest]; [ now inversion EncodeOk|].
+  1: { inversion LessThan. rewrite length_zero_iff_nil in H0. subst. inversion EncodeOk. split. easy. exists []. reflexivity. } 
+  destruct codes as [| code code_rest].
+  1: { inversion EncodeOk. split. easy. exists []. reflexivity. } 
   unfold utf8_encode in EncodeOk. fold utf8_encode in EncodeOk.
-  destruct (utf8_encode_codepoint code) as [bytes2| err] eqn:EncCode; [| discriminate].
-  destruct (utf8_encode code_rest) as [[bytes3 code_rest2]| err] eqn:EncCodes; [| discriminate].
+  destruct (utf8_encode_codepoint code) as [bytes2| err] eqn:EncCode.
+  2: { inversion EncodeOk. split. easy. subst. exists []. reflexivity.} 
+  destruct (utf8_encode code_rest) as [bytes3 code_rest2] eqn:EncCodes.
   inversion EncodeOk.
-  apply IHcodes_big in EncCodes as EncCodesValidUtf8; [ | simpl in LessThan; lia].
+  apply IHcodes_big in EncCodes as [EncCodesValidUtf8 [codes_prefix code_rest_eq]]; [ | simpl in LessThan; lia].
   apply encode_ok_implies_valid_bytes in EncCode as EncCodeValidUtf8.
-  apply valid_utf8_bytes_concat.
-  apply EncCodeValidUtf8.
-  apply EncCodesValidUtf8.
+  split. 
+  - apply valid_utf8_bytes_concat.
+    apply EncCodeValidUtf8.
+    apply EncCodesValidUtf8.
+  - subst. exists (code :: codes_prefix). reflexivity.
 Qed.
 
-Theorem utf8_encoder_implies_valid_bytes: forall codes bytes rest,
-    utf8_encode codes = Ok (bytes, rest) ->
-    valid_utf8_bytes bytes.
+Theorem utf8_encoder_implies_valid_bytes: forall codes bytes codes_suffix,
+    utf8_encode codes = (bytes, codes_suffix) ->
+    valid_utf8_bytes bytes /\ exists codes_prefix, codes = (codes_prefix ++ codes_suffix)%list.
 Proof.
   intros.
-  apply utf8_encoder_implies_valid_bytes_strong with (codes_big := codes) (codes := codes) (rest := rest). lia.
+  apply utf8_encoder_implies_valid_bytes_strong with (codes_big := codes) (codes := codes) (codes_suffix := codes_suffix). lia.
   apply H.
 Qed.
   
@@ -366,8 +374,7 @@ Proof.
   split.
   - unfold encoder_encode_correctly_implies_valid.
     intros.
-    apply utf8_encoder_implies_valid_bytes with (codes := codes) (rest:=[]).
-    apply H.
+    apply utf8_encoder_implies_valid_bytes. apply H.
   - unfold encoder_encode_valid_codes_correctly.
     intros.
     apply utf8_encode_valid_codepoints.
@@ -514,23 +521,38 @@ Qed.
 
 Theorem parse_codepoint_implies_prefix_valid_bytes : forall byte bytes code rest,
     parse_codepoint (byte :: bytes) = Ok (code, rest) ->
-    exists prefix suffix, valid_utf8_bytes prefix /\ (byte :: bytes) = (prefix ++ suffix)%list.
+    exists prefix suffix,
+      valid_utf8_bytes prefix /\
+        (([byte] = prefix /\ bytes = suffix)
+         \/ match bytes with
+           | byte2 :: rest => [byte; byte2] = prefix /\ rest = suffix
+           | _ => False
+           end
+         \/ match bytes with
+           | byte2 :: byte3 :: rest => [byte; byte2; byte3] = prefix /\ rest = suffix
+           | _ => False
+           end
+         \/ match bytes with
+           | byte2 :: byte3 :: byte4 ::rest =>
+               [byte; byte2; byte3; byte4] = prefix /\ rest = suffix
+           | _ => False
+           end).      
 Proof.
   intros byte bytes code rest parse_codepoint_ok.
   unfold parse_codepoint in parse_codepoint_ok.
   destruct (parse_header (byte :: bytes)) as [[size rest2] | err] eqn:ParseHeader; [| discriminate parse_codepoint_ok].
   apply parse_header_spec in ParseHeader as [bytes_eq [G | [G | [G | G]]]];
     destruct_bits G; simpl in parse_codepoint_ok; rewrite Pred in parse_codepoint_ok.
-  - exists [byte]. exists bytes. split. rewrite byte_bits0. validate_utf8_bytes. simpl in parse_codepoint_ok. inversion parse_codepoint_ok.
-    simpl. rewrite <- byte_bits0. reflexivity.
+  - exists [byte]. exists bytes. split. rewrite byte_bits0. validate_utf8_bytes. simpl in parse_codepoint_ok. left. inversion parse_codepoint_ok.
+    simpl. rewrite <- byte_bits0. split; reflexivity.
   - destruct_parse_continuation.
     exists [byte; b4]. exists rest2.
-    rewrite bytes_eq. rewrite byte_bits. rewrite byte_bits0. split. validate_utf8_bytes. crush_bits; try discriminate; tauto. reflexivity.
+    rewrite bytes_eq. rewrite byte_bits. rewrite byte_bits0. split. validate_utf8_bytes. crush_bits; try discriminate; tauto. right. left. split; reflexivity.
   - destruct (parse_continuation rest2) as [[cont1 rest3] | err] eqn:ParseCont1; [| discriminate parse_codepoint_ok]. simpl in parse_codepoint_ok.
     destruct (parse_continuation rest3) as [[cont2 rest4] | err] eqn:ParseCont2; [| discriminate parse_codepoint_ok].
     repeat destruct_parse_continuation.
     inversion ParseCont1. inversion ParseCont2. 
-    exists [byte; b10; b3]. exists rest4. subst. split. 2:  reflexivity.
+    exists [byte; b10; b3]. exists rest4. subst. split. 2:  right; right; left; split; reflexivity.
     simpl in parse_codepoint_ok.
     crush_bits; try discriminate; validate_utf8_bytes.
   - destruct (parse_continuation rest2) as [[cont1 rest3] | err] eqn:ParseCont1; [| discriminate parse_codepoint_ok]. simpl in parse_codepoint_ok.
@@ -538,7 +560,7 @@ Proof.
     destruct (parse_continuation rest4) as [[cont3 rest5] | err] eqn:ParseCont3; [| discriminate parse_codepoint_ok].
     repeat destruct_parse_continuation.
     inversion ParseCont1. inversion ParseCont2. inversion ParseCont3.
-    exists [byte; b16; b9; b2]. exists rest5. subst. split. 2: reflexivity.
+    exists [byte; b16; b9; b2]. exists rest5. subst. split. 2: right; right; right; split; reflexivity.
     simpl in parse_codepoint_ok.
     crush_bits; try discriminate; validate_utf8_bytes.
 Qed.
@@ -569,10 +591,9 @@ Proof.
   destruct bytes as [| byte1 byte1_rest]. easy.
   unfold utf8_decode, all in decode_ok. simpl in decode_ok.
   destruct (parse_codepoint (byte1 :: byte1_rest)) as [[code1 rest1] | err] eqn:ParseCodepoint; [| discriminate decode_ok].
-  destruct rest1.
-  - inversion decode_ok.
-    apply parse_codepoint_implies_prefix_valid_bytes in ParseCodepoint as [prefix [suffix [valid_utf8_prefix prefix_suffix]]]. 
-    subst.
+  apply parse_codepoint_implies_prefix_valid_bytes in ParseCodepoint as [prefix [suffix [valid_utf8_prefix [[prefix_eq suffix_eq] | [G | [G | G]]]]]].
+  1: apply valid_utf8_bytes_concat with (bytes1 := [byte1]).
+  apply IHbytes_big with (codes := codes) (rest := rest). simpl in LessThan. lia.
   
 Theorem utf8_decode_ok_implies_utf8_bytes : forall bytes codes,
     utf8_decode bytes = Ok (codes, []) ->

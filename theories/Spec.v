@@ -78,8 +78,8 @@ Inductive unicode_encode_error :=
 | EncodingCodepointTooBig (c: codepoint)
 | IllegalSurrogatePair (c: codepoint).
 
-Definition encoder_type := @parser (list Byte.byte) codepoint unicode_encode_error.
-Definition decoder_type := @parser (list codepoint) Byte.byte unicode_decode_error.
+Definition encoder_type := list codepoint -> (list byte) * (list codepoint).
+Definition decoder_type := list byte -> (list codepoint) * (list byte).
 
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
   match code with
@@ -154,26 +154,26 @@ Fixpoint valid_utf8_bytes (bytes: list Byte.byte) : Prop :=
 
 Definition encoder_encode_valid_codes_correctly (encoder: encoder_type) := forall codes,
     valid_codepoints codes <->
-      exists bytes, encoder codes = Ok (bytes, []).
+      exists bytes, encoder codes = (bytes, []).
 
-Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := forall codes bytes,
-    encoder codes = Ok (bytes, []) ->
-    valid_utf8_bytes bytes.
+Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := forall codes codes_suffix bytes,
+    encoder codes = (bytes, codes_suffix) ->
+    valid_utf8_bytes bytes /\ exists codes_prefix, codes = codes_prefix ++ codes_suffix.
 
 Definition utf8_encoder_spec encoder := encoder_encode_correctly_implies_valid encoder /\ encoder_encode_valid_codes_correctly encoder.
 
-Definition decoder_decode_correctly_implies_valid (decoder: decoder_type) := forall codes bytes,
-    decoder bytes = Ok (codes, bytes) ->
-    valid_codepoints codes.
+Definition decoder_decode_correctly_implies_valid (decoder: decoder_type) := forall codes bytes bytes_suffix,
+    decoder bytes = (codes, bytes_suffix) ->
+    valid_codepoints codes /\ exists bytes_prefix, bytes = bytes_prefix ++ bytes_suffix.
 
 Definition decoder_decode_valid_utf8_bytes_correctly (decoder: decoder_type) := forall bytes,
     valid_utf8_bytes bytes <->
-      exists codes, decoder bytes = Ok (codes, []).
+      exists codes, decoder bytes = (codes, []).
 
 Definition utf8_decoder_spec decoder := decoder_decode_correctly_implies_valid decoder /\ decoder_decode_valid_utf8_bytes_correctly decoder.
 
-Definition decoder_encoder_inverses (encoder: encoder_type) (decoder: decoder_type) := forall bytes bytes_rest codes codes_rest,
-    encoder bytes = Ok (codes, bytes_rest) <-> decoder codes = Ok (bytes, codes_rest).
+Definition decoder_encoder_inverses (encoder: encoder_type) (decoder: decoder_type) := forall bytes codes,
+    (exists bytes_rest, encoder bytes = (codes, bytes_rest)) <-> (exists codes_rest, decoder codes = (bytes, codes_rest)).
 
 Definition utf8_spec encoder decoder :=
   utf8_encoder_spec encoder /\ utf8_decoder_spec decoder /\
