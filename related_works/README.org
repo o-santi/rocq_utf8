@@ -1,6 +1,10 @@
 #+title: Related Works
 
 * Formalizations of machine code protocols and specifications
+** [[https://github.com/HigherOrderCO/Kind-Legacy/tree/master/base/Ether/RLP][Ether.js, a verified RLP parser]] :kind:
+A verified RLP (Ethereum binary encoding protocol) parser written from the ground up in Kind Lang, and extracted to JS
+
+
 ** [[file:protobuf.pdf][A Verified Protocol Buffer Compiler]]  :coq: 
 A verified compiler of the protobuf format, that produces a formally correct parser and deserializer from any protobuf schema.
 
