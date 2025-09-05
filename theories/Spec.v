@@ -9,7 +9,10 @@ Definition b5 : Type := bool * bool * bool * bool * bool.
 Definition b6 : Type := bool * bool * bool * bool * bool * bool.
 Definition b7 : Type := bool * bool * bool * bool * bool * bool * bool.
 
-Definition b4_zero: b4 := (false, false, false, false).
+Local Notation "0" := false.
+Local Notation "1" := true.
+
+Definition b4_zero: b4 := (0, 0, 0, 0).
 
 Definition b4_equal (a b: b4) : bool :=
   let '(a1, a2, a3, a4) := a in
@@ -17,8 +20,35 @@ Definition b4_equal (a b: b4) : bool :=
   (Bool.eqb a1 b1) && (Bool.eqb a2 b2) && (Bool.eqb a3 b3) && (Bool.eqb a4 b4).
 
 Definition codepoint : Type := bool * b4 * b4 *b4 * b4 * b4.
-Definition unicode_str : Type := list codepoint.
 
+Definition unicode_str : Type := list codepoint.
+Definition byte_str : Type := list byte.
+
+Definition b4_lt (a b: b4) : bool :=
+  let '(a1, a2, a3, a4) := a in
+  let '(b1, b2, b3, b4) := b in
+  (orb (orb (orb (andb (negb a1) b1) (andb (negb a2) b2)) (andb (negb a3) b3)) (andb (negb a4) b4)).
+
+Definition codepoint_lt (a b: codepoint) : bool :=
+  let '(a1, a2, a3, a4, a5, a6) := a in
+  let '(b1, b2, b3, b4, b5, b6) := b in
+  (orb (orb (orb (orb (orb (andb (negb a1) b1) (b4_lt a2 b2)) (b4_lt a3 b3)) (b4_lt a4 b4)) (b4_lt a5 b5)) (b4_lt a6 b6)).
+
+Definition byte_lt (a b: byte) : bool :=
+  let '(a8, (a7, (a6, (a5, (a4, (a3, (a2, a1))))))) := to_bits a in
+  let '(b8, (b7, (b6, (b5, (b4, (b3, (b2, b1))))))) := to_bits b in
+  (orb (orb (orb (orb (orb (orb (orb (andb (negb a1) b1) (andb (negb a2) b2)) (andb (negb a3) b3)) (andb (negb a4) b4)) (andb (negb a5) b5)) (andb (negb a6) b6)) (andb (negb a7) b7)) (andb (negb a8) b8)).
+
+Fixpoint lexicographic_compare {T} (lt: T -> T -> bool) (a b: list T): bool :=
+  match (a, b) with
+  | (_, []) => false
+  | ([], _) => true
+  | (a_head :: a_rest, b_head::b_rest) =>
+      orb (lt a_head b_head) (lexicographic_compare lt a_rest b_rest)
+  end.
+
+Definition codepoints_lt := lexicographic_compare codepoint_lt.
+Definition bytes_lt := lexicographic_compare byte_lt.
 
 Inductive range :=
   Range_00_7F
@@ -63,9 +93,6 @@ Definition byte_range (b: Byte.byte) : range :=
   | xf4 => Byte_F4
   | xf5 | xf6 | xf7 | xf8 | xf9 | xfa | xfb | xfc | xfd | xfe | xff => Range_F5_FF
   end.
-
-Local Notation "0" := false.
-Local Notation "1" := true.
 
 Inductive unicode_decode_error :=
 | OverlongEncoding
@@ -158,20 +185,19 @@ Definition encoder_encode_valid_codes_correctly (encoder: encoder_type) := foral
 
 Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := forall codes codes_suffix bytes,
     encoder codes = (bytes, codes_suffix) ->
-    
     (valid_utf8_bytes bytes
      /\ exists codes_prefix,
         (codes = codes_prefix ++ codes_suffix /\ encoder codes_prefix = (bytes, nil))).
 
-Definition encoder_injective (encoder: encoder_type) := forall codes1 codes2 bytes codes_rest,
-    encoder codes1 = (bytes, codes_rest) ->
-    encoder codes2 = (bytes, codes_rest) ->
-    codes1 = codes2.
+Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2 codes1_rest codes2_rest,
+    encoder codes1 = (bytes1, codes1_rest) ->
+    encoder codes2 = (bytes2, codes2_rest) ->
+    codepoints_lt codes1 codes2 = bytes_lt bytes1 bytes2.
 
 Definition utf8_encoder_spec encoder :=
   encoder_encode_correctly_implies_valid encoder
   /\ encoder_encode_valid_codes_correctly encoder
-  /\ encoder_injective encoder.
+  /\ encoder_strictly_increasing encoder.
 
 Definition decoder_decode_correctly_implies_valid (decoder: decoder_type) := forall codes bytes bytes_suffix,
     decoder bytes = (codes, bytes_suffix) ->
@@ -183,15 +209,16 @@ Definition decoder_decode_valid_utf8_bytes_correctly (decoder: decoder_type) := 
     valid_utf8_bytes bytes <->
       exists codes, decoder bytes = (codes, []).
 
-Definition decoder_injective (decoder: decoder_type) := forall bytes1 bytes2 codes bytes_rest,
-    decoder bytes1 = (codes, bytes_rest) ->
-    decoder bytes2 = (codes, bytes_rest) ->
-    bytes1 = bytes2.
+
+Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 codes1 codes2 bytes1_rest bytes2_rest,
+    decoder bytes1 = (codes1, bytes1_rest) ->
+    decoder bytes2 = (codes2, bytes2_rest) ->
+    codepoints_lt codes1 codes2 = bytes_lt bytes1 bytes2.
 
 Definition utf8_decoder_spec decoder :=
   decoder_decode_correctly_implies_valid decoder
   /\ decoder_decode_valid_utf8_bytes_correctly decoder
-  /\ decoder_injective decoder.
+  /\ decoder_strictly_increasing decoder.
 
 Definition utf8_spec encoder decoder :=
   utf8_encoder_spec encoder /\ utf8_decoder_spec decoder.

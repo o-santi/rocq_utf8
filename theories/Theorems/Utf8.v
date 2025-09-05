@@ -97,46 +97,6 @@ Ltac destruct_parse_continuation :=
       end
   end.
 
-Ltac to_bits byte :=
-  let rec break_bit bits :=
-    match type of bits with
-    | (bool * bool)%type => let b1 := fresh "b" in let b2 := fresh "b" in destruct bits as [b1 b2]
-    | (bool * ?rest)%type => let b := fresh "b" in destruct bits as [b _bits]; break_bit _bits
-    | (?rest * bool)%type => let b := fresh "b" in destruct bits as [_bits b]; break_bit _bits
-    | ?other => idtac other
-    end
-  in 
-  match type of byte with
-  | Spec.codepoint =>
-      unfold Spec.codepoint, Spec.b4 in byte;
-      destruct byte as [[[[[b b4_1] b4_2] b4_3] b4_4] b4_5];
-      break_bit b4_1; break_bit b4_2; break_bit b4_3; break_bit b4_4; break_bit b4_5
-  | Spec.b7 =>
-      unfold Spec.b7 in byte; break_bit byte
-  | Spec.b6 =>
-      unfold Spec.b6 in byte; break_bit byte
-  | Spec.b5 =>
-      unfold Spec.b5 in byte; break_bit byte
-  | Spec.b4 =>
-      unfold Spec.b4 in byte; break_bit byte
-  | Spec.b3 =>
-      unfold Spec.b3 in byte; break_bit byte
-  | Byte.byte =>
-      let B := fresh "B" in
-      let eqn_name := fresh "byte_bits" in
-      remember (Byte.to_bits byte) as B eqn:eqn_name;
-      break_bit B;
-      symmetry in eqn_name;
-      apply (f_equal Byte.of_bits) in eqn_name;
-      rewrite Byte.of_bits_to_bits in eqn_name
-  end.
-
-Ltac crush_bits :=
-  repeat match goal with
-    | |- context[if ?bit then _ else _] => destruct bit
-    | _: context[if ?bit then _ else _ ] |- _ => destruct bit
-    end.
-
 Ltac no_overlongs2 :=
   repeat match goal with
     | [ H: ?bit = _ \/ ?b |- _] => destruct H
@@ -315,25 +275,27 @@ Qed.
 
 Theorem utf8_encode_valid_codepoints : forall codepoints,
     valid_codepoints codepoints <->
-    exists bytes, utf8_encode codepoints = (bytes, []).
+    exists! bytes, utf8_encode codepoints = (bytes, []).
 Proof.
   split; intros.
   induction H as [| code rest].
-  - repeat eexists. 
+  - eexists. eexists. reflexivity. intros. inversion H. reflexivity.
   - unfold utf8_encode. apply encode_valid_codepoint in H.
     destruct H as [bytes encode_ok].
-    rewrite encode_ok. destruct IHForall as [bytes_rest encode_bytes_rest_ok].
-    fold (utf8_encode rest). rewrite encode_bytes_rest_ok. repeat eexists.
+    rewrite encode_ok. destruct IHForall as [bytes_rest [encode_rest_ok uniqueness]].
+    fold (utf8_encode rest). rewrite encode_rest_ok. repeat eexists.
+    intros bytes' bytes'_eq. inversion bytes'_eq. reflexivity.
   - unfold valid_codepoints. generalize dependent H. induction codepoints; intros.
     + auto.
-    + rewrite Forall_cons_iff. destruct H. unfold utf8_encode in H. fold utf8_encode in H.
+    + rewrite Forall_cons_iff. destruct H as [bytes [encode_codes uniqueness]]. unfold utf8_encode in encode_codes. fold utf8_encode in encode_codes.
       destruct (utf8_encode_codepoint a) eqn:U; [ | discriminate].
       split.
       apply encode_ok_implies_valid_codepoint in U. apply U.
-      destruct (utf8_encode codepoints) as [bytes unicode_rest].
-      simpl in H. inversion H. subst. clear H.
       apply IHcodepoints.
-      exists bytes. reflexivity.
+      destruct (utf8_encode codepoints) as [bytes' unicode_rest] eqn:EncCodes.
+      inversion encode_codes.
+      exists bytes'. split. reflexivity.
+      intros. inversion H. reflexivity.
 Qed.
 
 Theorem utf8_encoder_implies_valid_bytes_strong : forall (codes_big codes: list codepoint) (bytes : list byte) codes_suffix,
