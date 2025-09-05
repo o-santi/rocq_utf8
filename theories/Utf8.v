@@ -181,12 +181,12 @@ Definition parse_codepoint : @parser codepoint byte unicode_decode_error :=
     | Err err => Err err
     end.
 
-Definition utf8_decode : @parser unicode_str byte unicode_decode_error :=
-  all parse_codepoint.
+Definition utf8_decode: list byte -> (unicode_str * (list byte))  :=
+  many parse_codepoint.
 
-Definition to_unicode (s: string) : @result unicode_str unicode_decode_error :=
+Definition to_unicode (s: string) : unicode_str :=
   let bytes := List.map byte_of_ascii (list_ascii_of_string s) in
-  fmap (fun '(v, _) => v) (utf8_decode bytes).
+  let '(codes, _) := utf8_decode bytes in codes.
 
 (* The definition of UTF-8 prohibits encoding character numbers between *)
 (*    U+D800 and U+DFFF
@@ -217,15 +217,15 @@ Definition utf8_encode_codepoint (c: codepoint) : @result (list byte) unicode_en
   | _ => Err (EncodingCodepointTooBig c)
   end.
 
-Fixpoint utf8_encode (unicode: unicode_str) : @result ((list byte) * (list codepoint)) unicode_encode_error :=
+Fixpoint utf8_encode (unicode: unicode_str) : ((list byte) * (list codepoint)) :=
   match unicode with
-  | [] => Ok ([], [])
+  | [] => ([], [])
   | code :: unicode_rest =>
       let bytes := utf8_encode_codepoint code in
       match bytes with
-      | Err err => Err err
+      | Err err => ([], code :: unicode_rest)
       | Ok bytes => 
-          let* (bytes_rest, unicode_rest) := utf8_encode unicode_rest in
-          Ok (bytes ++ bytes_rest, unicode_rest)
+          let (bytes_rest, unicode_rest) := utf8_encode unicode_rest in
+          (bytes ++ bytes_rest, unicode_rest)
       end
   end.

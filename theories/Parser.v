@@ -41,7 +41,7 @@ Definition maybe {A I E} (p: @parser A I E) : @parser (option A) I E :=
     end.
 
 Definition predicate {I E} (pred: I -> bool) (err: option I -> E) : @parser I I E :=
-  fun s => 
+  fun s =>
     match s with
     | [] => Err (err None)
     | c :: rest =>
@@ -51,21 +51,20 @@ Definition predicate {I E} (pred: I -> bool) (err: option I -> E) : @parser I I 
         end
     end.
 
-Fixpoint many_aux { A I E} (p: @parser A I E) (fuel: nat) : @parser (list A) I E :=
-  fun s => 
-    match fuel with
-    | 0 => Ok ([], s)
-    | S fuel' =>
-        match p s with
-        | Err _ => Ok ([], s)
-        | Ok (val, rest) =>
-            let* (vals, rest) := many_aux p fuel' rest in
-            Ok (val :: vals, rest)
-        end
-    end.
+Fixpoint many_aux {A I E} (fuel: nat) (p: @parser A I E) (s: list I): ((list A) * (list I)) :=
+  match fuel with
+  | 0 => ([], s)
+  | S fuel' =>
+      match p s with
+      | Err _ => ([], s)
+      | Ok (val, rest) =>
+          let (vals, rest) := many_aux fuel' p rest in
+          (val :: vals, rest)
+      end
+  end.
 
-Definition many {A I E} (p: @parser A I E): @parser (list A) I E :=
-  fun s => many_aux p (S (length s)) s.
+Definition many {A I E} (p: @parser A I E) (s: list I): ((list A) * (list I)) :=
+  many_aux (S (length s)) p s.
 
 Fixpoint all_aux { A I E} (p: @parser A I E) (fuel: nat) : @parser (list A) I E :=
   fun s => 

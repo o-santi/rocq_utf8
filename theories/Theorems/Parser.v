@@ -46,7 +46,7 @@ Theorem many_aux_saturation_aux : forall A I E processor,
   forall n text fuel,
   (S (length text)) < n ->
   (S (length text)) <= fuel ->
-  @many_aux A I E processor (S (length text)) text = @many_aux A I E processor fuel text.
+  @many_aux A I E (S (length text)) processor text = @many_aux A I E fuel processor text.
 Proof.
   intros A I E processor processor_good.
   induction n; intros text fuel.
@@ -63,16 +63,16 @@ Proof.
     destruct fuel. exfalso. inversion enough_fuel.
     simpl. destruct (processor (text_head :: text_tail)) eqn:response_definition.
     + destruct x as [val rest].
-      replace (many_aux processor fuel rest) with (many_aux processor (S (length text_tail)) rest).
+      replace (many_aux fuel processor rest) with (many_aux (S (length text_tail)) processor rest).
       reflexivity.
       assert (length rest < length (text_head :: text_tail)). {
         apply processor_good with (response := val).
         apply response_definition.
       } {
       replace
-        (many_aux processor (S (length text_tail)) rest)
+        (many_aux (S (length text_tail)) processor rest)
       with
-        (many_aux processor (S (length rest)) rest).
+        (many_aux (S (length rest)) processor rest).
       apply IHn. simpl in H. lia. lia.
       apply IHn. simpl in H. lia.
       simpl in H. lia.
