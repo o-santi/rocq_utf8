@@ -189,15 +189,25 @@ Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := for
      /\ exists codes_prefix,
         (codes = codes_prefix ++ codes_suffix /\ encoder codes_prefix = (bytes, nil))).
 
-Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2 codes1_rest codes2_rest,
-    encoder codes1 = (bytes1, codes1_rest) ->
-    encoder codes2 = (bytes2, codes2_rest) ->
+Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2,
+    encoder codes1 = (bytes1, nil) ->
+    encoder codes2 = (bytes2, nil) ->
     codepoints_lt codes1 codes2 = bytes_lt bytes1 bytes2.
+
+Definition encoder_projects (encoder: encoder_type) := forall xs ys,
+    encoder (xs ++ ys) =
+      match encoder xs with
+      | (bytes, nil) =>
+          let (bytes2, rest) := encoder ys in
+          (bytes ++ bytes2, rest)
+      | (bytes, rest) => (bytes, rest ++ ys)
+      end.
 
 Definition utf8_encoder_spec encoder :=
   encoder_encode_correctly_implies_valid encoder
   /\ encoder_encode_valid_codes_correctly encoder
-  /\ encoder_strictly_increasing encoder.
+  /\ encoder_strictly_increasing encoder
+  /\ encoder_projects encoder.
 
 Definition decoder_decode_correctly_implies_valid (decoder: decoder_type) := forall codes bytes bytes_suffix,
     decoder bytes = (codes, bytes_suffix) ->
@@ -210,9 +220,9 @@ Definition decoder_decode_valid_utf8_bytes_correctly (decoder: decoder_type) := 
       exists codes, decoder bytes = (codes, []).
 
 
-Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 codes1 codes2 bytes1_rest bytes2_rest,
-    decoder bytes1 = (codes1, bytes1_rest) ->
-    decoder bytes2 = (codes2, bytes2_rest) ->
+Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 codes1 codes2,
+    decoder bytes1 = (codes1, nil) ->
+    decoder bytes2 = (codes2, nil) ->
     codepoints_lt codes1 codes2 = bytes_lt bytes1 bytes2.
 
 Definition utf8_decoder_spec decoder :=

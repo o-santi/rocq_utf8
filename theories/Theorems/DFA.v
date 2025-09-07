@@ -14,6 +14,8 @@ From Coq Require Import Lia.
 Local Notation "0" := false.
 Local Notation "1" := true.
 
+(* https://datatracker.ietf.org/doc/html/rfc3629 *)
+
 (* The character sequence U+0041 U+2262 U+0391 U+002E "A<NOT IDENTICAL
    TO><ALPHA>." is encoded in UTF-8 as follows: *)
 
