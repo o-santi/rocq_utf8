@@ -3,213 +3,10 @@ From Coq Require Import Lia.
 
 Require Import Utf8.Parser.
 Require Import Utf8.Spec.
-
+Require Import Utf8.Theorems.Order.
 
 Local Notation "1" := true.
 Local Notation "0" := false.
-
-Ltac to_bits byte :=
-  let rec break_bit bits :=
-    match type of bits with
-    | (bool * bool)%type => let b1 := fresh "b" in let b2 := fresh "b" in destruct bits as [b1 b2]
-    | (bool * ?rest)%type => let b := fresh "b" in destruct bits as [b _bits]; break_bit _bits
-    | (?rest * bool)%type => let b := fresh "b" in destruct bits as [_bits b]; break_bit _bits
-    | ?other => idtac other
-    end
-  in 
-  match type of byte with
-  | Spec.codepoint =>
-      unfold Spec.codepoint, Spec.b4 in byte;
-      let b := fresh "b" in
-      destruct byte as [[[[[b b4_1] b4_2] b4_3] b4_4] b4_5];
-      break_bit b4_1; break_bit b4_2; break_bit b4_3; break_bit b4_4; break_bit b4_5
-  | Spec.b7 =>
-      unfold Spec.b7 in byte; break_bit byte
-  | Spec.b6 =>
-      unfold Spec.b6 in byte; break_bit byte
-  | Spec.b5 =>
-      unfold Spec.b5 in byte; break_bit byte
-  | Spec.b4 =>
-      unfold Spec.b4 in byte; break_bit byte
-  | Spec.b3 =>
-      unfold Spec.b3 in byte; break_bit byte
-  | Byte.byte =>
-      let B := fresh "B" in
-      let eqn_name := fresh "byte_bits" in
-      remember (Byte.to_bits byte) as B eqn:eqn_name;
-      break_bit B;
-      symmetry in eqn_name;
-      apply (f_equal Byte.of_bits) in eqn_name;
-      rewrite Byte.of_bits_to_bits in eqn_name
-  end.
-
-Definition antisymmetric {T} (comparison: T -> T -> bool) :=
-  forall t1 t2,
-    comparison t1 t2 = false ->
-    comparison t2 t1 = false ->
-    t1 = t2.
-
-Definition irreflexive {T} (comparison: T -> T -> bool) :=
-  forall t, comparison t t = false.
-
-Ltac crush_bits :=
-  let B := fresh "B" in
-  repeat match goal with
-    | |- context[if ?bit then _ else _] =>
-        destruct bit eqn:B
-    | _: context[if ?bit then _ else _ ] |- _ =>
-        destruct bit eqn:B
-    end.
-
-Lemma b4_lt_antisymmetric : antisymmetric b4_lt.
-Proof.
-  intros b1 b2 b1_lt_b2 b2_lt_b1.
-  to_bits b1. to_bits b2.
-  unfold b4_lt, negb, andb, orb in b1_lt_b2, b2_lt_b1.
-  repeat (crush_bits; try discriminate); reflexivity.
-Qed.
-
-Lemma b4_lt_irreflexive : irreflexive b4_lt.
-Proof.
-  unfold irreflexive.
-  intros b. unfold b4_lt.
-  to_bits b. repeat rewrite Bool.andb_negb_l. reflexivity.
-Qed.
-
-Lemma codepoint_lt_antisymmetric : antisymmetric codepoint_lt.
-  intros c1 c2 c1_lt_c2 c2_lt_c1.
-  to_bits c1. to_bits c2.
-  unfold codepoint_lt in c1_lt_c2, c2_lt_c1.
-  do 5 (match type of c1_lt_c2 with
-  | context[b4_lt ?b4_1 ?b4_2] =>
-      let B4_eq1 := fresh "B4_1_eq" in
-      let B4_eq2 := fresh "B4_2_eq" in
-      let b_eq   := fresh "b4_eq" in
-      destruct (b4_lt b4_1 b4_2) eqn:B4_eq1;
-      destruct (b4_lt b4_2 b4_1) eqn:B4_eq2;
-      try rewrite Bool.orb_true_r in *; try rewrite Bool.andb_true_r in *; try discriminate;
-      specialize (b4_lt_antisymmetric b4_1 b4_2 B4_eq1 B4_eq2) as b_eq;
-      rewrite b_eq in * |- *
-        end); repeat rewrite Bool.orb_false_r in c1_lt_c2, c2_lt_c1.
-  destruct b; destruct b20; try discriminate; reflexivity.
-Qed.
-
-Lemma codepoint_lt_irreflexive : irreflexive codepoint_lt.
-Proof.
-  intros c.
-  unfold codepoint_lt.
-  to_bits c. rewrite Bool.andb_negb_l. repeat rewrite b4_lt_irreflexive. reflexivity.
-Qed.
-
-Lemma bit_compare_antisymmetric : antisymmetric (fun bool1 bool2 => (andb (negb bool1) bool2)).
-Proof.
-  intros bool1 bool2.
-  destruct bool1; destruct bool2; try discriminate; reflexivity.
-Qed.
-
-Lemma byte_lt_antisymetric : antisymmetric byte_lt.
-Proof.
-  intros byte1 byte2 b1_lt_b2 b2_lt_b1.
-  unfold byte_lt in b1_lt_b2, b2_lt_b1.
-  to_bits byte1. to_bits byte2.
-  do 8 (match type of b1_lt_b2 with
-  | context[andb (negb ?b1) ?b2] =>
-      let B_eq1 := fresh "B1_eq" in
-      let B_eq2 := fresh "B2_eq" in
-      let b_eq := fresh b_eq in
-      destruct (andb (negb b1) b2) eqn:B_eq1;
-      destruct (andb (negb b2) b1) eqn:B_eq2;
-      try rewrite Bool.orb_true_r in *; try rewrite Bool.andb_true_r in *; try discriminate;
-      specialize (bit_compare_antisymmetric b1 b2 B_eq1 B_eq2) as b_eq;
-      rewrite b_eq in *
-        end).
-  subst. reflexivity.
-Qed.
-
-Lemma byte_lt_irreflexive : irreflexive byte_lt.
-Proof.
-  intros byte.
-  unfold byte_lt.
-  to_bits byte.
-  repeat rewrite Bool.andb_negb_l.
-  reflexivity.
-Qed.
-
-Lemma lexicographic_compare_antisymetric {T} (lt: T -> T -> bool):
-  antisymmetric lt ->
-  antisymmetric (lexicographic_compare lt).
-Proof.
-  intros antisymmetric_lt.
-  unfold antisymmetric in *.
-  intros t1.
-  induction t1 as [| t1_head t1_rest];  intros t2 lexi_compare_t1_t2 lexi_compare_t2_t1.
-  - simpl in lexi_compare_t1_t2. destruct t2; [ reflexivity | discriminate].
-  - destruct t2 as [| t2_head t2_rest].
-    + discriminate lexi_compare_t2_t1.
-    + simpl in *.
-      destruct (lt t1_head t2_head) eqn:LtT1T2; [discriminate |].
-      destruct (lt t2_head t1_head) eqn:LtT2T1; [discriminate |].
-      specialize (antisymmetric_lt t1_head t2_head LtT1T2 LtT2T1).
-      subst.
-      simpl in lexi_compare_t1_t2, lexi_compare_t2_t1.
-      specialize (IHt1_rest t2_rest lexi_compare_t1_t2 lexi_compare_t2_t1). subst. reflexivity.
-Qed.
-
-Lemma lexicographic_compare_irreflexive {T} (lt: T -> T -> bool):
-  irreflexive lt ->
-  irreflexive (lexicographic_compare lt).
-Proof.
-  unfold irreflexive.
-  intros irreflexive_lt ts.
-  induction ts.
-  - reflexivity.
-  - simpl. rewrite irreflexive_lt. rewrite IHts. reflexivity.
-Qed.
-
-Lemma codepoints_lt_antisymmetric : antisymmetric codepoints_lt.
-Proof.
-  unfold codepoints_lt.
-  apply lexicographic_compare_antisymetric.
-  apply codepoint_lt_antisymmetric.
-Qed.
-
-Lemma codepoints_lt_irreflexive : irreflexive codepoints_lt.
-Proof.
-  unfold codepoints_lt.
-  apply lexicographic_compare_irreflexive.
-  apply codepoint_lt_irreflexive.
-Qed.
-
-Lemma bytes_lt_antisymetric : antisymmetric bytes_lt.
-Proof.
-  unfold bytes_lt.
-  apply lexicographic_compare_antisymetric.
-  apply byte_lt_antisymetric.
-Qed.
-
-Lemma bytes_lt_irreflexive: irreflexive bytes_lt.
-  unfold bytes_lt.
-  apply lexicographic_compare_irreflexive.
-  apply byte_lt_irreflexive.
-Qed.
-
-Lemma lexicographic_nil_smallest {T} (lt: T -> T -> bool): forall t,
-    t = nil \/ (lexicographic_compare lt nil t = true).
-Proof.
-  intros.
-  destruct t; [left | right]; reflexivity.
-Qed.
-
-Lemma antisymmetric_cases {T} (lt: T -> T -> bool): forall t1 t2,
-    antisymmetric lt ->
-    t1 = t2 \/ (lt t1 t2 = true) \/ (lt t2 t1 = true).
-Proof.
-  intros.
-  unfold antisymmetric in H. 
-  destruct (lt t1 t2) eqn:Lt1; [tauto|].
-  destruct (lt t2 t1) eqn:Lt2; [tauto|].
-  specialize (H t1 t2 Lt1 Lt2). left. apply H.
-Qed.
 
 Lemma byte_range_of_bits_00_7f: forall b1 b2 b3 b4 b5 b6 b7,
     byte_range (of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, 0)))))))) = Range_00_7F.
@@ -718,6 +515,16 @@ Proof.
       end. 
 Qed.
 
+Definition next_valid_codepoint (code: codepoint) : option codepoint :=
+  match code with
+  | (0, (0, 0, 0, 0), (1, 1, 0, 1), (0, 1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1)) =>
+      Some (0, b4_zero, (1, 1, 1, 0), b4_zero, b4_zero, b4_zero)
+  | (1, (0, 0, 0, 0), (1, 1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1), (1, 1, 1, 1)) =>
+      None
+  | (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) =>
+      None
+  end.
+
 Require Import Coq.Lists.List. Import ListNotations.
 
 Lemma list_equals_self_append_implies_nil {T}: forall (list1 list2: list T),
@@ -732,29 +539,79 @@ Proof.
     destruct list2. reflexivity. simpl in H. lia.
 Qed.
 
-Theorem encoder_spec_implies_encode_nil_is_nil : forall encoder,
+Lemma encoder_spec_implies_nil_mapsto_nil : forall encoder,
     utf8_encoder_spec encoder ->
     encoder nil = (nil, nil).
 Proof.
-  Admitted.
+  intros encoder encoder_spec_compliant.
+  assert (G := encoder_spec_compliant).
+  unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_strictly_increasing, encoder_projects in G.
+  destruct G as [enc_implies_valid_utf8_bytes [valid_codepoints_iff_enc [enc_strictly_increasing enc_projects]]].
+  assert (valid_codepoints []) as nil_valid. apply Forall_nil.
+  
+  apply valid_codepoints_iff_enc in nil_valid.
+  destruct nil_valid as [bytes encode_bytes].
+  specialize (enc_projects [] []). rewrite encode_bytes in enc_projects. simpl in enc_projects. rewrite enc_projects in encode_bytes. inversion encode_bytes.
+  symmetry in H0.
+  apply list_equals_self_append_implies_nil in H0.
+  subst. simpl in *. apply enc_projects.
+Qed.
 
-Theorem encoder_spec_implies_encoder_injective : forall encoder1 encoder2,
-    utf8_encoder_spec encoder1 ->
-    utf8_encoder_spec encoder2 ->
-    forall (codes_big codes: list codepoint) bytes,
-      (length codes) <= (length codes_big) -> 
-      encoder1 codes = (bytes, nil) ->
-      encoder2 codes = (bytes, nil).
+Lemma encoder_spec_injective : forall encoder,
+    utf8_encoder_spec encoder ->
+    forall (codes1 codes2: list codepoint) bytes,
+      encoder codes1 = (bytes, []) ->
+      encoder codes2 = (bytes, []) ->
+      codes1 = codes2.
 Proof.
-  intros encoder1 encoder2 encoder1_spec_compliant encoder2_spec_compliant.
+  intros encoder encoder_spec_compliant.
+  assert (G := encoder_spec_compliant).
+  unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_strictly_increasing, encoder_projects in G.
+  destruct G as [enc_implies_valid_utf8_bytes [valid_codepoints_iff_enc [enc_strictly_increasing enc_projects]]].
+  intros codes1 codes2 bytes encoder_codes1 encoder_codes2.
+  specialize (enc_strictly_increasing codes1 codes2 bytes bytes encoder_codes1 encoder_codes2) as compare_codes.
+  specialize (codepoints_compare_antisymmetric codes1 codes2) as G.
+  rewrite (@antisymmetric_reflexive (list byte) bytes_compare bytes_compare_antisymmetric) in compare_codes.
+  rewrite compare_codes in G.
+  apply G.
+Qed.
+
+Theorem encoder_spec_implies_encode_single_equals : forall encoder1 code bytes,
+    utf8_encoder_spec encoder1 ->
+    encoder1 [code] = (bytes, nil) ->
+    forall encoder2,
+      utf8_encoder_spec encoder2 ->
+      encoder2 [code] = (bytes, nil).
+Proof.
+  intros encoder1 code bytes encoder1_spec_compliant encoder1_code encoder2 encoder2_spec_compliant.
   assert (G1 := encoder1_spec_compliant).
   assert (G2 := encoder2_spec_compliant).
   unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_strictly_increasing, encoder_projects in G1, G2.
   destruct G1 as [enc1_implies_valid_utf8_bytes [valid_codepoints_iff_enc1 [enc1_strictly_increasing enc1_projects]]].
   destruct G2 as [enc2_implies_valid_utf8_bytes [valid_codepoints_iff_enc2 [enc2_strictly_increasing enc2_projects]]].
-  induction codes_big; intros codes bytes less_than encode_codes1.
-  - inversion less_than. rewrite length_zero_iff_nil in H0. subst.
-    specialize (enc1_projects nil nil) as enc_nil. simpl in enc_nil. rewrite encode_codes1 in enc_nil.
+  assert (exists bytes, encoder1 [code] = (bytes, nil)). exists bytes. assumption.
+  apply valid_codepoints_iff_enc1 in H.
+  apply valid_codepoints_iff_enc2 in H.
+  destruct H as [bytes2 encoder2_code]. rewrite encoder2_code.
+  apply pair_equal_spec. split; [| reflexivity].
+  Admitted.
+
+   
+Theorem encoder_spec_implies_encoder_equal : forall encoder1 codes bytes,
+    utf8_encoder_spec encoder1 ->
+    encoder1 codes = (bytes, nil) ->
+    forall encoder2,
+      utf8_encoder_spec encoder2 ->
+      encoder2 codes = (bytes, nil).
+Proof.
+  intros encoder1.
+  induction codes as [| code codes_tail]; intros bytes encoder1_spec_compliant encoder1_codes encoder2 encoder2_spec_compliant; 
+    assert (G1 := encoder1_spec_compliant);
+    assert (G2 := encoder2_spec_compliant);
+    unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_strictly_increasing, encoder_projects in G1, G2;
+    destruct G1 as [enc1_implies_valid_utf8_bytes [valid_codepoints_iff_enc1 [enc1_strictly_increasing enc1_projects]]];
+    destruct G2 as [enc2_implies_valid_utf8_bytes [valid_codepoints_iff_enc2 [enc2_strictly_increasing enc2_projects]]].
+  - specialize (enc1_projects nil nil) as enc_nil. simpl in enc_nil. rewrite encoder1_codes in enc_nil.
     inversion enc_nil.
     apply list_equals_self_append_implies_nil in H0. subst. clear enc_nil.
     specialize (enc2_projects nil nil). simpl in enc2_projects.
@@ -765,22 +622,23 @@ Proof.
       destruct G as [valid_utf8_bytes [codes_prefix [codes_eq enc_codes_prefix]]].
       symmetry in codes_eq.
       apply List.app_eq_nil in codes_eq as [codes_prefix_nil c_cons_rest_nil]. discriminate.
-  - destruct codes as [| code codes].
-    + apply IHcodes_big. simpl. lia. apply encode_codes1.
-    + simpl in less_than.
-      replace (code :: codes) with ([code] ++ codes) in encode_codes1 |- * by reflexivity.
-      rewrite enc1_projects in encode_codes1.
-      destruct (encoder1 [code]) as [bytes1 code_rest] eqn:encoder1_code.
-      destruct code_rest; [|inversion encode_codes1].
-      destruct (encoder1 codes) as [bytes2 codes_rest] eqn:encoder1_codes.
-      inversion encode_codes1. subst. clear encode_codes1.
-      apply IHcodes_big in encoder1_codes. 2: lia.
-      
-      rewrite enc2_projects. rewrite encoder1_codes.
-      rewrite encoder1_codes. reflexivity.
-      simpl.
-        
-    Qed.
+  - replace (code :: codes_tail) with ([code] ++ codes_tail) in encoder1_codes |- * by reflexivity.
+    rewrite enc1_projects in encoder1_codes.
+    destruct (encoder1 [code]) as [bytes1 code_rest] eqn:encoder1_code.
+    destruct code_rest; [|inversion encoder1_codes].
+    destruct (encoder1 codes_tail) as [bytes2 codes_rest] eqn:encoder1_codes_tail.
+    inversion encoder1_codes_tail. inversion encoder1_codes. subst.
+    specialize (IHcodes_tail bytes2 encoder1_spec_compliant ltac:(reflexivity) encoder2 encoder2_spec_compliant) as encoder2_codes_tail.
+    rewrite enc2_projects. rewrite encoder2_codes_tail.
+    assert (exists bytes, encoder1 [code] = (bytes, nil)). exists bytes1. assumption.
+    apply valid_codepoints_iff_enc1 in H.
+    apply valid_codepoints_iff_enc2 in H.
+    destruct H as [bytes3 encoder2_code]. rewrite encoder2_code.
+    apply pair_equal_spec; split; auto.
+    apply app_inv_tail_iff.
+    specialize (encoder_spec_implies_encode_single_equals encoder1 code bytes1 encoder1_spec_compliant encoder1_code encoder2 encoder2_spec_compliant) as G. rewrite G in encoder2_code. inversion encoder2_code.
+    reflexivity.
+Qed.
 
 (* Theorem encoder_spec_valid_all_equal : forall encoder decoder, *)
 (*     utf8_encoder_spec encoder -> *)
@@ -832,44 +690,41 @@ Proof.
   
 (* Admitted. *)
 
-(* Theorem decoder_spec_valid_all_equal : forall decoder1 decoder2, *)
-(*     utf8_decoder_spec decoder1 -> *)
-(*     utf8_decoder_spec decoder2 -> *)
-(*     forall bytes codes, *)
-(*       decoder1 bytes = (codes, nil) -> *)
-(*       decoder2 bytes = (codes, nil). *)
-(* Proof. *)
-(*   Admitted. *)
-
-Definition singleton {X Y} (f: list X -> list Y) : X -> list Y :=
-  fun x => f (cons x nil).
-
-Definition rigilles_theorem {X Y}: forall (foo: list X -> list Y),
-    (forall xs ys, foo (app xs ys) = app (foo xs) (foo ys)) ->
-    forall xs, foo xs = List.concat (List.map (singleton foo) xs).
+Lemma decoder_spec_injective : forall decoder,
+    utf8_decoder_spec decoder ->
+    forall (bytes1 bytes2: list byte) codes,
+      decoder bytes1 = (codes, []) ->
+      decoder bytes2 = (codes, []) ->
+      bytes1 = bytes2.
 Proof.
-  intros f distributes.
-  induction xs.
-  - specialize (distributes nil nil). simpl in distributes.
-    destruct (f nil) eqn:E.
-    + reflexivity.
-    + simpl in distributes.
-      assert (1 + length l = (1 + (length l)) + (1 + (length l))). {
-        replace (1 + length l) with (length (cons y l)) in |- * by reflexivity.
-        replace (length (cons y l) + length (cons y l)) with (length (app (y :: l) (y :: l))) by (apply List.length_app).
-        rewrite <- distributes at 1.  reflexivity.
-      }
-      lia.
-  - simpl. replace (cons a xs) with (app (cons a nil) xs) by reflexivity.
-    rewrite distributes.
-    rewrite <- IHxs. reflexivity.
+  intros decoder decoder_spec_compliant.
+  assert (G := decoder_spec_compliant).
+  unfold utf8_decoder_spec, decoder_decode_correctly_implies_valid, decoder_decode_valid_utf8_bytes_correctly, decoder_strictly_increasing in G.
+  destruct G as [dec_implies_valid_utf8_bytes [valid_bytes_iff_enc dec_strictly_increasing]].
+  intros bytes1 bytes2 codes decoder_bytes1 decoder_bytes2.
+  specialize (dec_strictly_increasing bytes1 bytes2 codes codes decoder_bytes1 decoder_bytes2) as compare_codes.
+  specialize (bytes_compare_antisymmetric bytes1 bytes2) as G.
+  rewrite (@antisymmetric_reflexive (list codepoint) codepoints_compare codepoints_compare_antisymmetric) in compare_codes.
+  rewrite <- compare_codes in G.
+  apply G.
 Qed.
+
+Lemma decoder_spec_nil_mapsto_nil : forall decoder,
+    utf8_decoder_spec decoder ->
+    decoder nil = (nil, []).
+  intros decoder decoder_spec_compliant.
+  assert (G := decoder_spec_compliant).
+  unfold utf8_decoder_spec, decoder_decode_correctly_implies_valid, decoder_decode_valid_utf8_bytes_correctly, decoder_strictly_increasing in G.
+  destruct G as [dec_implies_valid_utf8_bytes [valid_bytes_iff_enc dec_strictly_increasing]].
+  assert (valid_utf8_bytes []) as nil_valid. constructor. apply valid_bytes_iff_enc in nil_valid.
+  destruct nil_valid.
+  
+  Admitted.
 
 Theorem decode_encode_spec_compliant_decode_inverse_of_encode : forall encoder decoder,
     utf8_encoder_spec encoder ->
     utf8_decoder_spec decoder ->
-    forall (codes_big codes: unicode_str) bytes codes_suffix,
-      (length codes) <= (length codes_big) ->
+    forall codes bytes codes_suffix,
       encoder codes = (bytes, codes_suffix) ->
       exists codes_prefix, decoder bytes = (codes_prefix, nil) /\ codes = (codes_prefix ++ codes_suffix)%list.
 Proof.
@@ -877,47 +732,31 @@ Proof.
   assert (G1 := encoder_spec_compliant).
   assert (G2 := decoder_spec_compliant).
   unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_strictly_increasing in G1.
-  destruct G1 as [enc_implies_valid_utf8_bytes [valid_codepoints_iff_enc enc_strictly_increasing]].
+  destruct G1 as [enc_implies_valid_utf8_bytes [valid_codepoints_iff_enc [enc_strictly_increasing enc_projects]]].
   unfold utf8_decoder_spec, decoder_decode_correctly_implies_valid, decoder_decode_valid_utf8_bytes_correctly, decoder_strictly_increasing in G2.
   destruct G2 as [dec_implies_valid [valid_implies_dec dec_strictly_increasing]].
-  intros codes_big.
-  induction codes_big; intros codes bytes codes_prefix LessThan encode_codes.
-  - inversion LessThan. apply List.length_zero_iff_nil in H0. subst.
-    exists nil.
-    apply enc_implies_valid_utf8_bytes in encode_codes as G.
-    destruct G as [bytes_valid [codes_prefix2 [nil_eq enc_code_prefix2]]].
-    symmetry in nil_eq. apply List.app_eq_nil in nil_eq. destruct nil_eq. subst.
-    split; [| reflexivity].
-    clear enc_code_prefix2. clear LessThan.
-    assert (valid_utf8_bytes nil). constructor. apply valid_implies_dec in H. destruct H as [codes decode_nil].
-    apply dec_implies_valid in decode_nil as G. destruct G as [codes_valid _].
-    apply valid_codepoints_iff_enc in codes_valid.
-    destruct codes_valid as [bytes2 enc_codes2].
-    specialize (enc_strictly_increasing nil codes bytes bytes2 nil nil encode_codes enc_codes2).
-    apply enc_implies_valid_utf8_bytes in enc_codes2 as G. destruct G as [valid_bytes _].
-    apply valid_implies_dec in valid_bytes as [codes2 decode_bytes2].
-    specialize (dec_strictly_increasing nil bytes2 codes codes2 nil nil decode_nil decode_bytes2).
-    destruct codes; destruct bytes; destruct bytes2; simpl in *; try discriminate; try assumption.
-    3: { 
-    + unfold codepoints_lt, bytes_lt in enc_strictly_increasing. 
-    
-    unfold codepoints_lt in enc_strictly_increasing. simpl in enc_strictly_increasing.
-    symmetry in enc_strictly_increasing.
-    specialize (dec_strictly_increasing nil bytes codes3 (cons c codes2) nil nil decode_nil decode_bytes).
-    unfold bytes_lt in dec_strictly_increasing. simpl in dec_strictly_increasing
-    
-  bytes codes_rest encoder_bytes.
-  apply enc_implies_valid_utf8_bytes in encoder_bytes as G.
-  destruct G as [bytes_utf8_valid [codes_prefix [codes_prefix_eq encoder_prefix]]].
-  exists codes_prefix. split; [| apply codes_prefix_eq].
-  apply valid_implies_dec in bytes_utf8_valid as [codes2 decode_bytes_eql].
+  intros codes bytes codes_suffix encoder_codes.
+  apply enc_implies_valid_utf8_bytes in encoder_codes as G.
+  destruct G as [bytes_valid [codes_prefix [codes_prefix_eq encoder_prefix]]].
+  exists codes_prefix. split; [| apply codes_prefix_eq]. clear encoder_codes. clear codes_prefix_eq.
+  apply valid_implies_dec in bytes_valid.
+  destruct bytes_valid as [codes2 decode_bytes].
   apply dec_implies_valid in decode_bytes as G.
-  destruct G as [codes2_valid [bytes_prefix [bytes_prefix_eq decoder_bytes_prefix]]]. rewrite List.app_nil_r in bytes_prefix_eq. rewrite bytes_prefix_eq in *. subst.
-  specialize (enc_strictly_increasing codes_prefix codes2 bytes_prefix bytes2 nil nil H codes2_valid encoder_prefix enc_bytes2).
-    
-    
-    
-Admitted.
+  destruct G as [codes2_valid _].
+  apply valid_codepoints_iff_enc in codes2_valid.
+  destruct codes2_valid as [bytes2 encoder_codes2].
+  specialize (enc_strictly_increasing codes_prefix codes2 bytes bytes2 encoder_prefix encoder_codes2).
+  apply enc_implies_valid_utf8_bytes in encoder_codes2.
+  destruct encoder_codes2 as [bytes2_valid _].
+  apply valid_implies_dec in bytes2_valid as [codes3 decode_bytes2].
+  specialize (dec_strictly_increasing bytes bytes2 codes2 codes3 decode_bytes decode_bytes2).
+  rewrite <- enc_strictly_increasing in dec_strictly_increasing.
+  symmetry in dec_strictly_increasing.
+  specialize (codepoints_compare_transitive codes_prefix codes2 codes3 dec_strictly_increasing) as codes_trans.
+  induction codes2.
+  - unfold codepoints_compare in *. simpl in *.
+    destruct codes3. 
+Qed.
 
 (*   intros encoder decoder encoder_spec_compliant decoder_spec_compliant. *)
 (*   unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_injective in encoder_spec_compliant. *)

@@ -24,31 +24,62 @@ Definition codepoint : Type := bool * b4 * b4 *b4 * b4 * b4.
 Definition unicode_str : Type := list codepoint.
 Definition byte_str : Type := list byte.
 
-Definition b4_lt (a b: b4) : bool :=
-  let '(a1, a2, a3, a4) := a in
-  let '(b1, b2, b3, b4) := b in
-  (orb (orb (orb (andb (negb a1) b1) (andb (negb a2) b2)) (andb (negb a3) b3)) (andb (negb a4) b4)).
+Inductive comparison :=
+| More
+| Equal
+| Less.
 
-Definition codepoint_lt (a b: codepoint) : bool :=
-  let '(a1, a2, a3, a4, a5, a6) := a in
-  let '(b1, b2, b3, b4, b5, b6) := b in
-  (orb (orb (orb (orb (orb (andb (negb a1) b1) (b4_lt a2 b2)) (b4_lt a3 b3)) (b4_lt a4 b4)) (b4_lt a5 b5)) (b4_lt a6 b6)).
-
-Definition byte_lt (a b: byte) : bool :=
-  let '(a8, (a7, (a6, (a5, (a4, (a3, (a2, a1))))))) := to_bits a in
-  let '(b8, (b7, (b6, (b5, (b4, (b3, (b2, b1))))))) := to_bits b in
-  (orb (orb (orb (orb (orb (orb (orb (andb (negb a1) b1) (andb (negb a2) b2)) (andb (negb a3) b3)) (andb (negb a4) b4)) (andb (negb a5) b5)) (andb (negb a6) b6)) (andb (negb a7) b7)) (andb (negb a8) b8)).
-
-Fixpoint lexicographic_compare {T} (lt: T -> T -> bool) (a b: list T): bool :=
+Definition bool_compare (a b: bool) : comparison :=
   match (a, b) with
-  | (_, []) => false
-  | ([], _) => true
-  | (a_head :: a_rest, b_head::b_rest) =>
-      orb (lt a_head b_head) (lexicographic_compare lt a_rest b_rest)
+  | (0, 0) => Equal
+  | (0, 1) => Less
+  | (1, 0) => More
+  | (1, 1) => Equal
   end.
 
-Definition codepoints_lt := lexicographic_compare codepoint_lt.
-Definition bytes_lt := lexicographic_compare byte_lt.
+Definition if_equal (c other: comparison) :=
+  match c with
+  | More => More
+  | Less => Less
+  | Equal => other
+  end.
+
+Definition b2_compare (a b: bool * bool) : comparison :=
+  let '(a1, a2) := a in
+  let '(b1, b2) := b in
+  if_equal (bool_compare a1 b1) (bool_compare a2 b2).
+
+Definition b4_compare (a b: b4) : comparison :=
+  let '(a1, a2, a3, a4) := a in
+  let '(b1, b2, b3, b4) := b in
+  if_equal (b2_compare (a1, a2) (b1, b2)) (b2_compare (a3, a4) (b3, b4)).
+
+Definition byte_compare (a b: byte) : comparison :=
+  let '(a8, (a7, (a6, (a5, (a4, (a3, (a2, a1))))))) := to_bits a in
+  let '(b8, (b7, (b6, (b5, (b4, (b3, (b2, b1))))))) := to_bits b in
+  if_equal (b4_compare (a1, a2, a3, a4) (b1, b2, b3, b4))
+    (b4_compare (a5, a6, a7, a8) (b5, b6, b7, b8)).
+
+Definition codepoint_compare (a b: codepoint) : comparison :=
+  let '(a1, a2, a3, a4, a5, a6) := a in
+  let '(b1, b2, b3, b4, b5, b6) := b in
+  if_equal (bool_compare a1 b1)
+    (if_equal (b4_compare a2 b2)
+       (if_equal (b4_compare a3 b3)
+          (if_equal (b4_compare a4 b4)
+             (if_equal (b4_compare a5 b5) (b4_compare a6 b6))))).
+
+Fixpoint lexicographic_compare {T} (comp: T -> T -> comparison) (a b: list T): comparison :=
+  match (a, b) with
+  | ([], []) => Equal
+  | ([], _::_) => Less
+  | (_::_, []) => More
+  | (a_head :: a_rest, b_head::b_rest) =>
+      if_equal (comp a_head b_head) (lexicographic_compare comp a_rest b_rest)
+  end.
+
+Definition codepoints_compare := lexicographic_compare codepoint_compare.
+Definition bytes_compare := lexicographic_compare byte_compare.
 
 Inductive range :=
   Range_00_7F
@@ -192,7 +223,7 @@ Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := for
 Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2,
     encoder codes1 = (bytes1, nil) ->
     encoder codes2 = (bytes2, nil) ->
-    codepoints_lt codes1 codes2 = bytes_lt bytes1 bytes2.
+    codepoints_compare codes1 codes2 = bytes_compare bytes1 bytes2.
 
 Definition encoder_projects (encoder: encoder_type) := forall xs ys,
     encoder (xs ++ ys) =
@@ -219,11 +250,10 @@ Definition decoder_decode_valid_utf8_bytes_correctly (decoder: decoder_type) := 
     valid_utf8_bytes bytes <->
       exists codes, decoder bytes = (codes, []).
 
-
 Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 codes1 codes2,
     decoder bytes1 = (codes1, nil) ->
     decoder bytes2 = (codes2, nil) ->
-    codepoints_lt codes1 codes2 = bytes_lt bytes1 bytes2.
+    codepoints_compare codes1 codes2 = bytes_compare bytes1 bytes2.
 
 Definition utf8_decoder_spec decoder :=
   decoder_decode_correctly_implies_valid decoder
