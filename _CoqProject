@@ -1,2 +1,4 @@
 -R theories Utf8
-theories
+theories/Spec.v
+theories/Theorems/Order.v
+theories/Theorems/Spec.v

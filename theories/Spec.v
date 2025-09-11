@@ -1,85 +1,22 @@
 From Coq Require Import Lists.List.
 From Coq Require Import Strings.Byte.
+From Coq Require Import ZArith.BinInt.
+From Coq Require Import Hexadecimal.
 Import ListNotations.
 Require Import Utf8.Parser.
 
-Definition b3 : Type := bool * bool * bool.
-Definition b4 : Type := bool * bool * bool * bool.
-Definition b5 : Type := bool * bool * bool * bool * bool.
-Definition b6 : Type := bool * bool * bool * bool * bool * bool.
-Definition b7 : Type := bool * bool * bool * bool * bool * bool * bool.
-
-Local Notation "0" := false.
-Local Notation "1" := true.
-
-Definition b4_zero: b4 := (0, 0, 0, 0).
-
-Definition b4_equal (a b: b4) : bool :=
-  let '(a1, a2, a3, a4) := a in
-  let '(b1, b2, b3, b4) := b in
-  (Bool.eqb a1 b1) && (Bool.eqb a2 b2) && (Bool.eqb a3 b3) && (Bool.eqb a4 b4).
-
-Definition codepoint : Type := bool * b4 * b4 *b4 * b4 * b4.
+Definition codepoint : Type := Z.
 
 Definition unicode_str : Type := list codepoint.
 Definition byte_str : Type := list byte.
 
-Inductive comparison :=
-| More
-| Equal
-| Less.
+Local Notation "0" := false.
+Local Notation "1" := true.
 
-Definition bool_compare (a b: bool) : comparison :=
-  match (a, b) with
-  | (0, 0) => Equal
-  | (0, 1) => Less
-  | (1, 0) => More
-  | (1, 1) => Equal
-  end.
+Definition byte_compare (a b: byte) : comparison := Nat.compare (Byte.to_nat a) (Byte.to_nat b).
 
-Definition if_equal (c other: comparison) :=
-  match c with
-  | More => More
-  | Less => Less
-  | Equal => other
-  end.
-
-Definition b2_compare (a b: bool * bool) : comparison :=
-  let '(a1, a2) := a in
-  let '(b1, b2) := b in
-  if_equal (bool_compare a1 b1) (bool_compare a2 b2).
-
-Definition b4_compare (a b: b4) : comparison :=
-  let '(a1, a2, a3, a4) := a in
-  let '(b1, b2, b3, b4) := b in
-  if_equal (b2_compare (a1, a2) (b1, b2)) (b2_compare (a3, a4) (b3, b4)).
-
-Definition byte_compare (a b: byte) : comparison :=
-  let '(a8, (a7, (a6, (a5, (a4, (a3, (a2, a1))))))) := to_bits a in
-  let '(b8, (b7, (b6, (b5, (b4, (b3, (b2, b1))))))) := to_bits b in
-  if_equal (b4_compare (a1, a2, a3, a4) (b1, b2, b3, b4))
-    (b4_compare (a5, a6, a7, a8) (b5, b6, b7, b8)).
-
-Definition codepoint_compare (a b: codepoint) : comparison :=
-  let '(a1, a2, a3, a4, a5, a6) := a in
-  let '(b1, b2, b3, b4, b5, b6) := b in
-  if_equal (bool_compare a1 b1)
-    (if_equal (b4_compare a2 b2)
-       (if_equal (b4_compare a3 b3)
-          (if_equal (b4_compare a4 b4)
-             (if_equal (b4_compare a5 b5) (b4_compare a6 b6))))).
-
-Fixpoint lexicographic_compare {T} (comp: T -> T -> comparison) (a b: list T): comparison :=
-  match (a, b) with
-  | ([], []) => Equal
-  | ([], _::_) => Less
-  | (_::_, []) => More
-  | (a_head :: a_rest, b_head::b_rest) =>
-      if_equal (comp a_head b_head) (lexicographic_compare comp a_rest b_rest)
-  end.
-
-Definition codepoints_compare := lexicographic_compare codepoint_compare.
-Definition bytes_compare := lexicographic_compare byte_compare.
+Definition codepoints_compare := List.list_compare Z.compare.
+Definition bytes_compare := List.list_compare byte_compare.
 
 Inductive range :=
   Range_00_7F
@@ -139,18 +76,16 @@ Inductive unicode_encode_error :=
 Definition encoder_type := list codepoint -> (list byte) * (list codepoint).
 Definition decoder_type := list byte -> (list codepoint) * (list byte).
 
+Definition c10ffff := Z.of_hex_uint (D1 (D0 (Df (Df (Df (Df Nil)))))).
+
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
-  match code with
-  | (0, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) => True
-  | (1, (0,  0,  0,  0), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)) => True
-  | _ => False
-  end.
+  Z.le code c10ffff.
+
+Definition cd800 := Z.of_hex_uint (Dd (D8 (D0 (D0 Nil)))).
+Definition cdfff := Z.of_hex_uint (Dd (Df (Df (Df Nil)))).
 
 Definition codepoint_is_not_surrogate (code: codepoint) : Prop :=
-  match code with
-  | (0, (0, 0, 0, 0), (1, 1, 0, 1), (1, b6, b7, b8), (b9, b10, b11, b12), (b13, b14, b15, b16)) => False
-  | _ => True
-  end.
+  (Z.lt code cd800) \/ (Z.gt code cdfff).
 
 Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code.
 
