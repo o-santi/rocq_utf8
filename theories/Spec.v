@@ -1,11 +1,11 @@
 From Coq Require Import Lists.List.
 From Coq Require Import Strings.Byte.
-From Coq Require Import ZArith.BinInt.
 From Coq Require Import Hexadecimal.
+From Coq Require Import NArith.BinNat.
 Import ListNotations.
 Require Import Utf8.Parser.
 
-Definition codepoint : Type := Z.
+Definition codepoint : Type := N.
 
 Definition unicode_str : Type := list codepoint.
 Definition byte_str : Type := list byte.
@@ -15,7 +15,7 @@ Local Notation "1" := true.
 
 Definition byte_compare (a b: byte) : comparison := Nat.compare (Byte.to_nat a) (Byte.to_nat b).
 
-Definition codepoints_compare := List.list_compare Z.compare.
+Definition codepoints_compare := List.list_compare BinNat.N.compare.
 Definition bytes_compare := List.list_compare byte_compare.
 
 Inductive range :=
@@ -76,16 +76,16 @@ Inductive unicode_encode_error :=
 Definition encoder_type := list codepoint -> (list byte) * (list codepoint).
 Definition decoder_type := list byte -> (list codepoint) * (list byte).
 
-Definition c10ffff := Z.of_hex_uint (D1 (D0 (Df (Df (Df (Df Nil)))))).
+Definition c10ffff := N.of_hex_uint (D1 (D0 (Df (Df (Df (Df Nil)))))).
 
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
-  Z.le code c10ffff.
+  N.le code c10ffff.
 
-Definition cd800 := Z.of_hex_uint (Dd (D8 (D0 (D0 Nil)))).
-Definition cdfff := Z.of_hex_uint (Dd (Df (Df (Df Nil)))).
+Definition cd800 := N.of_hex_uint (Dd (D8 (D0 (D0 Nil)))).
+Definition cdfff := N.of_hex_uint (Dd (Df (Df (Df Nil)))).
 
 Definition codepoint_is_not_surrogate (code: codepoint) : Prop :=
-  (Z.lt code cd800) \/ (Z.gt code cdfff).
+  (N.lt code cd800) \/ (N.gt code cdfff).
 
 Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code.
 
@@ -127,23 +127,49 @@ Definition in_range_80_9f byte :=
   | _ => False
   end.
 
-Fixpoint valid_utf8_bytes (bytes: list Byte.byte) : Prop :=
-  match bytes with
-  | [] => True
-  | byte1 :: rest =>
-      match byte_range byte1 with
-      | Range_00_7F => valid_utf8_bytes rest
-      | Range_C2_DF => expect in_range_80_bf valid_utf8_bytes rest
-      | Byte_E0     => expect in_range_a0_bf (expect in_range_80_bf valid_utf8_bytes) rest
-      | Range_E1_EC
-      | Range_EE_EF => expect in_range_80_bf (expect in_range_80_bf valid_utf8_bytes) rest
-      | Byte_ED     => expect in_range_80_9f (expect in_range_80_bf valid_utf8_bytes) rest
-      | Byte_F0     => expect in_range_90_bf (expect in_range_80_bf (expect in_range_80_bf valid_utf8_bytes)) rest
-      | Range_F1_F3 => expect in_range_80_bf (expect in_range_80_bf (expect in_range_80_bf valid_utf8_bytes)) rest
-      | Byte_F4     => expect in_range_80_8f (expect in_range_80_bf (expect in_range_80_bf valid_utf8_bytes)) rest
-      | _           => False
-      end
-  end.
+Inductive valid_codepoint_representation : list byte -> Prop :=
+| OneByte (b: byte) :
+  byte_range b = Range_00_7F ->
+  valid_codepoint_representation [b]
+| TwoByte (b1 b2: byte):
+  byte_range b1 = Range_C2_DF ->
+  in_range_80_bf b2 ->
+  valid_codepoint_representation [b1; b2]
+| ThreeByte1 (b1 b2 b3: byte):
+  byte_range b1 = Range_E1_EC \/ byte_range b1 = Range_EE_EF ->
+  in_range_80_bf b2 ->
+  in_range_80_bf b3 ->
+  valid_codepoint_representation [b1; b2; b3]
+| ThreeByte2 (b1 b2 b3: byte):
+  byte_range b1 = Byte_ED ->
+  in_range_80_9f b2 ->
+  in_range_80_bf b3 ->
+  valid_codepoint_representation [b1; b2; b3]
+| FourBytes1 (b1 b2 b3 b4: byte):
+  byte_range b1 = Byte_F0 ->
+  in_range_90_bf b2 ->
+  in_range_80_bf b3 ->
+  in_range_80_bf b4 ->
+  valid_codepoint_representation [b1; b2; b3; b4]
+| FourBytes2 (b1 b2 b3 b4: byte):
+  byte_range b1 = Range_F1_F3 ->
+  in_range_80_bf b2 ->
+  in_range_80_bf b3 ->
+  in_range_80_bf b4 ->
+  valid_codepoint_representation [b1; b2; b3; b4]
+| FourBytes3 (b1 b2 b3 b4: byte):
+  byte_range b1 = Byte_F4 ->
+  in_range_80_8f b2 ->
+  in_range_80_bf b3 ->
+  in_range_80_bf b4 ->
+  valid_codepoint_representation [b1; b2; b3; b4].
+
+Inductive valid_utf8_bytes: list byte ->  Prop :=
+| Utf8Nil : valid_utf8_bytes []
+| Utf8Concat (bytes tail: list byte) :
+    valid_codepoint_representation bytes ->
+    valid_utf8_bytes tail ->
+    valid_utf8_bytes (bytes ++ tail).
 
 Definition encoder_encode_valid_codes_correctly (encoder: encoder_type) := forall codes,
     valid_codepoints codes <->
