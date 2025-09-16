@@ -48,9 +48,8 @@ Proof.
   assert (count < 0 \/ 0 <= count)%Z by lia.
   destruct H1.
   - admit. (* in this case forall n, ~(interval count n)) *)
-  - apply Z.right_induction with (z := 0%Z) (n := count); try apply H1.
-    * (* wtf? *) admit.
-    * admit.
+  - apply Wf_Z.natlike_ind with (x := count); try apply H1.
+    * split. admit. admit.
     * admit.
 Admitted.
 
