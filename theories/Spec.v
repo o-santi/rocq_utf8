@@ -136,11 +136,16 @@ Inductive valid_codepoint_representation : list byte -> Prop :=
   in_range_80_bf b2 ->
   valid_codepoint_representation [b1; b2]
 | ThreeByte1 (b1 b2 b3: byte):
+  byte_range b1 = Byte_E0 ->
+  in_range_a0_bf b2 ->
+  in_range_80_bf b3 ->
+  valid_codepoint_representation [b1; b2; b3]
+| ThreeByte2 (b1 b2 b3: byte):
   byte_range b1 = Range_E1_EC \/ byte_range b1 = Range_EE_EF ->
   in_range_80_bf b2 ->
   in_range_80_bf b3 ->
   valid_codepoint_representation [b1; b2; b3]
-| ThreeByte2 (b1 b2 b3: byte):
+| ThreeByte3 (b1 b2 b3: byte):
   byte_range b1 = Byte_ED ->
   in_range_80_9f b2 ->
   in_range_80_bf b3 ->
