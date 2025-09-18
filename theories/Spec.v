@@ -1,66 +1,21 @@
 From Coq Require Import Lists.List.
-From Coq Require Import Strings.Byte.
 From Coq Require Import Hexadecimal.
-From Coq Require Import NArith.BinNat.
+From Coq Require Import ZArith.BinInt.
 Import ListNotations.
 Require Import Utf8.Parser.
 
-Definition codepoint : Type := N.
+Open Scope Z_scope.
+
+Definition codepoint : Type := Z.
 
 Definition unicode_str : Type := list codepoint.
-Definition byte_str : Type := list byte.
+Definition byte_str : Type := list Z.
 
 Local Notation "0" := false.
 Local Notation "1" := true.
 
-Definition byte_compare (a b: byte) : comparison := Nat.compare (Byte.to_nat a) (Byte.to_nat b).
-
-Definition codepoints_compare := List.list_compare BinNat.N.compare.
-Definition bytes_compare := List.list_compare byte_compare.
-
-Inductive range :=
-  Range_00_7F
-| Range_80_8F
-| Range_90_9F
-| Range_A0_BF
-| Range_C0_C1
-| Range_C2_DF
-| Byte_E0 
-| Range_E1_EC
-| Byte_ED
-| Range_EE_EF
-| Byte_F0
-| Range_F1_F3
-| Byte_F4
-| Range_F5_FF
-.
-
-Definition byte_range (b: Byte.byte) : range :=
-  match b with
-    x00 | x01 | x02 | x03 | x04 | x05 | x06 | x07 | x08 | x09 | x0a | x0b | x0c | x0d | x0e | x0f
-  | x10 | x11 | x12 | x13 | x14 | x15 | x16 | x17 | x18 | x19 | x1a | x1b | x1c | x1d | x1e | x1f
-  | x20 | x21 | x22 | x23 | x24 | x25 | x26 | x27 | x28 | x29 | x2a | x2b | x2c | x2d | x2e | x2f
-  | x30 | x31 | x32 | x33 | x34 | x35 | x36 | x37 | x38 | x39 | x3a | x3b | x3c | x3d | x3e | x3f
-  | x40 | x41 | x42 | x43 | x44 | x45 | x46 | x47 | x48 | x49 | x4a | x4b | x4c | x4d | x4e | x4f
-  | x50 | x51 | x52 | x53 | x54 | x55 | x56 | x57 | x58 | x59 | x5a | x5b | x5c | x5d | x5e | x5f
-  | x60 | x61 | x62 | x63 | x64 | x65 | x66 | x67 | x68 | x69 | x6a | x6b | x6c | x6d | x6e | x6f
-  | x70 | x71 | x72 | x73 | x74 | x75 | x76 | x77 | x78 | x79 | x7a | x7b | x7c | x7d | x7e | x7f => Range_00_7F
-  | x80 | x81 | x82 | x83 | x84 | x85 | x86 | x87 | x88 | x89 | x8a | x8b | x8c | x8d | x8e | x8f => Range_80_8F
-  | x90 | x91 | x92 | x93 | x94 | x95 | x96 | x97 | x98 | x99 | x9a | x9b | x9c | x9d | x9e | x9f => Range_90_9F
-  | xa0 | xa1 | xa2 | xa3 | xa4 | xa5 | xa6 | xa7 | xa8 | xa9 | xaa | xab | xac | xad | xae | xaf
-  | xb0 | xb1 | xb2 | xb3 | xb4 | xb5 | xb6 | xb7 | xb8 | xb9 | xba | xbb | xbc | xbd | xbe | xbf => Range_A0_BF
-  | xc0 | xc1 => Range_C0_C1
-  | xc2 | xc3 | xc4 | xc5 | xc6 | xc7 | xc8 | xc9 | xca | xcb | xcc | xcd | xce | xcf
-  | xd0 | xd1 | xd2 | xd3 | xd4 | xd5 | xd6 | xd7 | xd8 | xd9 | xda | xdb | xdc | xdd | xde | xdf => Range_C2_DF
-  | xe0 => Byte_E0
-  | xe1 | xe2 | xe3 | xe4 | xe5 | xe6 | xe7 | xe8 | xe9 | xea | xeb | xec  => Range_E1_EC
-  | xed => Byte_ED
-  | xee | xef => Range_EE_EF
-  | xf0 => Byte_F0
-  | xf1 | xf2 | xf3 => Range_F1_F3
-  | xf4 => Byte_F4
-  | xf5 | xf6 | xf7 | xf8 | xf9 | xfa | xfb | xfc | xfd | xfe | xff => Range_F5_FF
-  end.
+Definition codepoints_compare := List.list_compare Z.compare.
+Definition bytes_compare := List.list_compare Z.compare.
 
 Inductive unicode_decode_error :=
 | OverlongEncoding
@@ -73,105 +28,67 @@ Inductive unicode_encode_error :=
 | EncodingCodepointTooBig (c: codepoint)
 | IllegalSurrogatePair (c: codepoint).
 
-Definition encoder_type := list codepoint -> (list byte) * (list codepoint).
-Definition decoder_type := list byte -> (list codepoint) * (list byte).
-
-Definition c10ffff := N.of_hex_uint (D1 (D0 (Df (Df (Df (Df Nil)))))).
+Definition encoder_type := unicode_str -> byte_str * unicode_str.
+Definition decoder_type := byte_str -> unicode_str * byte_str.
 
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
-  N.le code c10ffff.
-
-Definition cd800 := N.of_hex_uint (Dd (D8 (D0 (D0 Nil)))).
-Definition cdfff := N.of_hex_uint (Dd (Df (Df (Df Nil)))).
+  Z.le code 0x10ffff.
 
 Definition codepoint_is_not_surrogate (code: codepoint) : Prop :=
-  (N.lt code cd800) \/ (N.gt code cdfff).
+  (Z.lt code 0xd800) \/ (Z.gt code 0xdfff).
 
-Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code.
+Definition codepoint_not_negative (code: codepoint): Prop :=
+  Z.ge code 0.
+
+Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code /\ codepoint_not_negative code.
 
 Definition valid_codepoints (codes: list codepoint) := Forall valid_codepoint codes.
 
-Definition expect (Pred: byte -> Prop) (Pred_rest: list byte -> Prop) bytes :=
-  match bytes with
-  | [] => False
-  | byte :: rest => Pred byte /\ Pred_rest rest
-  end.
-
-Definition in_range_80_bf byte :=
-  match byte_range byte with
-  | Range_80_8F | Range_90_9F | Range_A0_BF => True
-  | _ => False
-  end.
-
-Definition in_range_80_8f byte :=
-  match byte_range byte with
-  | Range_80_8F => True
-  | _ => False
-  end.
-
-Definition in_range_a0_bf byte :=
-  match byte_range byte with
-  | Range_A0_BF => True
-  | _ => False
-  end.
-
-Definition in_range_90_bf byte :=
-  match byte_range byte with
-  | Range_90_9F | Range_A0_BF => True
-  | _ => False
-  end.
-
-Definition in_range_80_9f byte :=
-  match byte_range byte with
-  | Range_80_8F | Range_90_9F => True
-  | _ => False
-  end.
-
-Inductive valid_codepoint_representation : list byte -> Prop :=
-| OneByte (b: byte) :
-  byte_range b = Range_00_7F ->
+Inductive valid_codepoint_representation : list Z -> Prop :=
+| OneByte (b: Z) :
+  0 <= b <= 0x7f ->
   valid_codepoint_representation [b]
-| TwoByte (b1 b2: byte):
-  byte_range b1 = Range_C2_DF ->
-  in_range_80_bf b2 ->
+| TwoByte (b1 b2: Z):
+  0xc2 <= b1 <= 0xdf ->
+  0x80 <= b2 <= 0xbf ->
   valid_codepoint_representation [b1; b2]
-| ThreeByte1 (b1 b2 b3: byte):
-  byte_range b1 = Byte_E0 ->
-  in_range_a0_bf b2 ->
-  in_range_80_bf b3 ->
+| ThreeByte1 (b1 b2 b3: Z):
+  b1 = 0xe0 ->
+  0xa0 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3]
-| ThreeByte2 (b1 b2 b3: byte):
-  byte_range b1 = Range_E1_EC \/ byte_range b1 = Range_EE_EF ->
-  in_range_80_bf b2 ->
-  in_range_80_bf b3 ->
+| ThreeByte2 (b1 b2 b3: Z):
+  0xe1 <= b1 <= 0xec \/ 0xee <= b1 <= 0xef ->
+  0x80 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3]
-| ThreeByte3 (b1 b2 b3: byte):
-  byte_range b1 = Byte_ED ->
-  in_range_80_9f b2 ->
-  in_range_80_bf b3 ->
+| ThreeByte3 (b1 b2 b3: Z):
+  b1 = 0xed ->
+  0x80 <= b2 <= 0x9f ->
+  0x80 <= b3 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3]
-| FourBytes1 (b1 b2 b3 b4: byte):
-  byte_range b1 = Byte_F0 ->
-  in_range_90_bf b2 ->
-  in_range_80_bf b3 ->
-  in_range_80_bf b4 ->
+| FourBytes1 (b1 b2 b3 b4: Z):
+  b1 = 0xf0 ->
+  0x90 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3; b4]
-| FourBytes2 (b1 b2 b3 b4: byte):
-  byte_range b1 = Range_F1_F3 ->
-  in_range_80_bf b2 ->
-  in_range_80_bf b3 ->
-  in_range_80_bf b4 ->
+| FourBytes2 (b1 b2 b3 b4: Z):
+  0xf1 <= b1 <= 0xf3 ->
+  0x80 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3; b4]
-| FourBytes3 (b1 b2 b3 b4: byte):
-  byte_range b1 = Byte_F4 ->
-  in_range_80_8f b2 ->
-  in_range_80_bf b3 ->
-  in_range_80_bf b4 ->
+| FourBytes3 (b1 b2 b3 b4: Z):
+  b1 = 0xf4 ->
+  0x80 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3; b4].
 
-Inductive valid_utf8_bytes: list byte ->  Prop :=
+Inductive valid_utf8_bytes: list Z ->  Prop :=
 | Utf8Nil : valid_utf8_bytes []
-| Utf8Concat (bytes tail: list byte) :
+| Utf8Concat (bytes tail: list Z) :
     valid_codepoint_representation bytes ->
     valid_utf8_bytes tail ->
     valid_utf8_bytes (bytes ++ tail).

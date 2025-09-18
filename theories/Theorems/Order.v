@@ -1,8 +1,6 @@
 Require Import Utf8.Spec.
 From Coq Require Import Lists.List. Import ListNotations.
-From Coq Require Import NArith.BinNat.
-From Coq Require Import Hexadecimal.
-From Coq Require Import Strings.Byte.
+From Coq Require Import ZArith.BinInt.
 From Coq Require Import Arith.
 From Coq Require Import Lia.
 
@@ -40,14 +38,13 @@ Ltac to_bits byte :=
       rewrite Byte.of_bits_to_bits in eqn_name
   end.
 
-Definition c0800 := N.of_hex_uint (D8 (D0 (D0 Nil))).
-Definition ce000 := N.of_hex_uint (De (D0 (D0 (D0 Nil)))).
-
-Definition nth_valid_codepoint (n: N) : option codepoint :=
-  if (n <? cd800)%N then
+Definition nth_valid_codepoint (n: Z) : option codepoint :=
+  if n <? 0 then
+    None
+  else if n <? 0xd800 then
     Some n
-  else if (n <=? c10ffff - c0800)%N then
-    Some (n + c0800)%N
+  else if n <=? 0x10ffff - 0x0800 then
+    Some (n + 0x0800)
   else
     None.
 
@@ -57,87 +54,67 @@ Lemma nth_valid_codepoint_is_some_implies_valid : forall code,
 Proof.
   intros code. split. 
   - intro nth. destruct nth as [n nth].
-    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate.
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
     unfold nth_valid_codepoint in nth.
-    destruct (n <? cd800)%N eqn:less_than_d800; inversion nth; subst; clear nth.
-    + apply N.ltb_lt in less_than_d800.
-      split. apply N.lt_le_incl in less_than_d800. apply N.le_trans with (m:= cd800). assumption. vm_compute. easy.
-      left. assumption.
-    + apply N.ltb_nlt in less_than_d800.
-      destruct (n <=? 1112063)%N eqn:less_than_10ffff_m_800; [| discriminate].
-      apply N.leb_le in less_than_10ffff_m_800.
-      inversion H0. subst. clear H0.
-      split. replace (1112063)%N with (c10ffff - c0800)%N in less_than_10ffff_m_800 by reflexivity.
-      specialize (N.add_le_mono_r n (c10ffff - c0800)%N c0800) as [G1 G2].
-      apply G1 in less_than_10ffff_m_800.
-      rewrite N.sub_add in less_than_10ffff_m_800.
-      apply less_than_10ffff_m_800. vm_compute. intro. discriminate.
-      apply N.nlt_ge in less_than_d800.
-      right. apply N.lt_gt.
-      specialize (N.add_le_mono_r cd800 n c0800) as [G1 G2].
-      apply G1 in less_than_d800.
-      replace (cd800 + c0800)%N with (ce000) in less_than_d800 by reflexivity.
-      specialize (N.lt_succ_diag_r cdfff) as s. replace (N.succ cdfff) with ce000 in s by reflexivity.
-      lia.
+    destruct (n <? 0) eqn:n_not_neg; [ discriminate|]. apply Z.ltb_nlt in n_not_neg. apply Z.nlt_ge in n_not_neg. 
+    destruct (n <? 0xd800) eqn:less_than_d800; inversion nth; subst; clear nth.
+    + lia.
+    + apply Z.ltb_nlt in less_than_d800.
+      destruct (n <=? 1112063)%Z eqn:less_than_10ffff_m_800; [| discriminate]. 
+      apply Z.leb_le in less_than_10ffff_m_800.
+      inversion H0. subst. clear H0. lia.
   - intro valid_code.
-    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate in valid_code.
-    destruct valid_code as [code_less_10ffff code_not_surrogate].
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in valid_code.
+    destruct valid_code as [code_less_10ffff [code_not_surrogate code_not_neg]].
     unfold nth_valid_codepoint.
     destruct code_not_surrogate.
-    + exists code. apply <- N.ltb_lt in H. rewrite H. reflexivity.
-    + exists (code - c0800)%N.
-      destruct (code - c0800 <? cd800)%N eqn:less_d800.
-      * apply N.ltb_lt in less_d800. specialize (N.add_lt_mono_r (code - c0800)%N cd800 c0800) as [G1 G2].
-        apply G1 in less_d800. rewrite N.sub_add in less_d800.
-        replace (cd800 + c0800)%N with (N.succ cdfff) in less_d800 by reflexivity. lia.
-        apply N.gt_lt in H. apply N.lt_le_incl in H. apply N.le_trans with (m := cdfff). vm_compute. intro. discriminate.
-        assumption.
-      * apply N.ltb_nlt in less_d800.
-        destruct (code - c0800 <=? c10ffff - c0800)%N eqn: less_c10ffff_m_800.
-        -- rewrite N.sub_add. reflexivity.
-           apply N.gt_lt in H. apply N.lt_le_incl in H. apply N.le_trans with (m := cdfff). vm_compute. intro. discriminate. assumption.
-        -- apply N.leb_nle in less_c10ffff_m_800.
-           apply N.lt_nge in less_c10ffff_m_800.
-           apply N.lt_sub_lt_add_r in less_c10ffff_m_800. rewrite N.sub_add in less_c10ffff_m_800.
-           lia. apply N.gt_lt in H. apply N.lt_le_incl in H. apply N.le_trans with (m := cdfff). vm_compute. intro. discriminate. assumption.
+    + exists code. apply <- Z.ltb_lt in H. apply Z.ge_le in code_not_neg. apply <- Z.ltb_ge in code_not_neg. rewrite code_not_neg.
+      rewrite H. reflexivity.
+    + exists (code - 0x0800)%Z.
+      destruct (code - 2048 <? 0) eqn:less_than_zero. lia.
+      destruct (code - 0x0800 <? 0xd800)%Z eqn:less_d800. lia.
+      destruct (code - 0x0800 <=? 0x10ffff - 0x0800)%Z eqn:less_c10ffff_m_800.
+      rewrite Z.sub_add. reflexivity.
+      lia.
 Qed.
 
 Theorem nth_valid_codepoint_compat : forall n1 code1 n2 code2,
     nth_valid_codepoint n1 = Some code1 ->
     nth_valid_codepoint n2 = Some code2 ->
-    N.compare n1 n2 = N.compare code1 code2.
+    Z.compare n1 n2 = Z.compare code1 code2.
 Proof.
   intros n1 code1 n2 code2 code1_valid code2_valid.
   unfold nth_valid_codepoint in code1_valid, code2_valid.
   repeat match goal with
   | [G: context[if (?a <=? ?b)%N then _ else _] |- _] => 
       let l := fresh "less_than_eq" in
-      destruct (a <=? b)%N eqn:l; [apply N.leb_le in l| apply N.leb_nle in l]
+      destruct (a <=? b)%N eqn:l; [apply Z.leb_le in l| apply Z.leb_nle in l]
   | [G: context[if (?a <? ?b)%N then _ else _] |- _] => 
       let l := fresh "less_than" in
-      destruct (a <? b)%N eqn:l; [apply N.ltb_lt in l| apply N.ltb_nlt in l]
+      destruct (a <? b)%N eqn:l; [apply Z.ltb_lt in l| apply Z.ltb_nlt in l]
   end; inversion code1_valid; inversion code2_valid; subst; try reflexivity; try lia.
-  - specialize (N.compare_spec n1 code2) as compare_spec. 
-    destruct compare_spec; subst; try lia. 
-    apply N.lt_lt_add_r with (p:= c0800) in H. 
-    apply N.gt_lt_iff in H.
+  - specialize (Z.compare_spec n1 code2) as compare_spec. 
+    destruct compare_spec; subst; try lia. Search (?a < ?b -> ?c). 
+    apply Z.add_lt_mono with (p:=0) (q:= 0x0800) in H; try lia.
+    apply Z.gt_lt_iff in H. rewrite Z.add_0_r in H.
     rewrite H. reflexivity.
-  - specialize (N.compare_spec code1 n2) as compare_spec. 
+  - specialize (Z.compare_spec code1 n2) as compare_spec. 
     destruct compare_spec; subst; try lia. 
-    apply N.lt_lt_add_r with (p:= c0800) in H. 
+    apply Z.add_lt_mono with (p:=0) (q:= 0x0800) in H; try lia.
+    rewrite Z.add_0_r in H.
     rewrite H. reflexivity.
-  - specialize (N.compare_spec n1 n2) as compare_spec. 
+  - specialize (Z.compare_spec n1 n2) as compare_spec. 
     destruct compare_spec; subst.
-    + rewrite N.compare_refl. reflexivity.
-    + apply N.add_lt_mono_r with (p := c0800) in H. rewrite H. reflexivity.
-    + apply N.add_lt_mono_r with (p := c0800) in H. apply N.gt_lt_iff in H. rewrite H. reflexivity.
+    + rewrite Z.compare_refl. reflexivity.
+    + apply Z.add_lt_mono_r with (p := 0x0800) in H. rewrite H. reflexivity.
+    + apply Z.add_lt_mono_r with (p := 0x800) in H. apply Z.gt_lt_iff in H. rewrite H. reflexivity.
 Qed.
 
-Definition inverse_nth_valid_codepoint (code: codepoint) : option N :=
-  if (code <? cd800)%N then
+Definition inverse_nth_valid_codepoint (code: codepoint) : option Z :=
+  if (code <? 0xd800) then
     Some code
-  else if (code <=? c10ffff)%N then
-    Some (code - c0800)%N
+  else if (code <=? 0x10ffff)%Z then
+    Some (code - 0x0800)%Z
   else
     None.
 
@@ -149,146 +126,87 @@ Proof.
   split; intros.
   - assert (exists m, nth_valid_codepoint m = Some code). exists n. apply H.
     apply nth_valid_codepoint_is_some_implies_valid in H0 as code_valid. split; [|apply code_valid].
+    destruct code_valid as [code_less_10ffff [code_not_surrogate code_not_neg]].
     unfold inverse_nth_valid_codepoint. unfold nth_valid_codepoint in H.
-    destruct (n <? cd800)%N eqn:less_than_d800.
+    destruct (n <? 0) eqn:n_not_neg; [discriminate |]. apply Z.ltb_ge in n_not_neg.
+    destruct (n <? 0xd800) eqn:less_than_d800.
     + inversion H. subst. rewrite less_than_d800. reflexivity.
-    + apply N.ltb_nlt in less_than_d800.
-      destruct (n <=? c10ffff - c0800)%N eqn:less_than_10ffff; [| discriminate].
-      inversion H. subst. clear H.
-      apply N.leb_le in less_than_10ffff.
-      destruct (n + cdfff <? cd800)%N eqn:plus_less_than_d800.
-      apply N.ltb_lt in plus_less_than_d800. lia.
-      apply N.ltb_nlt in plus_less_than_d800.
-      destruct (n + c0800 <? cd800)%N eqn:plus_less_than_cd800.
-      * apply N.ltb_lt in plus_less_than_cd800. lia.
-      * apply N.ltb_nlt in plus_less_than_cd800.
-        destruct (n + c0800 <=? c10ffff)%N eqn: plus_less_than_10ffff.
-        -- rewrite N.add_sub. reflexivity.
-        -- apply N.leb_nle in plus_less_than_10ffff.
-           apply N.add_le_mono_r with (p:=c0800) in less_than_10ffff. 
-           rewrite N.sub_add in less_than_10ffff. 
-           lia. unfold N.le. intro G. simpl in G. vm_compute in G. discriminate.
+    + apply Z.ltb_nlt in less_than_d800.
+      destruct (n <=? 0x10ffff - 0x0800) eqn:less_than_10ffff; [| discriminate].
+      inversion H. subst. clear H. 
+      apply Z.leb_le in less_than_10ffff.
+      destruct (n + 0xdfff <? 0xd800)%Z eqn:plus_less_than_d800.
+      apply Z.ltb_lt in plus_less_than_d800. lia.
+      apply Z.ltb_nlt in plus_less_than_d800.
+      destruct (n + 0x0800 <? 0xd800)%Z eqn:plus_less_than_cd800.
+      * apply Z.ltb_lt in plus_less_than_cd800. lia.
+      * apply Z.ltb_nlt in plus_less_than_cd800.
+        destruct (n + 0x0800 <=? 0x10ffff)%Z eqn: plus_less_than_10ffff.
+        -- rewrite Z.add_simpl_r. reflexivity.
+        -- apply Z.leb_nle in plus_less_than_10ffff.
+           apply Z.add_le_mono_r with (p:=0x0800) in less_than_10ffff. 
+           rewrite Z.sub_add in less_than_10ffff. 
+           lia.
   - destruct H as [H valid_code].
     unfold inverse_nth_valid_codepoint in H.
-    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate in valid_code.
-    destruct valid_code as [code_less_than_10ffff code_not_surrogate].
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in valid_code.
+    destruct valid_code as [code_less_than_10ffff [code_not_surrogate code_not_neg]].
     unfold nth_valid_codepoint.
-    destruct (N.ltb code cd800) eqn:less_than_d800.
-    + inversion H. subst. rewrite less_than_d800. reflexivity.
-    + apply N.ltb_nlt in less_than_d800.
-      destruct (code <=? c10ffff)%N eqn:less_than_10ffff; [| discriminate].
+    destruct (Z.ltb code 0xd800) eqn:less_than_d800.
+    + inversion H. subst. rewrite less_than_d800. destruct (n <? 0) eqn:n_not_neg; [ lia | reflexivity].
+    + apply Z.ltb_nlt in less_than_d800.
+      destruct (code <=? 0x10ffff)%Z eqn:less_than_10ffff; [| discriminate].
       inversion H. subst. clear H.
-      apply N.leb_le in less_than_10ffff.
-      destruct (code - c0800 <? cd800)%N eqn: plus_less_than_cdfff.
-      * apply N.ltb_lt in plus_less_than_cdfff.
-        apply N.nlt_ge in less_than_d800. destruct code_not_surrogate; try lia.
-        apply N.add_lt_mono_r with (p:=c0800) in plus_less_than_cdfff.
-        rewrite N.sub_add in plus_less_than_cdfff.
-        apply N.gt_lt in H.
-        apply N.succ_lt_mono in H. 
-        replace (cd800 + c0800)%N with ce000 in plus_less_than_cdfff by reflexivity.
-        replace (N.succ cdfff) with ce000 in H by reflexivity. lia.
-        apply (N.le_trans) with (m := cd800). vm_compute. intro G. discriminate G. assumption.
-      * apply N.ltb_nlt in plus_less_than_cdfff.
-        destruct (code - c0800 <=? c10ffff - c0800)%N eqn:plus_less_than_10ffff_m_800.
-        -- rewrite N.sub_add. reflexivity.
-           apply N.nlt_ge in less_than_d800.
-           apply N.le_trans with (m:= cd800).  vm_compute. intro G. discriminate G. assumption.
-        -- apply N.leb_nle in plus_less_than_10ffff_m_800.
-           lia.
+      destruct (code - 2048 <? 0) eqn:less_than_zero; [ lia | ].
+      apply Z.leb_le in less_than_10ffff.
+      destruct (code - 0x0800 <? 0xd800)%Z eqn: plus_less_than_cdfff.
+      * lia. 
+      * apply Z.ltb_nlt in plus_less_than_cdfff.
+        destruct (code - 0x0800 <=? 0x10ffff - 0x0800)%Z eqn:plus_less_than_10ffff_m_800.
+        -- rewrite Z.sub_add. reflexivity.
+        -- lia.
 Qed.
 
-Definition c07ff := N.of_hex_uint     (D7 (Df (Df Nil))).
-Definition cd800 := N.of_hex_uint (Dd (D8 (D0 (D0 Nil)))).
-Definition cffff := N.of_hex_uint (Df (Df (Df (Df Nil)))).
-
-Open Scope N_scope.
-Definition nth_valid_codepoint_representation (n: N) : option (list byte) :=
-  let n := if N.leb cd800 n then n + c0800 else n in
-  let b := fun (idx: N) => N.testbit n idx in
-  if (N.leb n 127) then
-    Some [ Byte.of_bits (b 0, (b 1, (b 2, (b 3, (b 4, (b 5, (b 6, false))))))) ]
-  else if (N.leb n c07ff) then
-    Some [ Byte.of_bits (b 6, (b 7, (b 8, (b 9, (b 10, (false, (true, true)))))));
-           Byte.of_bits (b 0, (b 1, (b 2, (b 3, (b 4,  (b 5, (false, true)))))))]
-  else if (N.leb n cffff) then
-    Some [ Byte.of_bits (b 12, (b 13, (b 14, (b 15, (false, (true, (true, true)))))));
-           Byte.of_bits (b 6,  (b 7,  (b 8,  (b 9,  (b 10, (b 11, (false, true)))))));
-           Byte.of_bits (b 0,  (b 1,  (b 2,  (b 3,  (b 4,  (b 5, (false, true)))))))]
-  else if (N.leb n c10ffff) then
-    Some [ Byte.of_bits (b 18, (b 19, (b 20, (false, (true, (true, (true, true)))))));
-           Byte.of_bits (b 12, (b 13, (b 14, (b 15, (b 16, (b 17, (false, true)))))));
-           Byte.of_bits (b 6,  (b 7,  (b 8,  (b 9,  (b 10, (b 11, (false, true)))))));
-           Byte.of_bits (b 0,  (b 1,  (b 2,  (b 3,  (b 4,  (b 5, (false, true)))))))]
-  else 
+Definition nth_valid_codepoint_representation (n: Z) : option byte_str :=
+  let n := if Z.ltb n 0xd800 then n else n + 0x800 in
+  if (n <? 0) then
+    None
+  else if (n <=? 127) then
+    Some [ n ]
+  else if (n <=? 0x7ff) then
+    let b1 := n / 64 in
+    let b2 := n mod 64 in
+    Some [ 192 + b1; 128 + b2]
+  else if (n <=? 0xffff) then
+    let r := n / 64 in
+    let b1 := r / 64 in
+    let b2 := r mod 64 in
+    let b3 := n mod 64 in
+    Some [ 224 + b1; 128 + b2; 128 + b3]
+  else if (n <=? 0x10ffff) then
+    let r1 := n / 64 in
+    let r2 := r1 / 64 in
+    let b1 := r2 / 64 in
+    let b2 := r2 mod 64 in
+    let b3 := r1 mod 64 in
+    let b4 := n mod 64 in
+    Some [ 240 + b1; 128 + b2; 128 + b3; 128 + b4]
+  else
     None.
 
-Opaque of_bits.
-
-
-
-Lemma byte_range_of_bits_00_7f: forall b1 b2 b3 b4 b5 b6 b7,
-    byte_range (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, false)))))))) = Range_00_7F.
+Lemma some_injective {T}: forall (a b: T),
+    Some a = Some b ->
+    a = b.
 Proof.
-  intros.
-  let byte := constr:(of_bits (b1, (b2, (b3, (b4, (b5, (b6, (b7, false)))))))) in
-  pose (byte_eq := eq_refl byte);
-  apply (f_equal Byte.to_bits) in byte_eq;
-  rewrite Byte.to_bits_of_bits in byte_eq at 1;
-  destruct byte eqn:H2;
-    inversion byte_eq;
-    try reflexivity; destruct H as [G | [G | [G | G]]]; subst;
-    match goal with
-    | [F: true = false |- _] => apply Bool.diff_true_false in F; destruct F
-    end.
+  intros. inversion H. reflexivity.
 Qed.
 
-Lemma byte_range_of_bits_c2_df: forall b1 b2 b3 b4 b5,
-    (b2 = true \/ b3 = true \/ b4 = true \/ b5 = true) ->
-    byte_range (Byte.of_bits (b1, (b2, (b3, (b4, (b5, (false, (true, true)))))))) = Range_C2_DF.
+Lemma continuation_is_correct : forall n,
+    128 <= 128 + (n mod 64) <= 191.
 Proof.
   intros.
-  let byte := constr:(Byte.of_bits (b1, (b2, (b3, (b4, (b5, (false, (true, true)))))))) in
-  pose (byte_eq := eq_refl byte);
-  apply (f_equal Byte.to_bits) in byte_eq;
-  rewrite Byte.to_bits_of_bits in byte_eq at 1;
-  destruct byte eqn:H2; inversion byte_eq;
-    try reflexivity; destruct H as [G | [G | [G | G]]]; subst;
-    match goal with
-    | [F: true = false |- _] => apply Bool.diff_true_false in F; destruct F
-    end.
+  specialize (Z.mod_pos_bound n 64 ltac:(lia)) as [G1 G2]. lia.
 Qed.
-
-Lemma in_range_80_bf_of_bits: forall b1 b2 b3 b4 b5 b6,
-    in_range_80_bf (of_bits (b1, (b2, (b3, (b4, (b5, (b6, (false, true)))))))).
-Proof.
-  intros.
-  let byte := constr:(Byte.of_bits (b1, (b2, (b3, (b4, (b5, (b6, (false, true)))))))) in
-  pose (byte_eq := eq_refl byte);
-  apply (f_equal Byte.to_bits) in byte_eq;
-  rewrite Byte.to_bits_of_bits in byte_eq at 1;
-  destruct byte eqn:H2; inversion byte_eq;
-    try reflexivity; destruct H as [G | [G | [G | G]]]; subst;
-    match goal with
-    | [F: true = false |- _] => apply Bool.diff_true_false in F; destruct F
-    end.
-Qed.
-
-Lemma at_least_one_bit_1 : forall n, 
-    127 < n ->
-    n <= 2047 ->
-    N.testbit n 7 = true \/ N.testbit n 8 = true \/ N.testbit n 9 = true \/ N.testbit n 10 = true.
-Proof.
-  intros.
-  Search 
-  Admitted.
-
-Lemma at_least_one_bit_2 : forall n, 
-    127 < n ->
-    n <= 2047 ->
-    N.testbit n 7 = true \/ N.testbit n 8 = true \/ N.testbit n 9 = true \/ N.testbit n 10 = true.
-Proof.
-Admitted.
 
 Theorem nth_valid_codepoint_representation_spec: forall bytes,
     (exists n, nth_valid_codepoint_representation n = Some bytes) <->
@@ -296,19 +214,98 @@ Theorem nth_valid_codepoint_representation_spec: forall bytes,
 Proof.
   intros bytes. split.
   - intros [n valid_code]. unfold nth_valid_codepoint_representation in valid_code.
-    destruct (cd800 <=? n)%N eqn:n_more_cdb00.
-    destruct (n <=? 127)%N eqn:n_less_127; [apply N.leb_le in n_less_127 | apply N.leb_nle in n_less_127].
-    + inversion valid_code. apply OneByte. apply byte_range_of_bits_00_7f.
-    + destruct (n <=? c07ff)%N eqn:n_less_07ff; [apply N.leb_le in n_less_07ff | apply N.leb_nle in n_less_07ff].
-      * inversion valid_code.
-        apply TwoByte. 2: apply in_range_80_bf_of_bits.
-        apply byte_range_of_bits_c2_df.
-        apply N.nle_gt in n_less_127.
-        clear valid_code. clear H0.
-        apply at_least_one_bit_1. apply n_less_127. apply n_less_07ff.
-      * destruct (n <=? cffff)%N eqn:n_less_ffff; [apply N.leb_le in n_less_ffff | apply N.leb_nle in n_less_ffff].
-        -- inversion valid_code. clear H0. clear valid_code. clear n_less_127.
-        
+    destruct (n <? 0xd800) eqn:n_more_db00; [apply Z.ltb_lt in n_more_db00 | apply Z.ltb_nlt in n_more_db00; apply Z.nlt_ge in n_more_db00].
+    destruct (n <? 0) eqn:n_not_neg; [discriminate | apply Z.ltb_nlt in n_not_neg; apply Z.nlt_ge in n_not_neg].
+    destruct (n <=? 127)%N eqn:n_less_127; [apply Z.leb_le in n_less_127 | apply Z.leb_nle in n_less_127].
+    + inversion valid_code. apply OneByte. lia.
+    + destruct (n <=? 0x7ff)%Z eqn:n_less_07ff; [apply Z.leb_le in n_less_07ff | apply Z.leb_nle in n_less_07ff].
+      * apply some_injective in valid_code. rewrite <- valid_code.
+        apply TwoByte. split. apply Zorder.Znot_le_gt in n_less_127. 
+        assert (n / 64 >= 2). {
+          apply Z.gt_lt in n_less_127.
+          apply Zorder.Zlt_le_succ in n_less_127. apply Z.le_ge in n_less_127.
+          specialize (Zdiv.Z_div_ge n 128 64 ltac:(lia) n_less_127) as G. apply G.
+        } lia. 
+        assert (n / 64 <= 31). { 
+          apply (Zdiv.Z_div_le n 2047 64 ltac:(lia) n_less_07ff).
+        } lia.
+        apply continuation_is_correct.
+      * destruct (n <=? 0xffff)%N eqn:n_less_ffff; [apply Z.leb_le in n_less_ffff | apply Z.leb_nle in n_less_ffff].
+        -- apply some_injective in valid_code. rewrite <- valid_code.
+           apply Zorder.Znot_le_gt in n_less_07ff, n_less_127.
+           assert (n / 64 >= 32). {
+             apply Z.gt_lt in n_less_07ff.
+             apply Zorder.Zlt_le_succ in n_less_07ff. apply Z.le_ge in n_less_07ff.
+             apply (Zdiv.Z_div_ge n 2048 64 ltac:(lia) n_less_07ff).
+           }
+           specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as G.
+           destruct (Z.compare_spec (n / 64 / 64) 0).
+           --- rewrite H0. apply ThreeByte1. reflexivity. split. lia.
+               specialize (Z.mod_pos_bound (n / 64) 64 ltac:(lia)) as G2. lia.
+               apply continuation_is_correct.
+           --- apply Zorder.Zmult_gt_0_lt_compat_l with (p := 64 * 64) in H0.
+               rewrite Zdiv.Zdiv_Zdiv in H0.
+               replace (64 * 64) with 4096 in H0 by reflexivity.
+               rewrite Z.mul_0_r in H0. Search (?a * (?b / ?a)).
+               apply Z.lt_mul_0 in H0. destruct H0. lia. destruct H0.
+               specialize (Z.div_pos n 4096 n_not_neg ltac:(lia)) as G2. all: lia.
+           --- assert (n / 4096 <= 13). {
+                 apply Z.lt_le_incl in n_more_db00.
+                 apply (Zdiv.Z_div_le n 55296 4096 ltac:(lia) n_more_db00).
+               }
+               rewrite Zdiv.Zdiv_Zdiv in valid_code, G |- *; try lia.
+               replace (64 * 64) with 4096 in valid_code, G |- * by reflexivity. 
+               destruct (Z.compare_spec (n / 4096) 13).
+               ---- apply ThreeByte3. lia. split. specialize (Z.mod_pos_bound (n / 64) 64 ltac:(lia)) as G2. lia.
+                    assert ((n / 64) mod 64 <= 31). {
+                      rewrite H2 in G. apply (f_equal (fun a => (-(64 * 13)) + a)) in G.
+                      rewrite Z.add_assoc in G.
+                      rewrite Z.add_opp_diag_l in G.
+                      rewrite Z.add_0_l in G.
+                      rewrite <- G. Search (?a <= ?b).
+                      specialize (Z.add_le_mono_l (- (64 * 13) + n / 64) 31 (64 * 13)) as [G1 G2].
+                      apply G2. rewrite Z.add_assoc.
+                      rewrite Z.add_opp_diag_r.
+                      rewrite Z.add_0_l.
+                      apply Zorder.Zlt_le_succ in n_more_db00. replace 55296 with (Z.succ 55295) in n_more_db00 by reflexivity.
+                      apply Zorder.Zsucc_le_reg in n_more_db00.
+                      replace (64 * 13 + 31) with 863 by reflexivity.
+                      apply (Zdiv.Z_div_le n 55295 64 ltac:(lia) n_more_db00).
+                    } lia.
+                    apply continuation_is_correct.
+               ---- apply ThreeByte2. left. split. rewrite Z.div_div in H0.
+                    replace (64 * 64) with 4096 in H0 by reflexivity. apply Zorder.Zlt_le_succ in H0. 1,2,3:lia.
+                    lia. all: apply continuation_is_correct.
+               ---- lia.
+        -- destruct (n <=? 1114111) eqn:n_impossible; [| discriminate].
+           apply Z.leb_le in n_impossible. lia.
+    + destruct (n + 2048 <? 0) eqn:n_not_neg; [ discriminate| apply Z.ltb_ge in n_not_neg]. 
+      destruct (n + 2048 <=? 127) eqn:n_less_127; [ lia | apply Z.leb_gt in n_less_127 ]. 
+      destruct (n + 2048 <=? 2047) eqn:n_less_7ff; [ lia | apply Z.leb_gt in n_less_7ff ].
+      destruct (n + 2048 <=? 65535) eqn:n_less_ffff; [ apply Z.leb_le in n_less_ffff | apply Z.leb_gt in n_less_ffff].
+      * apply some_injective in valid_code. rewrite <- valid_code.
+        assert (14 <= (n + 2048) / 64 / 64 <= 15). {
+          apply Zorder.Zplus_le_compat_r with (p:=0x800) in n_more_db00.
+          replace (55296 + 2048) with 57344 in n_more_db00 by reflexivity.
+          rewrite Z.div_div; try lia. split.
+          apply (Zdiv.Z_div_le 57344 (n + 2048) (64 * 64) ltac:(lia) n_more_db00).
+          apply (Zdiv.Z_div_le (n + 2048) 65535 (64 * 64) ltac:(lia) n_less_ffff).
+        } 
+        apply ThreeByte2. right. lia. all: apply continuation_is_correct.
+      * destruct (n + 2048 <=? 1114111) eqn:n_less_10ffff; [ apply Z.leb_le in n_less_10ffff | discriminate].
+        apply some_injective in valid_code. rewrite <- valid_code.
+        specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64 / 64) 64) as G.
+        destruct (Z.compare_spec ((n + 2048) / 64 / 64 / 64) 0).
+        -- apply FourBytes1. rewrite H. reflexivity. split.
+           assert (16 <= ((n + 2048) / 64 / 64) mod 64). {
+             rewrite H in G. rewrite Z.add_0_l in G. rewrite <- G.
+             apply Zorder.Zlt_le_succ in n_less_ffff. 
+             rewrite Z.div_div; try lia.
+             specialize (Zdiv.Z_div_le 65536 (n+2048) (64 * 64) ltac:(lia) n_less_ffff) as G2.
+             replace (65536 / (64 * 64)) with 16 in G2 by reflexivity. apply G2.
+           } lia. all: apply continuation_is_correct.
+        -- 
+ 
 Admitted.
         
 
