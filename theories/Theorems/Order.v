@@ -94,7 +94,7 @@ Proof.
       destruct (a <? b)%N eqn:l; [apply Z.ltb_lt in l| apply Z.ltb_nlt in l]
   end; inversion code1_valid; inversion code2_valid; subst; try reflexivity; try lia.
   - specialize (Z.compare_spec n1 code2) as compare_spec. 
-    destruct compare_spec; subst; try lia. Search (?a < ?b -> ?c). 
+    destruct compare_spec; subst; try lia. 
     apply Z.add_lt_mono with (p:=0) (q:= 0x0800) in H; try lia.
     apply Z.gt_lt_iff in H. rewrite Z.add_0_r in H.
     rewrite H. reflexivity.
@@ -195,10 +195,12 @@ Definition nth_valid_codepoint_representation (n: Z) : option byte_str :=
     None.
 
 Lemma some_injective {T}: forall (a b: T),
-    Some a = Some b ->
-    a = b.
+    a = b <->
+          Some a = Some b.
 Proof.
-  intros. inversion H. reflexivity.
+  split; intros.
+  subst. reflexivity.
+  inversion H. reflexivity.
 Qed.
 
 Lemma continuation_is_correct : forall n,
@@ -246,7 +248,7 @@ Proof.
            --- apply Zorder.Zmult_gt_0_lt_compat_l with (p := 64 * 64) in H0.
                rewrite Zdiv.Zdiv_Zdiv in H0.
                replace (64 * 64) with 4096 in H0 by reflexivity.
-               rewrite Z.mul_0_r in H0. Search (?a * (?b / ?a)).
+               rewrite Z.mul_0_r in H0. 
                apply Z.lt_mul_0 in H0. destruct H0. lia. destruct H0.
                specialize (Z.div_pos n 4096 n_not_neg ltac:(lia)) as G2. all: lia.
            --- assert (n / 4096 <= 13). {
@@ -262,7 +264,7 @@ Proof.
                       rewrite Z.add_assoc in G.
                       rewrite Z.add_opp_diag_l in G.
                       rewrite Z.add_0_l in G.
-                      rewrite <- G. Search (?a <= ?b).
+                      rewrite <- G. 
                       specialize (Z.add_le_mono_l (- (64 * 13) + n / 64) 31 (64 * 13)) as [G1 G2].
                       apply G2. rewrite Z.add_assoc.
                       rewrite Z.add_opp_diag_r.
@@ -304,30 +306,419 @@ Proof.
              specialize (Zdiv.Z_div_le 65536 (n+2048) (64 * 64) ltac:(lia) n_less_ffff) as G2.
              replace (65536 / (64 * 64)) with 16 in G2 by reflexivity. apply G2.
            } lia. all: apply continuation_is_correct.
-        -- 
- 
-Admitted.
-        
+        -- specialize (Z.div_pos (n + 2048) 64 n_not_neg ltac:(lia)) as G2.
+           specialize (Z.div_pos ((n + 2048) / 64) 64 G2 ltac:(lia)) as G3.
+           specialize (Z.div_pos (((n + 2048) / 64) / 64) 64 G3 ltac:(lia)) as G4. lia.
+        -- destruct (Z.compare_spec ((n + 2048) / 64 / 64 / 64) 4).
+           --- apply FourBytes3. rewrite H0. reflexivity. 
+               split. specialize (Z.mod_pos_bound ((n + 2048) / 64 / 64) 64 ltac:(lia)) as G2. lia.
+               specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64 / 64) 64) as G2.
+               rewrite H0 in G2. apply (f_equal (fun b => -(64 * 4) + b)) in G2.
+               rewrite Z.add_assoc in G2. Search (- ?a + ?a).
+               rewrite Z.add_opp_diag_l in G2. rewrite Z.add_0_l in G2. 
+               specialize (Zdiv.Z_div_le (n + 2048) 1114111 (64 * 64) ltac:(lia) ltac:(assumption)) as G3.
+               rewrite Z.div_div in G2 |- *. 
+               replace (1114111 / (64 * 64)) with 271 in G3 by reflexivity.
+               all: try lia; apply continuation_is_correct.
+           --- apply FourBytes2. lia. all: apply continuation_is_correct.
+           --- specialize (Zdiv.Z_div_le (n+2048) 1114111 (64 * 64 * 64) ltac:(lia) n_less_10ffff) as G2.
+               replace (1114111 / (64 * 64 * 64)) with 4 in G2 by reflexivity.
+               do 2 rewrite Z.div_div in H0; try lia. rewrite Z.mul_assoc in H0. lia.
+  - intros bytes_valid.
+    unfold nth_valid_codepoint_representation.
+    destruct bytes_valid eqn:B_valid.
+    + exists b. destruct a as [G1 G2].
+      replace (b <? 0xd800 ) with true by lia.
+      replace (b <? 0) with false by lia.
+      replace (b <=? 127) with true by lia. reflexivity.
+    + pose (n := ((b1 - 192) * 64) + (b2 mod 64)).
+      destruct a. destruct a0.
+      exists n.
+      clear B_valid.
+      rewrite Z.sub_le_mono_r with (p:= 192) in l, l0.
+      replace (194 - 192) with 2 in l by reflexivity.
+      replace (223 - 192) with 31 in l0 by reflexivity.
+      specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as G.
+      replace (n <? 0xd800) with true by lia.
+      replace (n <? 0) with false by lia.
+      replace (n <=? 127) with false by lia.
+      replace (n <=? 2047) with true by lia.
+      rewrite <- some_injective.
+      assert (b1 = 192 + n / 64). {
+        unfold n.
+        rewrite Z.div_add_l; [| lia].
+        rewrite Z.mod_div; [| lia].
+        lia.
+      } rewrite <- H.
+      assert (b2 = 128 + (n mod 64)). {
+        unfold n. 
+        rewrite Zdiv.Zplus_mod. rewrite Z.mod_mul; [ |lia].
+        rewrite Zdiv.Zmod_mod. rewrite Z.add_0_l.
+        rewrite Zdiv.Zmod_mod.
+        specialize (Zdiv.Z_div_mod_eq_full b2 64) as G2.
+        assert (b2 / 64 = 2). lia. rewrite H0 in G2. lia.
+      } rewrite <- H0. reflexivity.
+    + pose (n := (b2 mod 64) * 64 + (b3 mod 64)).
+      destruct a; destruct a0.
+      exists n.
+      specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as G1.
+      specialize (Z.mod_pos_bound b3 64 ltac:(lia)) as G2.
+      specialize (Zdiv.Z_div_mod_eq_full b2 64) as G3.
+      specialize (Zdiv.Z_div_mod_eq_full b3 64) as G4.
+      assert (b2 / 64 = 2). lia.
+      assert (b3 / 64 = 2). lia.
+      replace (n <? 0xd800) with true by lia.
+      replace (n <? 0) with false by lia.
+      replace (n <=? 127) with false by lia.
+      replace (n <=? 2047) with false by lia.
+      replace (n <=? 65535) with true by lia.
+      rewrite <- some_injective.
+      assert (n / 64 / 64 = 0). {
+        unfold n. rewrite Z.div_add_l; [| lia].
+        rewrite Z.mod_div. rewrite Z.add_0_r. rewrite Z.mod_div. all:lia.
+      } rewrite H1. rewrite Z.add_0_r. rewrite <- e.
+      assert (128 + (n / 64) mod 64 = b2). {
+        unfold n. rewrite Z.div_add_l; [| lia].
+        rewrite Z.mod_div. rewrite Z.add_0_r. rewrite Z.mod_mod.
+        rewrite H in G3.
+        rewrite G3 at 2. all: lia.
+      } rewrite H2.
+      assert (128 + n mod 64 = b3). {
+        unfold n. rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.mod_mod. rewrite H0 in G4. rewrite G4 at 2.
+        reflexivity. all: lia.
+      } rewrite H3. reflexivity.
+    + pose (n := ((b1 - 224) * 4096) + (b2 mod 64) * 64 + (b3 mod 64)).
+      destruct o; destruct a1; destruct a; destruct a0;
+      specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as G1;
+      specialize (Z.mod_pos_bound b3 64 ltac:(lia)) as G2;
+      specialize (Zdiv.Z_div_mod_eq_full b2 64) as G3;
+      specialize (Zdiv.Z_div_mod_eq_full b3 64) as G4;
+      assert ((b2 / 64) = 2) as b2_64; try lia;
+      assert ((b3 / 64) = 2) as b3_64; try lia;
+      rewrite b2_64 in G3;
+      rewrite b3_64 in G4.
+      * exists n.
+        replace (n <? 0xd800) with true by lia.
+        replace (n <? 0) with false by lia.
+        replace (n <=? 127) with false by lia.
+        replace (n <=? 2047) with false by lia.
+        replace (n <=? 65535) with true by lia.
+        assert (224 + n / 4096 = b1). {
+          unfold n.
+          rewrite <- Z.add_assoc.
+          rewrite Z.div_add_l.
+          replace 4096 with (64 * 64) by reflexivity.
+          rewrite <- Z.div_div. rewrite Z.div_add_l.
+          rewrite Z.mod_div. rewrite Z.add_0_r.
+          rewrite Z.mod_div. all: lia.
+        } rewrite Z.div_div. replace (64 * 64) with 4096 by reflexivity. rewrite H.
+        assert (128 + (n / 64) mod 64 = b2). {
+          unfold n.
+          replace 4096 with (64 * 64) by reflexivity.
+          rewrite <- Z.add_assoc.
+          rewrite Z.mul_assoc.
+          rewrite Z.div_add_l.
+          rewrite Zdiv.Zplus_mod.
+          rewrite Z.mod_mul. rewrite Z.add_0_l.
+          rewrite Z.div_add_l. rewrite Z.mod_div.
+          rewrite Z.add_0_r.
+          repeat rewrite Z.mod_mod.
+          rewrite G3 at 2. all: lia.
+        } rewrite H0.
+        assert (128 + n mod 64 = b3). {
+          unfold n.
+          replace 4096 with (64 * 64) by reflexivity.
+          rewrite Zdiv.Zplus_mod.
+          rewrite Z.mul_assoc.
+          rewrite <- Z.mul_add_distr_r. 
+          rewrite Z.mod_mul.
+          rewrite Z.add_0_l. repeat rewrite Z.mod_mod.
+          all: lia.
+        } rewrite H1. reflexivity. all: lia.
+      * exists (n - 2048).
+        replace ((n - 2048) <? 0xd800) with false by lia.
+        rewrite Z.sub_add.
+        replace (n <? 0) with false by lia.
+        replace (n <=? 127) with false by lia.
+        replace (n <=? 2047) with false by lia.
+        replace (n <=? 65535) with true by lia.
+        assert (224 + n / 4096 = b1). {
+          unfold n.
+          rewrite <- Z.add_assoc.
+          rewrite Z.div_add_l.
+          replace 4096 with (64 * 64) by reflexivity.
+          rewrite <- Z.div_div. rewrite Z.div_add_l.
+          rewrite Z.mod_div. rewrite Z.add_0_r.
+          rewrite Z.mod_div. all: lia.
+        } rewrite Z.div_div. replace (64 * 64) with 4096 by reflexivity. rewrite H.
+        assert (128 + (n / 64) mod 64 = b2). {
+          unfold n.
+          replace 4096 with (64 * 64) by reflexivity.
+          rewrite <- Z.add_assoc.
+          rewrite Z.mul_assoc.
+          rewrite Z.div_add_l.
+          rewrite Zdiv.Zplus_mod.
+          rewrite Z.mod_mul. rewrite Z.add_0_l.
+          rewrite Z.div_add_l. rewrite Z.mod_div.
+          rewrite Z.add_0_r.
+          repeat rewrite Z.mod_mod.
+          rewrite G3 at 2. all: lia.
+        } rewrite H0.
+        assert (128 + n mod 64 = b3). {
+          unfold n.
+          replace 4096 with (64 * 64) by reflexivity.
+          rewrite Zdiv.Zplus_mod.
+          rewrite Z.mul_assoc.
+          rewrite <- Z.mul_add_distr_r. 
+          rewrite Z.mod_mul.
+          rewrite Z.add_0_l. repeat rewrite Z.mod_mod.
+          all: lia.
+        } rewrite H1. reflexivity. all: lia.
+    + pose (n := (13 * 4096) + (b2 mod 64) * 64 + (b3 mod 64)).
+      clear B_valid.
+      destruct a; destruct a0; 
+      specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as G1;
+      specialize (Z.mod_pos_bound b3 64 ltac:(lia)) as G2;
+      specialize (Zdiv.Z_div_mod_eq_full b2 64) as G3;
+      specialize (Zdiv.Z_div_mod_eq_full b3 64) as G4;
+      assert ((b2 / 64) = 2) as b2_64; try lia;
+      assert ((b3 / 64) = 2) as b3_64; try lia;
+      rewrite b2_64 in G3;
+      rewrite b3_64 in G4.
+      exists n.
+      replace (n <? 0xd800) with true by lia.
+      replace (n <? 0) with false by lia.
+      replace (n <=? 127) with false by lia.
+      replace (n <=? 2047) with false by lia.
+      replace (n <=? 65535) with true by lia.
+      assert (224 + n / 4096 = b1). {
+        unfold n.
+        rewrite <- Z.add_assoc.
+        rewrite Z.div_add_l.
+        replace 4096 with (64 * 64) by reflexivity.
+        rewrite <- Z.div_div. rewrite Z.div_add_l.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. rewrite e. all: lia.
+      } rewrite Z.div_div. replace (64 * 64) with 4096 by reflexivity. rewrite H3.
+      assert (128 + (n / 64) mod 64 = b2). {
+        unfold n.
+        replace 4096 with (64 * 64) by reflexivity.
+        rewrite <- Z.add_assoc.
+        rewrite Z.mul_assoc.
+        rewrite Z.div_add_l.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.div_add_l. rewrite Z.mod_div.
+        rewrite Z.add_0_r.
+        repeat rewrite Z.mod_mod.
+        rewrite G3 at 2. all: lia.
+      } rewrite H4.
+      assert (128 + n mod 64 = b3). {
+        unfold n.
+        replace 4096 with (64 * 64) by reflexivity.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mul_assoc.
+        rewrite <- Z.mul_add_distr_r. 
+        rewrite Z.mod_mul.
+        rewrite Z.add_0_l. repeat rewrite Z.mod_mod.
+        all: lia.
+      } rewrite H5. reflexivity. all: lia.
+    + pose (n := (b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64)).
+      destruct a. destruct a0. destruct a1. clear B_valid.
+      specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as G1;
+      specialize (Z.mod_pos_bound b3 64 ltac:(lia)) as G2;
+      specialize (Z.mod_pos_bound b4 64 ltac:(lia)) as G3;
+      specialize (Zdiv.Z_div_mod_eq_full b2 64) as G4;
+      specialize (Zdiv.Z_div_mod_eq_full b3 64) as G5;
+      specialize (Zdiv.Z_div_mod_eq_full b4 64) as G6;
+      assert ((b2 / 64) = 2) as b2_64; try lia;
+      assert ((b3 / 64) = 2) as b3_64; try lia;
+      assert ((b4 / 64) = 2) as b4_64; try lia;
+      rewrite b2_64 in G4;
+      rewrite b3_64 in G5;
+      rewrite b4_64 in G6.
+      exists (n - 2048).
+      replace ((n - 2048) <? 0xd800) with false by lia.
+      rewrite Z.sub_add.
+      replace (n <? 0) with false by lia.
+      replace (n <=? 127) with false by lia.
+      replace (n <=? 2047) with false by lia.
+      replace (n <=? 65535) with false by lia.
+      replace (n <=? 1114111) with true by lia.
+      assert (n / 64 / 64 / 64 = 0). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc. 
+        repeat rewrite Z.div_add_l. rewrite e.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. all: lia.
+      } rewrite H. rewrite <- e. rewrite Z.add_0_r.
+      assert (128 + (n / 64 / 64) mod 64 = b2). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        repeat rewrite Z.div_add_l. rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.mod_mod. rewrite Z.mod_mod.
+        rewrite G4 at 2. all: lia.
+      } rewrite H0. 
+      assert (128 + (n / 64) mod 64 = b3). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        repeat rewrite Z.div_add_l. rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.mod_mod. rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul.  rewrite Z.mod_mod.
+        rewrite Z.add_0_l. rewrite Z.mod_mod.
+        rewrite G5 at 2. all: lia.
+      } rewrite H1. 
+      assert (128 + n mod 64 = b4). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        repeat rewrite Z.mod_mod.
+        rewrite G6 at 2. all: lia.
+      } rewrite H2. reflexivity.
+    + pose (n := (b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64)).
+      destruct a. destruct a0. destruct a1. destruct a2. clear B_valid.
+      specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as G1;
+      specialize (Z.mod_pos_bound b3 64 ltac:(lia)) as G2;
+      specialize (Z.mod_pos_bound b4 64 ltac:(lia)) as G3;
+      specialize (Zdiv.Z_div_mod_eq_full b2 64) as G4;
+      specialize (Zdiv.Z_div_mod_eq_full b3 64) as G5;
+      specialize (Zdiv.Z_div_mod_eq_full b4 64) as G6;
+      assert ((b2 / 64) = 2) as b2_64; try lia;
+      assert ((b3 / 64) = 2) as b3_64; try lia;
+      assert ((b4 / 64) = 2) as b4_64; try lia;
+      rewrite b2_64 in G4;
+      rewrite b3_64 in G5;
+      rewrite b4_64 in G6.
+      exists (n - 2048).
+      replace ((n - 2048) <? 0xd800) with false by lia.
+      rewrite Z.sub_add.
+      replace (n <? 0) with false by lia.
+      replace (n <=? 127) with false by lia.
+      replace (n <=? 2047) with false by lia.
+      replace (n <=? 65535) with false by lia.
+      replace (n <=? 1114111) with true by lia.
+      assert (240 + n / 64 / 64 / 64 = b1). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc. 
+        repeat rewrite Z.div_add_l. 
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. all: lia.
+      } rewrite H. 
+      assert (128 + (n / 64 / 64) mod 64 = b2). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        repeat rewrite Z.div_add_l. rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.mod_mod. rewrite Z.mod_mod.
+        rewrite G4 at 2. all: lia.
+      } rewrite H0. 
+      assert (128 + (n / 64) mod 64 = b3). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        repeat rewrite Z.div_add_l. rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.mod_mod. rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul.  rewrite Z.mod_mod.
+        rewrite Z.add_0_l. rewrite Z.mod_mod.
+        rewrite G5 at 2. all: lia.
+      } rewrite H1. 
+      assert (128 + n mod 64 = b4). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        repeat rewrite Z.mod_mod.
+        rewrite G6 at 2. all: lia.
+      } rewrite H2. reflexivity.
+    + pose (n := (b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64)).
+      destruct a. destruct a0. destruct a1. clear B_valid.
+      specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as G1;
+      specialize (Z.mod_pos_bound b3 64 ltac:(lia)) as G2;
+      specialize (Z.mod_pos_bound b4 64 ltac:(lia)) as G3;
+      specialize (Zdiv.Z_div_mod_eq_full b2 64) as G4;
+      specialize (Zdiv.Z_div_mod_eq_full b3 64) as G5;
+      specialize (Zdiv.Z_div_mod_eq_full b4 64) as G6;
+      assert ((b2 / 64) = 2) as b2_64; try lia;
+      assert ((b3 / 64) = 2) as b3_64; try lia;
+      assert ((b4 / 64) = 2) as b4_64; try lia;
+      rewrite b2_64 in G4;
+      rewrite b3_64 in G5;
+      rewrite b4_64 in G6.
 
-Lemma byte_compare_antisymmetric : forall byte1 byte2, byte_compare byte1 byte2 = CompOpp (byte_compare byte2 byte1).
-Proof.
-  intros byte1 byte2.
-  unfold byte_compare.
-  apply PeanoNat.Nat.compare_antisym.
+      exists (n - 2048).
+      replace ((n - 2048) <? 0xd800) with false by lia.
+      rewrite Z.sub_add.
+      replace (n <? 0) with false by lia.
+      replace (n <=? 127) with false by lia.
+      replace (n <=? 2047) with false by lia.
+      replace (n <=? 65535) with false by lia.
+      replace (n <=? 1114111) with true by lia.
+      assert (240 + n / 64 / 64 / 64 = b1). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc. 
+        repeat rewrite Z.div_add_l. 
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. all: lia.
+      } rewrite H. 
+      assert (128 + (n / 64 / 64) mod 64 = b2). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        repeat rewrite Z.div_add_l. rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.mod_mod. rewrite Z.mod_mod.
+        rewrite G4 at 2. all: lia.
+      } rewrite H0. 
+      assert (128 + (n / 64) mod 64 = b3). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        repeat rewrite Z.div_add_l. rewrite Z.mod_div. rewrite Z.add_0_r.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul. rewrite Z.add_0_l.
+        rewrite Z.mod_mod. rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul.  rewrite Z.mod_mod.
+        rewrite Z.add_0_l. rewrite Z.mod_mod.
+        rewrite G5 at 2. all: lia.
+      } rewrite H1. 
+      assert (128 + n mod 64 = b4). { 
+        unfold n.
+        do 2 rewrite <- Z.add_assoc.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        rewrite Zdiv.Zplus_mod.
+        rewrite Z.mod_mul at 1. rewrite Z.add_0_l.
+        repeat rewrite Z.mod_mod.
+        rewrite G6 at 2. all: lia.
+      } rewrite H2. reflexivity.
 Qed.
 
-Lemma byte_compare_eq_iff : forall b1 b2, byte_compare b1 b2 = Eq <-> b1 = b2.
-Proof.
-  intros b1 b2.
-  unfold byte_compare.
-  specialize (PeanoNat.Nat.compare_eq_iff (Byte.to_nat b1) (Byte.to_nat b2)) as [G1 G2].
-  split; intros.
-  - apply G1 in H. apply (f_equal Byte.of_nat) in H. do 2 rewrite Byte.of_to_nat in H. inversion H. reflexivity.
-  - subst. specialize (G2 ltac:(reflexivity)).
-    apply G2.
-Qed.
-
-Lemma list_compare_refl_if {T} (cmp: T -> T -> comparison) : forall (t: list T), 
+Lemma list_compare_refl_if {T} (cmp: T -> T -> comparison) : forall (t: list T),
     (forall x y, cmp x y = Eq <-> x = y) ->
     list_compare cmp t t = Eq.
 Proof.

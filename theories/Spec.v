@@ -81,7 +81,7 @@ Inductive valid_codepoint_representation : list Z -> Prop :=
   valid_codepoint_representation [b1; b2; b3; b4]
 | FourBytes3 (b1 b2 b3 b4: Z):
   b1 = 0xf4 ->
-  0x80 <= b2 <= 0xbf ->
+  0x80 <= b2 <= 0x8f ->
   0x80 <= b3 <= 0xbf ->
   0x80 <= b4 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3; b4].
