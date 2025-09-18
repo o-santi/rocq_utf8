@@ -86,6 +86,23 @@ Proof.
   - apply f_domain.
 Qed.
 
+Theorem partial_induction {X Y}
+  (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
+  (P : option Y -> Prop) :
+  partial_morphism domain range f ->
+  (forall y, (range y) -> P (Some y)) ->
+  forall x, (domain x) -> P (f x).
+Proof.
+  unfold partial_morphism.
+  intros [f_range f_domain] induction_principle x x_in_domain.
+  destruct (f x) eqn:current_case.
+  - assert (range y) by (apply (f_range x y current_case)).
+    apply (induction_principle y H).
+  - assert (~ (domain x)).
+    + apply f_domain. apply current_case.
+    + exfalso. apply (H x_in_domain).
+Qed.
+
 Definition ordered_enumeration (range : t -> Prop) (count : Z) (get_nth : Z -> option t) (get_index : t -> option Z) : Prop :=
   (partial_morphism (interval count) range get_nth)
   /\ (partial_morphism range (interval count) get_index)
@@ -120,11 +137,14 @@ Proof.
           unfold ordered_enumeration in H; destruct H as [a [b c]]; apply b).
         assert (partial_morphism range (interval 1) g1) by (
           unfold ordered_enumeration in H0; destruct H0 as [a [b c]]; apply b).
-        unfold partial_morphism in H1, H2.
-        destruct H1, H2.
-        destruct (g0 x). (* oof so annoying *)
-        -- admit.
-        -- admit.
+        apply partial_induction
+          with (f := g0) (x := x) (domain := range) (range := (interval 1));
+          try assumption; intros. (* that's what I'm talking about! *)
+        apply partial_induction
+          with (f := g1) (x := x) (domain := range) (range := (interval 1));
+          try assumption; intros.
+        unfold interval in H3, H4. assert (y = y0%Z) by lia.
+        rewrite H5. reflexivity.
     + intros. admit.
 Admitted.
 
