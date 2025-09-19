@@ -314,7 +314,7 @@ Proof.
                split. specialize (Z.mod_pos_bound ((n + 2048) / 64 / 64) 64 ltac:(lia)) as G2. lia.
                specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64 / 64) 64) as G2.
                rewrite H0 in G2. apply (f_equal (fun b => -(64 * 4) + b)) in G2.
-               rewrite Z.add_assoc in G2. Search (- ?a + ?a).
+               rewrite Z.add_assoc in G2.
                rewrite Z.add_opp_diag_l in G2. rewrite Z.add_0_l in G2. 
                specialize (Zdiv.Z_div_le (n + 2048) 1114111 (64 * 64) ltac:(lia) ltac:(assumption)) as G3.
                rewrite Z.div_div in G2 |- *. 
@@ -829,7 +829,6 @@ Lemma byte_compare_antisymm : forall b1 b2,
 Proof.
   intros.
   unfold bytes_compare.
-  Search list_compare.
   apply list_compare_antisym.
   apply Z.compare_eq_iff.
   apply Z.compare_antisym.
@@ -915,29 +914,71 @@ Proof.
      | [G: Some [?a1; ?a2; ?a3; ?a4] = Some [?b1;?b2; ?b3; ?b4] |- _] =>
       apply some_injective in G; apply list_equals_4 in G; destruct G as [H1 [H2 [H3 H4]]]; subst
      end);
-  unfold bytes_compare, list_compare. 
-  - destruct (b ?= b0); reflexivity.
-  - specialize (Zdiv.Z_div_mod_eq_full n1 64) as mod1.
-    specialize (Zdiv.Z_div_mod_eq_full n2 64) as mod2.
-    specialize (Z.mul_div_le n1 64 ltac:(lia)) as E1.
-    specialize (Z.mul_div_le n2 64 ltac:(lia)) as E2.
-    specialize (Z.mod_pos_bound n1 64 ltac:(lia)) as E3.
-    specialize (Z.mod_pos_bound n2 64 ltac:(lia)) as E4.
-    destruct (Z.compare_spec (192 + n1 / 64) (192 + n2 / 64)).
-    + destruct (Z.compare_spec (128 + n1 mod 64) (128 + n2 mod 64)).
-      *  apply (f_equal (fun x => -192 + x)) in H. repeat rewrite Z.add_assoc in H.
-         replace (-192 + 192) with 0 in H by reflexivity.
-         do 2 rewrite Z.add_0_l in H. rewrite H in mod1.
-         apply (f_equal (fun x => -128 + x)) in H0. repeat rewrite Z.add_assoc in H0. replace (-128 + 128) with 0 in H0 by reflexivity. 
-         do 2 rewrite Z.add_0_l in H0. rewrite H0 in mod1. rewrite <- mod1 in mod2. rewrite mod2. apply Z.compare_eq_iff. reflexivity.
-    1,2: apply Zorder.Zplus_lt_compat_l with (p:=-192) in H;
-      repeat rewrite Z.add_assoc in H;
-      replace (-192 + 192) with 0 in H by reflexivity;
-      do 2 rewrite Z.add_0_l in H;
-      fold (Z.lt n1 n2); fold (Z.gt n1 n2);
-      rewrite mod1, mod2; try lia.
-      
-      
+    unfold bytes_compare, list_compare.
+  Ltac add_bounds G :=
+    let mul_div := fresh "mul_div" in
+    let div_mod := fresh "div_mod" in
+    let mod_bound := fresh "mod_bound" in
+    lazymatch G with
+    | (?n mod 64)%Z =>
+        specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
+        specialize (Z.mod_pos_bound n 64 ltac:(lia)) as mod_bound;
+        add_bounds n
+    | (?n / 64)%Z =>
+        specialize (Z.mul_div_le n 64 ltac:(lia)) as mul_div;
+        specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
+        add_bounds n
+    | ?a => idtac 
+    end.
+  Ltac crush_lia :=
+    (repeat 
+       let comp_eq := fresh "comp_eq" in
+       let range := fresh "range" in
+       match goal with
+       | [G: (_ \/ _) |- _] =>
+           destruct G as [range | range]
+       | [|- context[?a + ?b ?= ?a + ?c]] =>
+           add_bounds b; add_bounds c;
+           destruct (Z.compare_spec (a + b) (a + c)) as [ comp_eq | comp_eq | comp_eq ];
+           [ apply (f_equal (fun x => -a + x)) in comp_eq (* when equal *)
+           | apply Zorder.Zplus_lt_compat_l with (p:=-a) in comp_eq (* LT *)
+           | apply Zorder.Zplus_lt_compat_l with (p:=-a) in comp_eq (* GT *)
+           ];
+           (repeat rewrite Z.add_assoc in comp_eq);
+           replace (-a + a) with 0 in comp_eq by reflexivity;
+           (do 2 rewrite Z.add_0_l in comp_eq);
+           try rewrite comp_eq in * |- *
+       | [|- context[?a ?= ?c + ?b]] =>
+           add_bounds b;
+           destruct (Z.compare_spec a (c + b)) as [ comp_eq | comp_eq | comp_eq ];
+           [ apply (f_equal (fun x => -a + x)) in comp_eq (* when equal *)
+           | apply Zorder.Zplus_lt_compat_l with (p:=-a) in comp_eq (* LT *)
+           | apply Zorder.Zplus_lt_compat_l with (p:=-a) in comp_eq (* GT *)
+           ];
+           (repeat rewrite Z.add_assoc in comp_eq);
+           vm_compute (-a + c) in comp_eq;
+           try rewrite Z.add_0_l in comp_eq;
+           try rewrite comp_eq in * |- *
+       | [H: ?a + ?b = ?a |- context[?a ?= ?a + ?b]] =>
+           rewrite H; rewrite Z.compare_refl
+       | [H: ?a = ?a + ?b |- context[?a ?= ?a + ?b]] =>
+           rewrite H; rewrite Z.compare_refl
+       end);
+    (do 3 try match goal with
+       | [H1: (?a / ?b) = _, H2: context[?c * (?a / ?b)] |- _] =>
+           rewrite H1 in H2
+       end);
+    match goal with       
+    | [|- (?n1 ?= ?n2 = Eq)] => apply Z.compare_eq_iff
+    | [|- (?n1 ?= ?n2 = Lt)] => fold (Z.lt n1 n2)
+    | [|- (?n1 ?= ?n2 = Gt)] => fold (Z.gt n1 n2)
+    | [ |- ?g] => idtac
+    end.
+  1: destruct (b ?= b0); reflexivity.
+  par: crush_lia; try lia.
+Qed.
+
+  
 Lemma list_compare_refl_if {T} (cmp: T -> T -> comparison) : forall (t: list T),
     (forall x y, cmp x y = Eq <-> x = y) ->
     list_compare cmp t t = Eq.
