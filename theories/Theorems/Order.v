@@ -718,6 +718,226 @@ Proof.
       } rewrite H2. reflexivity.
 Qed.
 
+Lemma bytes_compare_single : forall b1 b2,
+    bytes_compare [b1] [b2] = Z.compare b1 b2.
+Proof.
+  intros.
+  simpl. destruct (Z.compare b1 b2); reflexivity.
+Qed.
+
+Lemma byte_compare_length : forall (a b: byte_str),
+    valid_codepoint_representation a ->
+    valid_codepoint_representation b ->
+    ((length a) < (length b))%nat ->
+    bytes_compare a b = Lt. 
+Proof.
+  intros.
+  destruct H; destruct H0; simpl in H1; try lia; 
+    repeat match goal with
+      | [G: ?a <= ?b <= ?c |- _] => 
+          destruct G
+      end; simpl; 
+    let G := fresh "G" in
+    match goal with
+    | [ |- match (?b1 ?= ?b2) with  | _ => _ end = _ ] =>
+        assert (b1 <? b2 = true) as G; try lia; 
+        apply Z.ltb_lt in G; rewrite G; reflexivity
+    end.
+Qed.
+
+Lemma valid_codepoint_representation_length1 : forall n bytes,
+    length bytes = 1%nat ->
+    nth_valid_codepoint_representation n = Some bytes ->
+    0 <= n <= 127.
+Proof.
+  intros.
+  assert (exists n, nth_valid_codepoint_representation n = Some bytes) as E. exists n. assumption.
+  apply nth_valid_codepoint_representation_spec in E.
+  destruct E; simpl in H; try lia.
+  unfold nth_valid_codepoint_representation in H0.
+  repeat let eq := fresh "G" in
+  match goal with
+  | [G: context[if ?a <? ?b then _ else _] |- _] =>
+      destruct (a <? b) eqn:eq; try discriminate
+  | [G: context[if ?a <=? ?b then _ else _ ] |- _] =>
+      destruct (a <=? b) eqn:eq; try discriminate
+  end.
+  inversion H0. lia. inversion H0. lia.
+Qed.
+
+
+Lemma valid_codepoint_representation_length2 : forall n bytes,
+    length bytes = 2%nat ->
+    nth_valid_codepoint_representation n = Some bytes ->
+    128 <= n <= 0x7ff.
+Proof.
+  intros.
+  assert (exists n, nth_valid_codepoint_representation n = Some bytes) as E. exists n. assumption.
+  apply nth_valid_codepoint_representation_spec in E.
+  destruct E; simpl in H; try lia.
+  unfold nth_valid_codepoint_representation in H0.
+  repeat let eq := fresh "G" in
+  match goal with
+  | [G: context[if ?a <? ?b then _ else _] |- _] =>
+      destruct (a <? b) eqn:eq; try discriminate
+  | [G: context[if ?a <=? ?b then _ else _ ] |- _] =>
+      destruct (a <=? b) eqn:eq; try discriminate
+  end.
+  inversion H0. lia. inversion H0. lia.
+Qed.
+
+Lemma valid_codepoint_representation_length3 : forall n bytes,
+    length bytes = 3%nat ->
+    nth_valid_codepoint_representation n = Some bytes ->
+    0x800 <= n <= (0xffff - 0x800).
+Proof.
+  intros.
+  unfold nth_valid_codepoint_representation in H0.
+  assert (exists n, nth_valid_codepoint_representation n = Some bytes) as E. exists n. assumption.
+  apply nth_valid_codepoint_representation_spec in E.
+  destruct E; simpl in H; try lia.
+  all: repeat let eq := fresh "G" in
+  match goal with
+  | [G: context[if ?a <? ?b then _ else _] |- _] =>
+      destruct (a <? b) eqn:eq; try discriminate
+  | [G: context[if ?a <=? ?b then _ else _ ] |- _] =>
+      destruct (a <=? b) eqn:eq; try discriminate
+  end; try lia.
+Qed.
+
+Lemma valid_codepoint_representation_length4 : forall n bytes,
+    length bytes = 4%nat ->
+    nth_valid_codepoint_representation n = Some bytes ->
+    (0xffff - 0x7ff) <= n <= (0x10ffff - 0x800).
+Proof.
+  intros.
+  unfold nth_valid_codepoint_representation in H0.
+  assert (exists n, nth_valid_codepoint_representation n = Some bytes) as E. exists n. assumption.
+  apply nth_valid_codepoint_representation_spec in E.
+  destruct E; simpl in H; try lia.
+  all: repeat let eq := fresh "G" in
+  match goal with
+  | [G: context[if ?a <? ?b then _ else _] |- _] =>
+      destruct (a <? b) eqn:eq; try discriminate
+  | [G: context[if ?a <=? ?b then _ else _ ] |- _] =>
+      destruct (a <=? b) eqn:eq; try discriminate
+  end; try lia.
+Qed.
+
+Lemma byte_compare_antisymm : forall b1 b2,
+    bytes_compare b1 b2 = CompOpp (bytes_compare b2 b1).
+Proof.
+  intros.
+  unfold bytes_compare.
+  Search list_compare.
+  apply list_compare_antisym.
+  apply Z.compare_eq_iff.
+  apply Z.compare_antisym.
+Qed.
+
+Lemma list_equals_1 {T}: forall (a b: T), [a] = [b] -> a = b. 
+Proof. intros. inversion H. reflexivity. Qed.
+Lemma list_equals_2 {T}: forall (a1 a2 b1 b2: T), [a1;a2] = [b1;b2] -> a1 = b1 /\ a2 = b2. 
+Proof. intros. inversion H. split; reflexivity. Qed.
+Lemma list_equals_3 {T}: forall (a1 a2 a3 b1 b2 b3: T), [a1;a2;a3] = [b1;b2;b3] -> a1 = b1 /\ a2 = b2 /\ a3 = b3.
+ Proof. intros. inversion H. do 2 split; reflexivity. Qed.
+Lemma list_equals_4 {T}: forall (a1 a2 a3 a4 b1 b2 b3 b4: T), [a1;a2;a3;a4] = [b1;b2;b3;b4] -> a1 = b1 /\ a2 = b2 /\ a3 = b3 /\ a4 = b4. 
+Proof. intros. inversion H. do 3 split; reflexivity. Qed.    
+
+Theorem nth_valid_codepoint_representation_compat: forall n1 n2 bytes1 bytes2,
+    nth_valid_codepoint_representation n1 = Some bytes1 -> 
+    nth_valid_codepoint_representation n2 = Some bytes2 -> 
+    Z.compare n1 n2 = bytes_compare bytes1 bytes2.
+Proof.
+  intros n1 n2 bytes1 bytes2 bytes1_valid bytes2_valid.
+  assert (exists n, nth_valid_codepoint_representation n = Some bytes1) as valid_bytes1. exists n1. assumption. 
+  assert (exists n, nth_valid_codepoint_representation n = Some bytes2) as valid_bytes2. exists n2. assumption.
+  apply nth_valid_codepoint_representation_spec in valid_bytes1, valid_bytes2.
+  remember (bytes1).
+  remember (bytes2).
+  pose (valid1 := valid_bytes1).
+  pose (valid2 := valid_bytes2).
+  destruct valid_bytes1; destruct valid_bytes2;
+  (do 2 let eq := fresh "n_bound" in
+  match goal with
+  | [L: [?b] = ?bytes, E: nth_valid_codepoint_representation ?n = Some [?b] |- _] =>
+      specialize (valid_codepoint_representation_length1 n [b] ltac:(reflexivity) E) as eq;
+      clear L
+  | [L: [?b; ?b1] = ?bytes, E: nth_valid_codepoint_representation ?n = Some [?b;?b1] |- _] =>
+      specialize (valid_codepoint_representation_length2 n [b; b1] ltac:(reflexivity) E) as eq;
+      clear L
+  | [L: [?b; ?b1; ?b2] = ?bytes, E: nth_valid_codepoint_representation ?n = Some [?b;?b1;?b2] |- _] =>
+      specialize (valid_codepoint_representation_length3 n [b; b1; b2] ltac:(reflexivity) E) as eq;
+      clear L
+  | [L: [?b; ?b1; ?b2; ?b3] = ?bytes, E: nth_valid_codepoint_representation ?n = Some [?b;?b1; ?b2; ?b3] |- _] =>
+      specialize (valid_codepoint_representation_length4 n [b; b1; b2; b3] ltac:(reflexivity) E) as eq;
+      clear L
+  end); try let b_eq := fresh "bytes_compare_eq" in
+       match goal with
+       | [G1: valid_codepoint_representation [?a1], G2: valid_codepoint_representation [?b1; ?b2] |- _] =>
+           specialize (byte_compare_length [a1] [b1; b2] G1 G2 ltac:(simpl in *; lia)) as b_eq
+       | [G1: valid_codepoint_representation [?a1], G2: valid_codepoint_representation [?b1; ?b2; ?b3] |- _] =>
+           specialize (byte_compare_length [a1] [b1; b2; b3] G1 G2 ltac:(simpl in *; lia)) as b_eq
+       | [G1: valid_codepoint_representation [?a1], G2: valid_codepoint_representation [?b1; ?b2; ?b3; ?b4] |- _] =>
+           specialize (byte_compare_length [a1] [b1; b2; b3; b4] G1 G2 ltac:(simpl in *; lia)) as b_eq
+       | [G1: valid_codepoint_representation [?a1; ?a2], G2: valid_codepoint_representation [?b1; ?b2; ?b3] |- _] =>
+           specialize (byte_compare_length [a1; a2] [b1; b2; b3] G1 G2 ltac:(simpl in *; lia)) as b_eq
+       | [G1: valid_codepoint_representation [?a1; ?a2], G2: valid_codepoint_representation [?b1; ?b2; ?b3; ?b4] |- _] =>
+           specialize (byte_compare_length [a1; a2] [b1; b2; b3; b4] G1 G2 ltac:(simpl in *; lia)) as b_eq
+       | [G1: valid_codepoint_representation [?a1; ?a2; ?a3], G2: valid_codepoint_representation [?b1; ?b2; ?b3; ?b4] |- _] =>
+           specialize (byte_compare_length [a1; a2; a3] [b1; b2; b3; b4] G1 G2 ltac:(simpl in *; lia)) as b_eq
+       end; try match goal with
+              | [C: bytes_compare ?a ?b = Lt |- _ = bytes_compare ?a ?b] =>
+                rewrite C
+              | [C: bytes_compare ?a ?b = Lt |- _ = bytes_compare ?b ?a] =>
+                  rewrite byte_compare_antisymm; rewrite C; simpl
+              end; try fold (Z.lt n1 n2); try fold (Z.gt n1 n2); try lia.
+  all: unfold nth_valid_codepoint_representation in bytes1_valid, bytes2_valid;
+  (repeat let eq := fresh "G" in
+  match goal with
+  | [G: context[if ?a <? ?b then _ else _] |- _] =>
+      destruct (a <? b) eqn:eq; try discriminate; try lia
+  | [G: context[if ?a <=? ?b then _ else _ ] |- _] =>
+      destruct (a <=? b) eqn:eq; try discriminate; try lia
+  end);
+    (do 2 
+        let H1 := fresh "H" in
+        let H2 := fresh "H" in
+        let H3 := fresh "H" in
+        let H4 := fresh "H" in
+       match goal with
+     | [G: Some [?a] = Some [?b] |- _] =>
+      apply some_injective in G; apply list_equals_1 in G; subst
+     | [G: Some [?a1; ?a2] = Some [?b1;?b2] |- _] =>
+      apply some_injective in G; apply list_equals_2 in G; destruct G; subst
+     | [G: Some [?a1; ?a2; ?a3] = Some [?b1;?b2; ?b3] |- _] =>
+      apply some_injective in G; apply list_equals_3 in G; destruct G as [H1 [H2 H3]]; subst
+     | [G: Some [?a1; ?a2; ?a3; ?a4] = Some [?b1;?b2; ?b3; ?b4] |- _] =>
+      apply some_injective in G; apply list_equals_4 in G; destruct G as [H1 [H2 [H3 H4]]]; subst
+     end);
+  unfold bytes_compare, list_compare. 
+  - destruct (b ?= b0); reflexivity.
+  - specialize (Zdiv.Z_div_mod_eq_full n1 64) as mod1.
+    specialize (Zdiv.Z_div_mod_eq_full n2 64) as mod2.
+    specialize (Z.mul_div_le n1 64 ltac:(lia)) as E1.
+    specialize (Z.mul_div_le n2 64 ltac:(lia)) as E2.
+    specialize (Z.mod_pos_bound n1 64 ltac:(lia)) as E3.
+    specialize (Z.mod_pos_bound n2 64 ltac:(lia)) as E4.
+    destruct (Z.compare_spec (192 + n1 / 64) (192 + n2 / 64)).
+    + destruct (Z.compare_spec (128 + n1 mod 64) (128 + n2 mod 64)).
+      *  apply (f_equal (fun x => -192 + x)) in H. repeat rewrite Z.add_assoc in H.
+         replace (-192 + 192) with 0 in H by reflexivity.
+         do 2 rewrite Z.add_0_l in H. rewrite H in mod1.
+         apply (f_equal (fun x => -128 + x)) in H0. repeat rewrite Z.add_assoc in H0. replace (-128 + 128) with 0 in H0 by reflexivity. 
+         do 2 rewrite Z.add_0_l in H0. rewrite H0 in mod1. rewrite <- mod1 in mod2. rewrite mod2. apply Z.compare_eq_iff. reflexivity.
+    1,2: apply Zorder.Zplus_lt_compat_l with (p:=-192) in H;
+      repeat rewrite Z.add_assoc in H;
+      replace (-192 + 192) with 0 in H by reflexivity;
+      do 2 rewrite Z.add_0_l in H;
+      fold (Z.lt n1 n2); fold (Z.gt n1 n2);
+      rewrite mod1, mod2; try lia.
+      
+      
 Lemma list_compare_refl_if {T} (cmp: T -> T -> comparison) : forall (t: list T),
     (forall x y, cmp x y = Eq <-> x = y) ->
     list_compare cmp t t = Eq.
