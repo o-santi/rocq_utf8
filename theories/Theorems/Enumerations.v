@@ -86,6 +86,7 @@ Proof.
   - apply f_domain.
 Qed.
 
+(* TODO strengthen induction *)
 Theorem partial_induction {X Y}
   (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
   (P : option Y -> Prop) :
@@ -114,7 +115,20 @@ Definition ordered_enumeration (range : t -> Prop) (count : Z) (get_nth : Z -> o
        (n < m)%Z ->
        (Some element0 = get_nth n) ->
        (Some element1 = get_nth m) ->
-       element0 < element1) (* these redundant hypothesis feel a bit dumb but ok *).
+       element0 < element1).
+       (* these redundant hypothesis feel a bit dumb but ok *)
+       (* TODO: use match instead *)
+
+(* Lemma interval_enumeration_unique : forall count f g,
+  ordered_enumeration (interval count) count f g ->
+   ((pointwise_equal (interval count) f (fun x => Some x))
+   /\ (pointwise_equal (interval count) g (fun x => Some x))).
+   Admitted. *)
+(* TODO: parameterize other type in ordered_enumeration *)
+
+(* TODO: if get_nth is increasing then so is get_index *)
+
+(* TODO: the inverse function is unique in the sense of pointwise_equal *)
 
 Theorem get_nth_unique : forall range count f0 f1 g0 g1,
   ordered_enumeration range count f0 g0 ->
