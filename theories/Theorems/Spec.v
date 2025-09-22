@@ -7,41 +7,7 @@ Require Import Utf8.Parser.
 Require Import Utf8.Spec.
 Require Import Utf8.Theorems.Order.
 
-(* Ltac destruct_valid_bytes valid_bytes := *)
-(*   let start R := *)
-(*     match type of R with *)
-(*     | valid_utf8_bytes (cons ?head ?tail) => idtac *)
-(*     | valid_utf8_bytes ?bytes => *)
-(*         let head := fresh "byte" in *)
-(*         let tail := fresh "byte_rest" in *)
-(*         let bytes_eq := fresh "bytes_eq" in *)
-(*         destruct bytes as [|head tail] eqn:bytes_eq *)
-(*     end; *)
-(*     unfold valid_utf8_bytes in valid_bytes; *)
-(*     fold valid_utf8_bytes in valid_bytes; *)
-(*     match type of R with *)
-(*     | context[byte_range ?byte] => *)
-(*         let byte_in_range := fresh "byte_in_range" in *)
-(*         destruct (byte_range byte) eqn:byte_in_range; try contradiction *)
-(*     end *)
-(*   in *)
-(* let rec go R := *)
-(*   unfold expect in R; *)
-(*   match type of R with *)
-(*   | valid_utf8_bytes ?b => idtac *)
-(*   | match ?bytes with | _ => _ end => *)
-(*       let head := fresh "byte" in *)
-(*       let tail := fresh "byte_rest" in *)
-(*       let bytes_eq := fresh "bytes_eq" in *)
-(*       let byte_pred := fresh "byte_pred" in  *)
-(*       let rest_pred := fresh "rest_pred" in *)
-(*       destruct bytes as [| head tail] eqn:bytes_eq; try contradiction; *)
-(*       destruct R as [byte_pred rest_pred]; *)
-(*       go rest_pred *)
-(*   end in *)
-(*   start valid_bytes; go valid_bytes. *)
-
-Theorem valid_utf8_bytes_concat : forall (bytes1 bytes2: list byte),
+Theorem valid_utf8_bytes_concat : forall (bytes1 bytes2: byte_str),
     valid_utf8_bytes bytes1 ->
     valid_utf8_bytes bytes2 ->
     valid_utf8_bytes (bytes1 ++ bytes2).
@@ -50,7 +16,7 @@ Proof.
   rewrite <- app_assoc. apply Utf8Concat. apply H. apply IHvalid_bytes1. apply valid_bytes2.
 Qed.
 
-Theorem valid_utf8_decompose : forall (bytes1 bytes2: list byte),
+Theorem valid_utf8_decompose : forall (bytes1 bytes2: byte_str),
     valid_utf8_bytes (bytes1 ++ bytes2) ->
     valid_utf8_bytes bytes1 ->
     valid_utf8_bytes bytes2.
@@ -83,7 +49,6 @@ Proof.
   unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_strictly_increasing, encoder_projects in G.
   destruct G as [enc_implies_valid_utf8_bytes [valid_codepoints_iff_enc [enc_strictly_increasing enc_projects]]].
   assert (valid_codepoints []) as nil_valid. apply Forall_nil.
-  
   apply valid_codepoints_iff_enc in nil_valid.
   destruct nil_valid as [bytes encode_bytes].
   specialize (enc_projects [] []). rewrite encode_bytes in enc_projects. simpl in enc_projects. rewrite enc_projects in encode_bytes. inversion encode_bytes.
@@ -106,14 +71,14 @@ Proof.
   intros codes1 codes2 bytes encoder_codes1 encoder_codes2.
   specialize (enc_strictly_increasing codes1 codes2 bytes bytes encoder_codes1 encoder_codes2) as compare_codes.
   unfold bytes_compare in compare_codes.
-  rewrite list_compare_refl_if in compare_codes. 2: apply byte_compare_eq_iff.
+  rewrite list_compare_refl_if in compare_codes. 2: apply Z.compare_eq_iff.
   unfold codepoints_compare in compare_codes. apply list_compare_refl in compare_codes. apply compare_codes.
   apply Z.compare_eq_iff.
 Qed.
 
 Lemma decoder_spec_injective : forall decoder,
     utf8_decoder_spec decoder ->
-    forall (bytes1 bytes2: list byte) codes,
+    forall (bytes1 bytes2: byte_str) codes,
       decoder bytes1 = (codes, []) ->
       decoder bytes2 = (codes, []) ->
       bytes1 = bytes2.
@@ -127,7 +92,7 @@ Proof.
   unfold codepoints_compare in compare_codes.
   rewrite list_compare_refl_if in compare_codes. 2: apply Z.compare_eq_iff.
   unfold bytes_compare in compare_codes. symmetry in compare_codes. rewrite list_compare_refl in compare_codes.
-  apply compare_codes. apply byte_compare_eq_iff.
+  apply compare_codes. apply Z.compare_eq_iff.
 Qed.
 
 Lemma decoder_spec_projects_inverse: forall decoder,
@@ -166,7 +131,7 @@ Lemma decoder_spec_nil_mapsto_nil : forall decoder,
   assert (valid_utf8_bytes []) as nil_valid. constructor. apply valid_bytes_iff_dec in nil_valid as G.
   destruct G as [codes decode_codes].
   assert (decode_codes_copy := decode_codes).
-  replace (nil) with (@nil byte ++ @nil byte) in decode_codes by reflexivity.
+  replace (nil) with (@nil Z ++ @nil Z) in decode_codes by reflexivity.
   rewrite decoder_spec_decode_app_valid_bytes in decode_codes; try assumption.
   rewrite decode_codes_copy in decode_codes.
   inversion decode_codes. symmetry in H0.
@@ -178,7 +143,7 @@ Lemma encoder_spec_implies_nth_code_mapsto_nth_byte : forall encoder,
     utf8_encoder_spec encoder ->
     forall code bytes,
       encoder [code] = (bytes, []) -> 
-      exists n, nth_valid_codepoint n = Some code /\ nth_valid_byte n = Some bytes.
+      exists n, nth_valid_codepoint n = Some code /\ nth_valid_codepoint_representation n = Some bytes.
 Admitted.
 
 Lemma decoder_spec_implies_nth_bytes_mapsto_nth_code : forall decoder,
