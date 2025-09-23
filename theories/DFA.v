@@ -11,7 +11,7 @@ Definition zero_codep : codepoint := (0, b4_zero, b4_zero, b4_zero, b4_zero, b4_
 
 (* An implementation of the fast and efficient UTF8 decoding DFA *)
 (* presented in the following post: *)
-(* https://writings.sh/post/en/utf8/ *)
+(* https://bjoern.hoehrmann.de/utf-8/decoder/dfa/ *)
 
 Inductive parsing_state :=
   Initial

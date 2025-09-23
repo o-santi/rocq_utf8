@@ -1,4 +1,5 @@
 Require Import Utf8.Spec.
+Require Import Utf8.Theorems.Enumerations.
 From Coq Require Import Lists.List. Import ListNotations.
 From Coq Require Import ZArith.BinInt.
 From Coq Require Import Arith.
@@ -110,8 +111,21 @@ Proof.
     + apply Z.add_lt_mono_r with (p := 0x800) in H. apply Z.gt_lt_iff in H. rewrite H. reflexivity.
 Qed.
 
+Lemma nth_valid_codepoint_none : forall n,
+    nth_valid_codepoint n = None ->
+    n < 0 \/ n > (0x10ffff - 0x800).
+Proof.
+  intros n is_none.
+  unfold nth_valid_codepoint in is_none.
+  destruct (n <? 0) eqn:n_lt_0. lia.
+  destruct (n <? 55296) eqn:n_lt_d800. discriminate.
+  destruct (n <=? 1114111 - 2048) eqn:n_lt_10ffff. discriminate. lia.
+Qed.
+  
 Definition inverse_nth_valid_codepoint (code: codepoint) : option Z :=
-  if (code <? 0xd800) then
+  if (code <? 0) then
+    None 
+  else if (code <? 0xd800) then
     Some code
   else if (code <=? 0x10ffff)%Z then
     Some (code - 0x0800)%Z
@@ -130,7 +144,9 @@ Proof.
     unfold inverse_nth_valid_codepoint. unfold nth_valid_codepoint in H.
     destruct (n <? 0) eqn:n_not_neg; [discriminate |]. apply Z.ltb_ge in n_not_neg.
     destruct (n <? 0xd800) eqn:less_than_d800.
-    + inversion H. subst. rewrite less_than_d800. reflexivity.
+    + inversion H. subst.
+      replace (code <? 0) with false by lia.
+      rewrite less_than_d800. reflexivity.
     + apply Z.ltb_nlt in less_than_d800.
       destruct (n <=? 0x10ffff - 0x0800) eqn:less_than_10ffff; [| discriminate].
       inversion H. subst. clear H. 
@@ -142,7 +158,8 @@ Proof.
       * apply Z.ltb_lt in plus_less_than_cd800. lia.
       * apply Z.ltb_nlt in plus_less_than_cd800.
         destruct (n + 0x0800 <=? 0x10ffff)%Z eqn: plus_less_than_10ffff.
-        -- rewrite Z.add_simpl_r. reflexivity.
+        -- rewrite Z.add_simpl_r.
+           replace (n + 2048 <? 0) with false by lia. reflexivity.
         -- apply Z.leb_nle in plus_less_than_10ffff.
            apply Z.add_le_mono_r with (p:=0x0800) in less_than_10ffff. 
            rewrite Z.sub_add in less_than_10ffff. 
@@ -152,6 +169,7 @@ Proof.
     unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in valid_code.
     destruct valid_code as [code_less_than_10ffff [code_not_surrogate code_not_neg]].
     unfold nth_valid_codepoint.
+    destruct (Z.ltb code 0) eqn:less_than_0; [discriminate|].
     destruct (Z.ltb code 0xd800) eqn:less_than_d800.
     + inversion H. subst. rewrite less_than_d800. destruct (n <? 0) eqn:n_not_neg; [ lia | reflexivity].
     + apply Z.ltb_nlt in less_than_d800.
@@ -165,6 +183,52 @@ Proof.
         destruct (code - 0x0800 <=? 0x10ffff - 0x0800)%Z eqn:plus_less_than_10ffff_m_800.
         -- rewrite Z.sub_add. reflexivity.
         -- lia.
+Qed.
+
+
+Module F := FiniteEnumerations Z.
+
+Theorem nth_valid_codepoint_ordered : F.ordered_enumeration valid_codepoint (0x10ffff - 0x7ff) nth_valid_codepoint inverse_nth_valid_codepoint.
+Proof.
+  split.
+  - split.
+    + intros n code is_some.
+      apply nth_valid_codepoint_is_some_implies_valid. exists n. apply is_some.
+    + intros n is_none. unfold F.interval. apply nth_valid_codepoint_none in is_none. lia.
+  - split.
+    + split.
+      * intros n code is_some. unfold inverse_nth_valid_codepoint in is_some.
+        unfold F.interval.
+        destruct (n <? 0) eqn:n_lt_0; [discriminate|].
+        destruct (n <? 55296) eqn:n_lt_d800.
+        -- inversion is_some. lia.
+        -- destruct (n <=? 0x10ffff) eqn:n_lt_10ffff; [|discriminate]. inversion is_some. lia.
+      * intros n is_none. unfold inverse_nth_valid_codepoint in is_none.
+        unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
+        destruct (n <? 0) eqn:n_lt_0. lia.
+        destruct (n <? 55296) eqn:n_lt_d800. discriminate.
+        destruct (n <=? 0x10ffff) eqn:n_lt_10ffff. discriminate.
+        lia.
+    + split.
+      * unfold F.pointwise_equal, F.and_then.
+        intros n in_range.
+        destruct (nth_valid_codepoint n) eqn:nth_valid.
+        apply nth_valid_codepoint_invertible. apply nth_valid.
+        apply nth_valid_codepoint_none in nth_valid. unfold F.interval in in_range. lia.
+      * split.
+        -- unfold F.pointwise_equal, F.and_then.
+           intros code valid_code.
+           destruct (inverse_nth_valid_codepoint code) eqn:inverse_code.
+           apply nth_valid_codepoint_invertible. split; assumption.
+           apply nth_valid_codepoint_is_some_implies_valid in valid_code.
+           destruct valid_code as [n nth_valid_is_some].
+           apply nth_valid_codepoint_invertible in nth_valid_is_some as [invertible_some _].
+           rewrite inverse_code in invertible_some. discriminate.
+        -- intros n1 n2 code1 code2 range1 range2 n1_lt_n2 code1_some code2_some.
+           symmetry in code1_some, code2_some.
+           specialize (nth_valid_codepoint_compat n1 code1 n2 code2 code1_some code2_some) as compare_compat.
+           rewrite <- compare_compat.
+           apply n1_lt_n2.
 Qed.
 
 Definition nth_valid_codepoint_representation (n: Z) : option byte_str :=
@@ -718,6 +782,125 @@ Proof.
       } rewrite H2. reflexivity.
 Qed.
 
+Definition inverse_nth_valid_codepoint_representation (bytes: byte_str) : option Z :=
+  let between b lo hi := andb (lo <=? b) (b <=? hi) in 
+  match bytes with
+  | [b] => if between b 0 127 then Some b else None
+  | [b1; b2] =>
+      if andb (between b1 0xc2 0xdf) (between b2 0x80 0xbf) then
+        Some ((b1 mod 64) * 64 + (b2 mod 64))
+      else None
+  | [b1; b2; b3] =>
+      let fst := andb (andb (b1 =? 0xed) (between b2 0x80 0x9f)) (between b3 0x80 0xbf) in
+      let snd := andb (andb (b1 =? 0xe0) (between b2 0xa0 0xbf)) (between b3 0x80 0xbf) in
+      let trd := andb (andb (between b1 0xe1 0xec) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      let frth := andb (andb (between b1 0xee 0xef) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      if orb (orb (orb fst snd) trd) frth then
+        Some (((b1 - 224) * 4096) + (b2 mod 64) * 64 + (b3 mod 64))
+      else None
+  | [b1; b2; b3; b4] =>
+      let fst := andb (andb (andb (b1 =? 0xf0) (between b2 0x90 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      let snd := andb (andb (andb (between b1 0xf1 0xf3) (between b2 0x90 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      let trd := andb (andb (andb (b1 =? 0xf4) (between b2 0x80 0x8f)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      if orb (orb fst snd) trd then
+        Some ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64))
+      else None
+  | _ => None
+  end.
+
+Ltac crush_comparisons :=
+  repeat match goal with
+    | [G: context[if (?a <=? ?b)%N then _ else _] |- _] => 
+        let l := fresh "less_than_eq" in
+        destruct (a <=? b)%N eqn:l; [apply Z.leb_le in l| apply Z.leb_nle in l]
+    | [G: context[if (?a <? ?b)%N then _ else _] |- _] => 
+        let l := fresh "less_than" in
+        destruct (a <? b)%N eqn:l; [apply Z.ltb_lt in l| apply Z.ltb_nlt in l]
+    end.
+
+Lemma list_equals_1 {T}: forall (a b: T), [a] = [b] -> a = b. 
+Proof. intros. inversion H. reflexivity. Qed.
+Lemma list_equals_2 {T}: forall (a1 a2 b1 b2: T), [a1;a2] = [b1;b2] -> a1 = b1 /\ a2 = b2. 
+Proof. intros. inversion H. split; reflexivity. Qed.
+Lemma list_equals_3 {T}: forall (a1 a2 a3 b1 b2 b3: T), [a1;a2;a3] = [b1;b2;b3] -> a1 = b1 /\ a2 = b2 /\ a3 = b3.
+ Proof. intros. inversion H. do 2 split; reflexivity. Qed.
+Lemma list_equals_4 {T}: forall (a1 a2 a3 a4 b1 b2 b3 b4: T), [a1;a2;a3;a4] = [b1;b2;b3;b4] -> a1 = b1 /\ a2 = b2 /\ a3 = b3 /\ a4 = b4. 
+Proof. intros. inversion H. do 3 split; reflexivity. Qed.
+
+Theorem nth_valid_codepoint_representation_invertible : forall n bytes,
+    nth_valid_codepoint_representation n = Some bytes ->
+    inverse_nth_valid_codepoint_representation bytes = Some n.
+Proof.
+  intros n bytes bytes_nth.
+  assert (exists n, nth_valid_codepoint_representation n = Some bytes) as valid_bytes.
+  exists n. assumption.
+  apply nth_valid_codepoint_representation_spec in valid_bytes.
+  unfold inverse_nth_valid_codepoint_representation.
+  unfold nth_valid_codepoint_representation in bytes_nth.
+  destruct valid_bytes.
+  - replace (andb (0 <=? b) (b <=? 127)) with true by lia.
+    crush_comparisons; inversion bytes_nth; try lia. reflexivity.
+  - crush_comparisons; try discriminate; try lia.
+    replace (andb (andb (194 <=? b1) (b1 <=? 223)) (andb (128 <=? b2) (b2 <=? 191))) with true by lia.
+    apply some_injective in bytes_nth.
+    apply list_equals_2 in bytes_nth. destruct bytes_nth as [G1 G2].
+    rewrite <- G1, <- G2.
+    rewrite Zdiv.Zplus_mod. rewrite Z.add_0_l.
+    rewrite Z.mod_mod; [|lia]. rewrite Zdiv.Zplus_mod.  rewrite Z.add_0_l.
+    repeat rewrite Z.mod_mod; try lia.
+    specialize (Zdiv.Z_div_mod_eq_full n 64) as G.
+    specialize (Z.rem_mul_r n 64 64 ltac:(lia) ltac:(lia)) as G3.
+    rewrite Z.add_comm in G3. rewrite Z.mul_comm. rewrite <- G3.
+    rewrite <- some_injective.
+    apply Z.mod_small; lia.
+  - crush_comparisons; try discriminate; try lia;
+      match goal with | [|- (if ?cond then _ else _) = _] => replace cond with true by lia end;
+      apply some_injective in bytes_nth;
+      apply list_equals_3 in bytes_nth; destruct bytes_nth as [b1eq [b2eq b3eq]];
+      rewrite <- some_injective; rewrite H; vm_compute (224 - 224); rewrite Z.add_0_l.
+    2: { apply Z.nlt_ge in less_than0. rewrite H in b1eq.
+         apply (f_equal (fun c => (-224 + c))) in b1eq. rewrite Z.add_assoc in b1eq.
+         vm_compute (-224 + 224) in b1eq. rewrite Z.add_0_l in b1eq. rewrite Z.div_div in b1eq; try lia.
+         apply Z.add_le_mono_r with (p:=2048) in less_than0.
+         apply Zdiv.Z_div_le with (c := 64 * 64) in less_than0. vm_compute ((55296 + 2048) / (64 * 64)) in less_than0. lia. lia. }
+    rewrite <- b2eq, <- b3eq. repeat (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; rewrite Z.mod_mod; try lia).
+    rewrite Z.mod_mod; [|lia]. rewrite Z.mod_mod; [|lia].
+    specialize (Z.rem_mul_r n 64 64 ltac:(lia) ltac:(lia)) as G3. rewrite Z.add_comm in G3. rewrite Z.mul_comm. rewrite <- G3.
+    rewrite H in b1eq.
+    apply (f_equal (fun c => (-224 + c))) in b1eq. rewrite Z.add_assoc in b1eq. vm_compute (-224 + 224) in b1eq.
+    rewrite Z.add_0_l in b1eq.
+    apply Z.mod_small. split; [lia|].
+    specialize (Z.div_small_iff n (64 * 64) ltac:(lia)) as [G1 G2].
+    rewrite Z.div_div in b1eq.
+    apply G1 in b1eq. destruct b1eq. all: lia.
+  - crush_comparisons; try discriminate; try lia;
+      match goal with | [|- (if ?cond then _ else _) = _] => replace cond with true by lia end;
+      apply some_injective in bytes_nth;
+      apply list_equals_3 in bytes_nth; destruct bytes_nth as [b1eq [b2eq b3eq]];
+      rewrite <- some_injective; destruct H; rewrite <- b1eq, <- b2eq, <- b3eq.
+    + replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
+      replace ((128 + (n / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
+      replace ((128 + n mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
+      specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod.
+      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
+    + replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
+      replace ((128 + (n / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
+      replace ((128 + n mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
+      specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod.
+      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
+    + replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) by lia.
+      replace ((128 + ((n + 2048) / 64) mod 64) mod 64) with ((n + 2048) / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
+      replace ((128 + (n + 2048) mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).  
+      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod. 
+      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia. 
+    + replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) by lia.
+      replace ((128 + ((n + 2048) / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod with (b:= (n + 2048) mod 64); rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).
+      replace ((128 + (n + 2048) mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod with (b:= (n + 2048) mod 64); rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).
+      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod.
+      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
+      
+      
+      
 Lemma bytes_compare_single : forall b1 b2,
     bytes_compare [b1] [b2] = Z.compare b1 b2.
 Proof.
@@ -833,15 +1016,6 @@ Proof.
   apply Z.compare_eq_iff.
   apply Z.compare_antisym.
 Qed.
-
-Lemma list_equals_1 {T}: forall (a b: T), [a] = [b] -> a = b. 
-Proof. intros. inversion H. reflexivity. Qed.
-Lemma list_equals_2 {T}: forall (a1 a2 b1 b2: T), [a1;a2] = [b1;b2] -> a1 = b1 /\ a2 = b2. 
-Proof. intros. inversion H. split; reflexivity. Qed.
-Lemma list_equals_3 {T}: forall (a1 a2 a3 b1 b2 b3: T), [a1;a2;a3] = [b1;b2;b3] -> a1 = b1 /\ a2 = b2 /\ a3 = b3.
- Proof. intros. inversion H. do 2 split; reflexivity. Qed.
-Lemma list_equals_4 {T}: forall (a1 a2 a3 a4 b1 b2 b3 b4: T), [a1;a2;a3;a4] = [b1;b2;b3;b4] -> a1 = b1 /\ a2 = b2 /\ a3 = b3 /\ a4 = b4. 
-Proof. intros. inversion H. do 3 split; reflexivity. Qed.    
 
 Theorem nth_valid_codepoint_representation_compat: forall n1 n2 bytes1 bytes2,
     nth_valid_codepoint_representation n1 = Some bytes1 -> 

@@ -11,9 +11,6 @@ Definition codepoint : Type := Z.
 Definition unicode_str : Type := list codepoint.
 Definition byte_str : Type := list Z.
 
-Local Notation "0" := false.
-Local Notation "1" := true.
-
 Definition codepoints_compare := List.list_compare Z.compare.
 Definition bytes_compare := List.list_compare Z.compare.
 
@@ -32,13 +29,13 @@ Definition encoder_type := unicode_str -> byte_str * unicode_str.
 Definition decoder_type := byte_str -> unicode_str * byte_str.
 
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
-  Z.le code 0x10ffff.
+  (code <= 0x10ffff).
 
 Definition codepoint_is_not_surrogate (code: codepoint) : Prop :=
-  (Z.lt code 0xd800) \/ (Z.gt code 0xdfff).
+  (code < 0xd800) \/ (code > 0xdfff).
 
 Definition codepoint_not_negative (code: codepoint): Prop :=
-  Z.ge code 0.
+  (code >= 0).
 
 Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code /\ codepoint_not_negative code.
 
