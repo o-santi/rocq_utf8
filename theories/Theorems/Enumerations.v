@@ -106,6 +106,16 @@ Record Ordered {T} (compare: T -> T -> comparison) := {
     trans : forall t1 t2 t3 res, compare t1 t2 = res -> compare t2 t3 = res -> compare t1 t3 = res;
   }.
 
+Definition increasing {T1 T2}
+  (domain: T1 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) :=
+  forall n m, (domain n) -> (domain m) ->
+      match (to n, to m) with
+      | (Some a, Some b) => (compare1 n m) = (compare2 a b)
+      | _ => False
+      end.
+
 Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1)
    := {
     ordered1 : @Ordered T1 compare1;
@@ -114,11 +124,7 @@ Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop
     to_morphism: partial_morphism range domain from;
     from_to_id : pointwise_equal domain (and_then to from) (fun x => Some x);
     to_from_id : pointwise_equal range (and_then from to) (fun x => Some x);
-    from_preserves_compare : forall n m, (domain n) -> (domain m) ->
-      match (to n, to m) with
-      | (Some a, Some b) => (compare1 n m) = (compare2 a b)
-      | _ => False
-      end;
+    from_preserves_compare : increasing domain compare1 compare2 to;
   }.
 
 (* Lemma interval_enumeration_unique : forall count f g,
@@ -132,11 +138,16 @@ Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop
 
 (* TODO: the inverse function is unique in the sense of pointwise_equal *)
 
-Theorem partial_isomorphism_countable_unique {T1 T2} (count: Z) (range1: T1 -> Prop) (range2: T2 -> Prop) compare1 compare2:
-  forall from0 from1 to0 to1,
-    OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 from0 to0 ->
-    OrderedPartialIsomorphism (interval count) range2 Z.compare compare2 from1 to1 ->
-  (pointwise_equal (interval count) (and_then from0 to0) (and_then from1 to1)).
+Theorem partial_isomorphism_countable_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
+  forall from0 from1 from2 to0 to1 to2,
+    OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
+    OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 to1 from1 ->
+    partial_morphism range0 range1 to2 ->
+    partial_morphism range1 range0 from2 ->
+    increasing range0 compare0 compare1 to2 ->
+    increasing range1 compare1 compare0 from2 ->
+  (pointwise_equal range0 to2 (and_then from0 to1))
+  /\ (pointwise_equal range1 from2 (and_then from1 to0)).
 Proof.
   (* intros range count. *)
   (* remember (count - 1)%Z as predecessor. *)
