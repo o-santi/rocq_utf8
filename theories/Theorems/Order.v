@@ -185,52 +185,55 @@ Proof.
         -- lia.
 Qed.
 
+Definition ZOrder : @Ordered Z Z.compare.
+  split. apply Z.compare_eq_iff. intros. apply Z.compare_antisym.
+  intros. destruct res.
+  - apply Z.compare_eq_iff in H, H0. subst. apply Z.compare_refl.
+  - apply Zcompare.Zcompare_Lt_trans with (m := t2); assumption.
+  - apply Zcompare.Zcompare_Gt_trans with (m := t2); assumption.
+Qed.
 
-Module F := FiniteEnumerations Z.
-
-Theorem nth_valid_codepoint_ordered : F.ordered_enumeration valid_codepoint (0x10ffff - 0x7ff) nth_valid_codepoint inverse_nth_valid_codepoint.
-Proof.
-  split.
+Definition codepoint_nth_isomorphism : OrderedPartialIsomorphism (interval (0x10ffff - 0x7ff)) valid_codepoint Z.compare Z.compare nth_valid_codepoint inverse_nth_valid_codepoint.
+  split. apply ZOrder. apply ZOrder.
   - split.
     + intros n code is_some.
       apply nth_valid_codepoint_is_some_implies_valid. exists n. apply is_some.
-    + intros n is_none. unfold F.interval. apply nth_valid_codepoint_none in is_none. lia.
+    + intros n is_none. apply nth_valid_codepoint_none in is_none. unfold interval. lia.
   - split.
-    + split.
-      * intros n code is_some. unfold inverse_nth_valid_codepoint in is_some.
-        unfold F.interval.
-        destruct (n <? 0) eqn:n_lt_0; [discriminate|].
-        destruct (n <? 55296) eqn:n_lt_d800.
-        -- inversion is_some. lia.
-        -- destruct (n <=? 0x10ffff) eqn:n_lt_10ffff; [|discriminate]. inversion is_some. lia.
-      * intros n is_none. unfold inverse_nth_valid_codepoint in is_none.
-        unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
-        destruct (n <? 0) eqn:n_lt_0. lia.
-        destruct (n <? 55296) eqn:n_lt_d800. discriminate.
-        destruct (n <=? 0x10ffff) eqn:n_lt_10ffff. discriminate.
-        lia.
-    + split.
-      * unfold F.pointwise_equal, F.and_then.
-        intros n in_range.
-        destruct (nth_valid_codepoint n) eqn:nth_valid.
-        apply nth_valid_codepoint_invertible. apply nth_valid.
-        apply nth_valid_codepoint_none in nth_valid. unfold F.interval in in_range. lia.
-      * split.
-        -- unfold F.pointwise_equal, F.and_then.
-           intros code valid_code.
-           destruct (inverse_nth_valid_codepoint code) eqn:inverse_code.
-           apply nth_valid_codepoint_invertible. split; assumption.
-           apply nth_valid_codepoint_is_some_implies_valid in valid_code.
-           destruct valid_code as [n nth_valid_is_some].
-           apply nth_valid_codepoint_invertible in nth_valid_is_some as [invertible_some _].
-           rewrite inverse_code in invertible_some. discriminate.
-        -- intros n1 n2 code1 code2 range1 range2 n1_lt_n2 code1_some code2_some.
-           symmetry in code1_some, code2_some.
-           specialize (nth_valid_codepoint_compat n1 code1 n2 code2 code1_some code2_some) as compare_compat.
-           rewrite <- compare_compat.
-           apply n1_lt_n2.
+    + intros n code is_some. unfold inverse_nth_valid_codepoint in is_some.
+      unfold interval.
+      destruct (n <? 0) eqn:n_lt_0; [discriminate|].
+      destruct (n <? 55296) eqn:n_lt_d800.
+      -- inversion is_some. lia.
+      -- destruct (n <=? 0x10ffff) eqn:n_lt_10ffff; [|discriminate]. inversion is_some. lia.
+    + intros n is_none. unfold inverse_nth_valid_codepoint in is_none.
+      unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
+      destruct (n <? 0) eqn:n_lt_0. lia.
+      destruct (n <? 55296) eqn:n_lt_d800. discriminate.
+      destruct (n <=? 0x10ffff) eqn:n_lt_10ffff. discriminate.
+      lia.
+  - unfold pointwise_equal, and_then.
+    intros n in_range.
+    destruct (nth_valid_codepoint n) eqn:nth_valid.
+    apply nth_valid_codepoint_invertible. apply nth_valid.
+    apply nth_valid_codepoint_none in nth_valid. unfold interval in in_range. lia.
+  - unfold pointwise_equal, and_then.
+    intros code valid_code.
+    destruct (inverse_nth_valid_codepoint code) eqn:inverse_code.
+    apply nth_valid_codepoint_invertible. split; assumption.
+    apply nth_valid_codepoint_is_some_implies_valid in valid_code.
+    destruct valid_code as [n nth_valid_is_some].
+    apply nth_valid_codepoint_invertible in nth_valid_is_some as [invertible_some _].
+    rewrite inverse_code in invertible_some. discriminate.
+  - intros n1 n2 range1 range2.
+    unfold interval in range1, range2.
+    destruct (nth_valid_codepoint n1) as [code1|]eqn:is_valid1; [ | apply nth_valid_codepoint_none in is_valid1; lia ].
+    destruct (nth_valid_codepoint n2) as [code2|]eqn:is_valid2; [ | apply nth_valid_codepoint_none in is_valid2; lia ].
+    specialize (nth_valid_codepoint_compat n1 code1 n2 code2 is_valid1 is_valid2) as compare_compat.
+    rewrite <- compare_compat.
+    reflexivity.
 Qed.
-
+    
 Definition nth_valid_codepoint_representation (n: Z) : option byte_str :=
   let n := if Z.ltb n 0xd800 then n else n + 0x800 in
   if (n <? 0) then
@@ -893,14 +896,17 @@ Proof.
       replace ((128 + (n + 2048) mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).  
       specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod. 
       specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia. 
-    + replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) by lia.
-      replace ((128 + ((n + 2048) / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod with (b:= (n + 2048) mod 64); rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).
-      replace ((128 + (n + 2048) mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod with (b:= (n + 2048) mod 64); rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).
-      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod.
-      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
-      
-      
-      
+    + apply (f_equal (fun c => c - 224)) in b1eq.
+      replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) in b1eq |- * by lia.
+      (* apply Zdiv.Z_div_le with (c:= 64 * 64) in less_than_eq1; try lia. *)
+      (* rewrite Z.div_div in b1eq |-; try lia. *)
+      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod. 
+      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod.
+      admit.
+Admitted.
+
+
+
 Lemma bytes_compare_single : forall b1 b2,
     bytes_compare [b1] [b2] = Z.compare b1 b2.
 Proof.
@@ -1017,7 +1023,7 @@ Proof.
   apply Z.compare_antisym.
 Qed.
 
-Theorem nth_valid_codepoint_representation_compat: forall n1 n2 bytes1 bytes2,
+Theorem nth_valid_codepoint_representation_compare_compat: forall n1 n2 bytes1 bytes2,
     nth_valid_codepoint_representation n1 = Some bytes1 -> 
     nth_valid_codepoint_representation n2 = Some bytes2 -> 
     Z.compare n1 n2 = bytes_compare bytes1 bytes2.
@@ -1152,7 +1158,82 @@ Proof.
   par: crush_lia; try lia.
 Qed.
 
+Lemma nth_valid_codepoint_representation_none : forall n : Z,
+    nth_valid_codepoint_representation n = None -> 
+    n < 0 \/ n > (1114111 - 2048).
+Proof.
+  intros.
+  unfold nth_valid_codepoint_representation in H.
+  crush_comparisons; try discriminate; lia.
+Qed.
+
+Lemma inverse_nth_valid_codepoint_representation_bounds : forall bytes n,
+    inverse_nth_valid_codepoint_representation bytes = Some n ->
+    interval (0x10ffff - 0x7ff) n.
+Admitted.
+
+Lemma inverse_nth_valid_codepoint_representation_invertible : forall bytes n,
+    valid_codepoint_representation bytes ->
+    inverse_nth_valid_codepoint_representation bytes = Some n ->
+    nth_valid_codepoint_representation n = Some bytes.
+Admitted.
+
+
+Definition BytesOrder : Ordered bytes_compare.
+Proof.
+  unfold bytes_compare.
+  split.
+  - apply list_compare_refl. apply Z.compare_eq_iff.
+  - intros.
+    apply list_compare_antisym. apply Z.compare_eq_iff. apply Z.compare_antisym.
+  - intros.
+    apply list_compare_trans with (ys:=t2); try assumption.
+    + apply Z.compare_eq_iff.
+    + intros. destruct c.
+      -- apply Z.compare_eq_iff in H1, H2. subst. apply Z.compare_refl.
+      -- apply Zcompare.Zcompare_Lt_trans with (m := y); assumption.
+      -- apply Zcompare.Zcompare_Gt_trans with (m := y); assumption.
+    + apply Z.compare_antisym.
+Qed.
+
+
+
+Lemma valid_codepoint_representation_isomorphism : OrderedPartialIsomorphism (interval (0x10ffff - 0x7ff)) valid_codepoint_representation Z.compare bytes_compare nth_valid_codepoint_representation inverse_nth_valid_codepoint_representation.
+  split.
+  - apply ZOrder.
+  - apply BytesOrder.
+  - split.
+    + intros n bytes bytes_valid. apply nth_valid_codepoint_representation_spec. exists n. assumption.
+    + intros. apply nth_valid_codepoint_representation_none in H. unfold interval. lia.
+  - split.
+    + apply inverse_nth_valid_codepoint_representation_bounds.
+    + intros bytes bytes_none bytes_valid.
+      apply <- nth_valid_codepoint_representation_spec in bytes_valid.
+      destruct bytes_valid as [n nth_some].
+      apply nth_valid_codepoint_representation_invertible in nth_some.
+      rewrite bytes_none in nth_some. discriminate.
+  - unfold pointwise_equal, and_then, interval.
+    intros n n_interval. 
+    destruct (nth_valid_codepoint_representation n) eqn:nth_valid; [|apply nth_valid_codepoint_representation_none in nth_valid; lia].
+    apply nth_valid_codepoint_representation_invertible. assumption.
+  - unfold pointwise_equal, and_then, interval.
+    intros bytes bytes_valid.
+    destruct (inverse_nth_valid_codepoint_representation bytes) eqn:inv_bytes.
+    2: { apply <- nth_valid_codepoint_representation_spec in bytes_valid.
+         destruct bytes_valid as [n n_eq].
+         apply nth_valid_codepoint_representation_invertible in n_eq. rewrite n_eq in inv_bytes. discriminate. }
+    apply inverse_nth_valid_codepoint_representation_invertible.
+    all: assumption.
+  - intros n1 n2 n1_range n2_range. unfold interval in n1_range, n2_range.
+    destruct (nth_valid_codepoint_representation n1) eqn:n1_valid; [|apply nth_valid_codepoint_representation_none in n1_valid; lia].
+    destruct (nth_valid_codepoint_representation n2) eqn:n2_valid; [|apply nth_valid_codepoint_representation_none in n2_valid; lia].
+    apply nth_valid_codepoint_representation_compare_compat; assumption.
+Qed.
+
+Theorem nth_codepoint_unique : pointwise_equal (interval (1114111 - 2047)) (and_then nth_valid_codepoint inverse_nth_valid_codepoint) (and_then nth_valid_codepoint_representation inverse_nth_valid_codepoint_representation).
+Proof.
   
+    
 Lemma list_compare_refl_if {T} (cmp: T -> T -> comparison) : forall (t: list T),
     (forall x y, cmp x y = Eq <-> x = y) ->
     list_compare cmp t t = Eq.

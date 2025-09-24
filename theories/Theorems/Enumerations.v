@@ -13,13 +13,9 @@ From Coq Require Import ZArith.BinInt.
 From Coq Require Import Lia.
 Import ListNotations.
 
-Module FiniteEnumerations (Import O : OrderedTypeFull').
-
 (* Get all the nice notations for free *)
 Local Open Scope list_scope.
-
-(* t is our generic ordered type *)
-
+                        
 Definition interval (count n : Z) : Prop :=
   (0 <= n /\ n < count)%Z.
 
@@ -104,20 +100,26 @@ Proof.
     + exfalso. apply (H x_in_domain).
 Qed.
 
-Definition ordered_enumeration (range : t -> Prop) (count : Z) (get_nth : Z -> option t) (get_index : t -> option Z) : Prop :=
-  (partial_morphism (interval count) range get_nth)
-  /\ (partial_morphism range (interval count) get_index)
-  /\ (pointwise_equal (interval count) (and_then get_nth get_index) (fun x => Some x))
-  /\ (pointwise_equal range (and_then get_index get_nth) (fun x => Some x))
-  /\ (forall (n m : Z) (element0 element1 : t),
-       (interval count n) ->
-       (interval count m) ->
-       (n < m)%Z ->
-       (Some element0 = get_nth n) ->
-       (Some element1 = get_nth m) ->
-       element0 < element1).
-       (* these redundant hypothesis feel a bit dumb but ok *)
-       (* TODO: use match instead *)
+Record Ordered {T} (compare: T -> T -> comparison) := {
+    eq : forall t1 t2, compare t1 t2 = Eq <-> t1 = t2;
+    antisym : forall t1 t2, compare t1 t2 = CompOpp (compare t2 t1);
+    trans : forall t1 t2 t3 res, compare t1 t2 = res -> compare t2 t3 = res -> compare t1 t3 = res;
+  }.
+
+Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1)
+   := {
+    ordered1 : @Ordered T1 compare1;
+    ordered2 : @Ordered T2 compare2;
+    from_morphism : partial_morphism domain range to;
+    to_morphism: partial_morphism range domain from;
+    from_to_id : pointwise_equal domain (and_then to from) (fun x => Some x);
+    to_from_id : pointwise_equal range (and_then from to) (fun x => Some x);
+    from_preserves_compare : forall n m, (domain n) -> (domain m) ->
+      match (to n, to m) with
+      | (Some a, Some b) => (compare1 n m) = (compare2 a b)
+      | _ => False
+      end;
+  }.
 
 (* Lemma interval_enumeration_unique : forall count f g,
   ordered_enumeration (interval count) count f g ->
@@ -130,36 +132,34 @@ Definition ordered_enumeration (range : t -> Prop) (count : Z) (get_nth : Z -> o
 
 (* TODO: the inverse function is unique in the sense of pointwise_equal *)
 
-Theorem get_nth_unique : forall range count f0 f1 g0 g1,
-  ordered_enumeration range count f0 g0 ->
-  ordered_enumeration range count f1 g1 ->
-  (pointwise_equal (interval count) f0 f1)
-  /\ (pointwise_equal range g0 g1).
+Theorem partial_isomorphism_countable_unique {T1 T2} (count: Z) (range1: T1 -> Prop) (range2: T2 -> Prop) compare1 compare2:
+  forall from0 from1 to0 to1,
+    OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 from0 to0 ->
+    OrderedPartialIsomorphism (interval count) range2 Z.compare compare2 from1 to1 ->
+  (pointwise_equal (interval count) (and_then from0 to0) (and_then from1 to1)).
 Proof.
-  intros range count.
-  remember (count - 1)%Z as predecessor.
-  assert (count = predecessor + 1)%Z by lia.
-  subst count. clear Heqpredecessor.
-  assert (predecessor < 0 \/ 0 <= predecessor)%Z as [nonnegative_count | positive_count] by lia.
-  - admit. (* vacuously true *)
-  - intros. generalize dependent range.
-    apply Wf_Z.natlike_ind with (x := predecessor); try apply positive_count.
-    + simpl. intros. unfold pointwise_equal. split.
-      * admit.
-      * intros x x_is_zero. unfold interval in x_is_zero.
-        assert (partial_morphism range (interval 1) g0) by (
-          unfold ordered_enumeration in H; destruct H as [a [b c]]; apply b).
-        assert (partial_morphism range (interval 1) g1) by (
-          unfold ordered_enumeration in H0; destruct H0 as [a [b c]]; apply b).
-        apply partial_induction
-          with (f := g0) (x := x) (domain := range) (range := (interval 1));
-          try assumption; intros. (* that's what I'm talking about! *)
-        apply partial_induction
-          with (f := g1) (x := x) (domain := range) (range := (interval 1));
-          try assumption; intros.
-        unfold interval in H3, H4. assert (y = y0%Z) by lia.
-        rewrite H5. reflexivity.
-    + intros. admit.
+  (* intros range count. *)
+  (* remember (count - 1)%Z as predecessor. *)
+  (* assert (count = predecessor + 1)%Z by lia. *)
+  (* subst count. clear Heqpredecessor. *)
+  (* assert (predecessor < 0 \/ 0 <= predecessor)%Z as [nonnegative_count | positive_count] by lia. *)
+  (* - admit. (* vacuously true *) *)
+  (* - intros. generalize dependent range. *)
+  (*   apply Wf_Z.natlike_ind with (x := predecessor); try apply positive_count. *)
+  (*   + simpl. intros. unfold pointwise_equal. split. *)
+  (*     * admit. *)
+  (*     * intros x x_is_zero. unfold interval in x_is_zero. *)
+  (*       assert (partial_morphism range (interval 1) g0) by ( *)
+  (*         unfold ordered_enumeration in H; destruct H as [a [b c]]; apply b). *)
+  (*       assert (partial_morphism range (interval 1) g1) by ( *)
+  (*         unfold ordered_enumeration in H0; destruct H0 as [a [b c]]; apply b). *)
+  (*       apply partial_induction *)
+  (*         with (f := g0) (x := x) (domain := range) (range := (interval 1)); *)
+  (*         try assumption; intros. (* that's what I'm talking about! *) *)
+  (*       apply partial_induction *)
+  (*         with (f := g1) (x := x) (domain := range) (range := (interval 1)); *)
+  (*         try assumption; intros. *)
+  (*       unfold interval in H3, H4. assert (y = y0%Z) by lia. *)
+  (*       rewrite H5. reflexivity. *)
+  (*   + intros. admit. *)
 Admitted.
-
-End FiniteEnumerations.
