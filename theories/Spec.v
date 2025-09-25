@@ -90,15 +90,17 @@ Inductive valid_utf8_bytes: list Z ->  Prop :=
     valid_utf8_bytes tail ->
     valid_utf8_bytes (bytes ++ tail).
 
-Definition encoder_encode_valid_codes_correctly (encoder: encoder_type) := forall codes,
-    valid_codepoints codes <->
-      exists bytes, encoder codes = (bytes, []).
+Definition encoder_nil (encoder: encoder_type) := encoder [] = ([], []).
 
-Definition encoder_encode_correctly_implies_valid (encoder: encoder_type) := forall codes codes_suffix bytes,
-    encoder codes = (bytes, codes_suffix) ->
-    (valid_utf8_bytes bytes
-     /\ exists codes_prefix,
-        (codes = codes_prefix ++ codes_suffix /\ encoder codes_prefix = (bytes, nil))).
+Definition encoder_input_correct_iff (encoder: encoder_type) := forall code,
+    valid_codepoint code <->
+    exists bytes, encoder [code] = (bytes, []).
+
+Definition encoder_output_correct (encoder: encoder_type) := forall code,
+    match encoder [code] with
+    | (bytes, []) => valid_codepoint_representation bytes
+    | (bytes, rest) => bytes = [] /\ rest = [code]
+    end.
 
 Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2,
     encoder codes1 = (bytes1, nil) ->
@@ -114,31 +116,50 @@ Definition encoder_projects (encoder: encoder_type) := forall xs ys,
       | (bytes, rest) => (bytes, rest ++ ys)
       end.
 
-Definition utf8_encoder_spec encoder :=
-  encoder_encode_correctly_implies_valid encoder
-  /\ encoder_encode_valid_codes_correctly encoder
-  /\ encoder_strictly_increasing encoder
-  /\ encoder_projects encoder.
-
-Definition decoder_decode_correctly_implies_valid (decoder: decoder_type) := forall codes bytes bytes_suffix,
-    decoder bytes = (codes, bytes_suffix) ->
-    valid_codepoints codes /\
-      (exists bytes_prefix,
-          (bytes = bytes_prefix ++ bytes_suffix) /\ (decoder bytes_prefix = (codes, nil))).
-
-Definition decoder_decode_valid_utf8_bytes_correctly (decoder: decoder_type) := forall bytes,
-    valid_utf8_bytes bytes <->
-      exists codes, decoder bytes = (codes, []).
+Record utf8_encoder_spec encoder := {
+    enc_nil : encoder_nil encoder;
+    enc_increasing : encoder_strictly_increasing encoder;
+    enc_input : encoder_input_correct_iff encoder;
+    enc_output : encoder_output_correct encoder;
+    enc_projects : encoder_projects encoder;
+  }.
 
 Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 codes1 codes2,
     decoder bytes1 = (codes1, nil) ->
     decoder bytes2 = (codes2, nil) ->
     codepoints_compare codes1 codes2 = bytes_compare bytes1 bytes2.
 
-Definition utf8_decoder_spec decoder :=
-  decoder_decode_correctly_implies_valid decoder
-  /\ decoder_decode_valid_utf8_bytes_correctly decoder
-  /\ decoder_strictly_increasing decoder.
+Definition decoder_input_correct_iff (decoder: decoder_type) := forall bytes,
+    valid_codepoint_representation bytes <->
+    exists code, decoder bytes = ([code], []).
 
-Definition utf8_spec encoder decoder :=
-  utf8_encoder_spec encoder /\ utf8_decoder_spec decoder.
+Definition decoder_output_correct (decoder: decoder_type) := forall bytes,
+    valid_codepoint_representation bytes ->
+    match decoder bytes with
+    | ([code], []) =>  valid_codepoint code
+    | (codes, rest) => codes = [] /\ rest = bytes
+    end.
+
+Definition decoder_projects (decoder: decoder_type) := forall xs ys,
+    decoder (xs ++ ys) =
+      match decoder xs with
+      | (codes, []) =>
+          let (codes2, rest) := decoder ys in
+          (codes ++ codes2, rest)
+      | (codes, rest) => (codes, rest ++ ys)
+      end.
+
+Definition decoder_nil (decoder: decoder_type) := decoder nil = (nil, nil).
+
+Record utf8_decoder_spec decoder := {
+    dec_nil : decoder_nil decoder;
+    dec_input : decoder_input_correct_iff decoder;
+    dec_output : decoder_output_correct decoder;
+    dec_increasing : decoder_strictly_increasing decoder;
+    dec_projects : decoder_projects decoder;
+  }.
+
+Record utf8_spec encoder decoder := {
+    encoder_spec_compliant : utf8_encoder_spec encoder;
+    decoder_spec_compliant : utf8_decoder_spec decoder;
+  }.

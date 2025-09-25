@@ -262,8 +262,7 @@ Definition nth_valid_codepoint_representation (n: Z) : option byte_str :=
     None.
 
 Lemma some_injective {T}: forall (a b: T),
-    a = b <->
-          Some a = Some b.
+    a = b <-> Some a = Some b.
 Proof.
   split; intros.
   subst. reflexivity.
@@ -1196,8 +1195,6 @@ Proof.
     + apply Z.compare_antisym.
 Qed.
 
-
-
 Lemma valid_codepoint_representation_isomorphism : OrderedPartialIsomorphism (interval (0x10ffff - 0x7ff)) valid_codepoint_representation Z.compare bytes_compare nth_valid_codepoint_representation inverse_nth_valid_codepoint_representation.
   split.
   - apply ZOrder.
@@ -1229,10 +1226,6 @@ Lemma valid_codepoint_representation_isomorphism : OrderedPartialIsomorphism (in
     destruct (nth_valid_codepoint_representation n2) eqn:n2_valid; [|apply nth_valid_codepoint_representation_none in n2_valid; lia].
     apply nth_valid_codepoint_representation_compare_compat; assumption.
 Qed.
-
-Theorem nth_codepoint_unique : pointwise_equal (interval (1114111 - 2047)) (and_then nth_valid_codepoint inverse_nth_valid_codepoint) (and_then nth_valid_codepoint_representation inverse_nth_valid_codepoint_representation).
-Proof.
-  
     
 Lemma list_compare_refl_if {T} (cmp: T -> T -> comparison) : forall (t: list T),
     (forall x y, cmp x y = Eq <-> x = y) ->
