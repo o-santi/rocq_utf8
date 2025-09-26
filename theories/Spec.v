@@ -133,12 +133,12 @@ Definition decoder_input_correct_iff (decoder: decoder_type) := forall bytes,
     valid_codepoint_representation bytes <->
     exists code, decoder bytes = ([code], []).
 
-Definition decoder_output_correct (decoder: decoder_type) := forall bytes,
-    valid_codepoint_representation bytes ->
-    match decoder bytes with
-    | ([code], []) =>  valid_codepoint code
-    | (codes, rest) => codes = [] /\ rest = bytes
-    end.
+Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
+    decoder bytes = (codes, bytes_suffix) ->
+    (valid_codepoints codes /\
+       (exists bytes_prefix,
+           decoder bytes_prefix = (codes, [])
+           /\ bytes = bytes_prefix ++ bytes_suffix)).
 
 Definition decoder_projects (decoder: decoder_type) := forall xs ys,
     decoder (xs ++ ys) =

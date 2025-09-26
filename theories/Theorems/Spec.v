@@ -75,10 +75,9 @@ Proof.
   - rewrite dec_projects; [| assumption].
     apply (decoder_spec.(dec_input decoder)) in H.
     destruct H as [code decode_bytes].
-    assert (exists code, decoder bytes = ([code], [])). exists code. assumption.
-    eapply dec_input in H; [| assumption].
-    eapply dec_output in H as code_valid; [| apply decoder_spec].
-    rewrite decode_bytes in code_valid.
+    apply dec_output in decode_bytes as G; [| assumption].
+    destruct G as [code_valid [bytes_prefix bytes_eq]].
+    inversion code_valid.
     destruct IHbytes_valid as [codes [decode_tail codes_valid]].
     rewrite decode_bytes.
     rewrite decode_tail.
@@ -161,8 +160,9 @@ Proof.
     inversion bytes_some. subst.
     assert (exists code, decoder bytes = ([code], [])). exists code. assumption.
     apply dec_input in H as bytes_valid.
-    specialize (dec_output bytes bytes_valid).
-    rewrite decode_bytes in dec_output.
+    specialize (dec_output bytes [code] [] decode_bytes).
+    destruct dec_output as [valid_code _].
+    inversion valid_code.
     assumption.
   - intros bytes bytes_none bytes_valid.
     destruct (decoder bytes) as [codes rest] eqn:decoder_bytes.
@@ -272,7 +272,7 @@ Proof.
   - apply inverse_nth_valid_codepoint_representation_invertible; assumption.
 Qed.
 
-Theorem decode_encode_spec_inverses_for_single: forall encoder decoder,
+Theorem utf8_spec_encoder_decoder_inverse_single: forall encoder decoder,
     utf8_encoder_spec encoder ->
     utf8_decoder_spec decoder ->
     forall code bytes,
@@ -297,7 +297,29 @@ Proof.
   assumption.
 Qed.
 
-Theorem decode_encode_spec_compliant_decode_inverse_of_encode : forall encoder decoder,
+Theorem utf8_spec_decoder_encoder_inverse_single: forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall code bytes,
+      decoder bytes = ([code], []) ->
+      encoder [code] = (bytes, []).
+Proof.
+  intros encoder decoder encoder_spec decoder_spec.
+  intros code bytes decode_bytes.
+  eapply utf8_spec_implies_decoder_maps_nth_to_nth in decode_bytes as G; [ | apply encoder_spec | assumption].
+  destruct G as [n [nth_code nth_byte]].
+  apply dec_output in decode_bytes as [valid_code _]; [|assumption].
+  eapply encoder_encode_valid_codepoints in valid_code; [| apply encoder_spec].
+  destruct valid_code as [bytes2 [encoder_code _]].
+  eapply utf8_spec_implies_encoder_maps_nth_to_nth in encoder_code as G; [ | apply encoder_spec | apply decoder_spec].
+  destruct G as [n2 [nth2_code nth2_byte]].
+  apply nth_valid_codepoint_invertible in nth_code as [inverse_n _], nth2_code as [inverse_n2 _].
+  rewrite inverse_n in inverse_n2. apply some_injective in inverse_n2.
+  subst. rewrite nth2_byte in nth_byte. apply some_injective in nth_byte.
+  subst. assumption.
+Qed.
+
+Theorem utf8_spec_encoder_decoder_inverse : forall encoder decoder,
     utf8_encoder_spec encoder ->
     utf8_decoder_spec decoder ->
     forall codes bytes codes_suffix,
@@ -324,13 +346,64 @@ Proof.
     destruct IHtail as [codes_tail [decode_bytes3 tail_eq]].
     inversion encode_codes.
     rewrite dec_projects; [|assumption].
-    eapply decode_encode_spec_inverses_for_single in encoder_code; [ | assumption | apply decoder_spec].
+    eapply utf8_spec_encoder_decoder_inverse_single in encoder_code; [ | assumption | apply decoder_spec].
     rewrite encoder_code.
     rewrite decode_bytes3.
     exists ([code] ++ codes_tail). split. reflexivity. inversion tail_eq. subst. reflexivity.
 Qed.
-    
-Theorem encoder_spec_implies_encode_single_equals : forall encoder1 decoder code bytes,
+
+
+Theorem utf8_spec_decoder_project_dual : forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall (xs_big xs ys: unicode_str) bytes bytes_suffix,
+      ((length xs) + (length ys) <= (length xs_big))%nat ->
+      decoder bytes = (xs ++ ys, bytes_suffix) ->
+      (exists bytes1 bytes2,
+          decoder bytes1 = (xs, []) /\ 
+            decoder bytes2 = (ys, bytes_suffix) /\
+            bytes = bytes1 ++ bytes2).
+Proof.
+  intros encoder decoder encoder_spec decoder_spec.
+  induction xs_big; intros xs ys bytes rest length decoder_bytes.
+  - inversion length. destruct xs; destruct ys; try discriminate H0.
+    exists []. exists bytes. repeat split. apply dec_nil. assumption. apply decoder_bytes. 
+  - destruct xs as [| x xs].
+    + exists nil. exists bytes. repeat split. apply dec_nil. assumption. apply decoder_bytes.
+    + 
+      
+Admitted.
+    (* + replace (x :: xs)  *)
+      
+Theorem utf8_spec_decoder_encoder_inverse_strong : forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall (codes_big codes: unicode_str) bytes bytes_suffix,
+      ((length codes) <= (length codes_big))%nat ->
+      decoder bytes = (codes, bytes_suffix) ->
+      exists bytes_prefix, encoder codes = (bytes_prefix, nil) /\ bytes = (bytes_prefix ++ bytes_suffix)%list.
+Proof.
+  intros encoder decoder encoder_spec decoder_spec.
+  induction codes as [| code codes]; intros bytes bytes_suffix length decoder_bytes.
+  - exists []. split. apply enc_nil. assumption. apply dec_output in decoder_bytes.
+    destruct decoder_bytes as [_ [bytes_prefix [decoder_bytes_prefix bytes_eq]]].
+    specialize (decoder_spec_injective decoder decoder_spec [] bytes_prefix []
+                  (dec_nil decoder decoder_spec) decoder_bytes_prefix) as G. subst. reflexivity.
+    assumption.
+  - replace (code :: codes) with ([code] ++ codes) in decoder_bytes |- * by reflexivity.
+    eapply utf8_spec_decoder_project_dual with (xs_big := [code] ++ codes) in decoder_bytes; [| apply encoder_spec | assumption | rewrite length_app; lia].
+    destruct decoder_bytes as [bytes1 [bytes2 [decoder_bytes1 [decoder_bytes2 bytes_eq]]]].
+    eapply utf8_spec_decoder_encoder_inverse_single in decoder_bytes1; [| apply encoder_spec | assumption].
+    apply IHcodes in decoder_bytes2; [|  simpl in length; lia].
+    destruct decoder_bytes2 as [bytes_prefix [encoder_codes bytes2_eq]].
+    rewrite enc_projects; [| assumption].
+    rewrite decoder_bytes1. rewrite encoder_codes.
+    exists (bytes1 ++ bytes_prefix).
+    split. reflexivity. inversion bytes2_eq. inversion bytes_eq. subst.
+    rewrite app_assoc. reflexivity.
+Qed.
+
+Theorem utf8_spec_encoder_unique_single : forall encoder1 decoder code bytes,
     utf8_encoder_spec encoder1 ->
     utf8_decoder_spec decoder ->
     encoder1 [code] = (bytes, nil) ->
@@ -353,7 +426,7 @@ Proof.
   assumption.
 Qed.
    
-Theorem encoder_spec_implies_encoder_equal : forall encoder1 decoder codes bytes rest,
+Theorem utf8_spec_encoder_unique : forall encoder1 decoder codes bytes rest,
     utf8_encoder_spec encoder1 ->
     utf8_decoder_spec decoder ->
     encoder1 codes = (bytes, rest) ->
@@ -395,51 +468,9 @@ Proof.
     destruct H as [bytes3 encoder2_code]. rewrite encoder2_code.
     apply pair_equal_spec; split; auto.
     apply app_inv_tail_iff.
-    specialize (encoder_spec_implies_encode_single_equals encoder1 decoder code bytes1 encoder1_spec decoder_spec encoder1_code encoder2 encoder2_spec) as G. rewrite G in encoder2_code. inversion encoder2_code.
+    specialize (utf8_spec_encoder_unique_single encoder1 decoder code bytes1 encoder1_spec decoder_spec encoder1_code encoder2 encoder2_spec) as G. rewrite G in encoder2_code. inversion encoder2_code.
     reflexivity.
     all: assumption.
 Qed.
 
-(* Theorem encoder_spec_valid_all_equal : forall encoder1 encoder2, *)
-(*     utf8_encoder_spec encoder1 -> *)
-(*     utf8_encoder_spec encoder2 -> *)
-(*     forall codes bytes codes_suffix, *)
-(*       encoder1 codes = (bytes, codes_suffix) -> *)
-(*       exists codes_prefix, encoder2 codes_prefix = (bytes, nil) /\ codes = (codes_prefix ++ codes_suffix). *)
-(* Proof. *)
-(*   intros encoder1 encoder2 encoder1_spec_compliant encoder2_spec_compliant. *)
-(*   unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_strictly_increasing in encoder1_spec_compliant, encoder2_spec_compliant. *)
-(*   destruct encoder1_spec_compliant as [enc1_implies_valid_utf8_bytes [valid_codepoints_iff_enc1 enc1_strictly_increasing]]. *)
-(*   destruct encoder2_spec_compliant as [enc2_implies_valid_utf8_bytes [valid_codepoints_iff_enc2 enc2_strictly_increasing]]. *)
-(*   intros codes bytes enc1_codes. *)
-(*   assert (exists bytes, encoder1 codes = (bytes, nil)) as codes_valid. { *)
-(*     exists bytes. apply enc1_codes. *)
-(*   } *)
-(*   apply <- valid_codepoints_iff_enc1 in codes_valid. *)
-(*   apply valid_codepoints_iff_enc2 in codes_valid as enc2_codes. *)
-(*   destruct enc2_codes as [bytes2 enc2_codes]. *)
-(*   specialize (enc1_strictly_increasing codes codes bytes bytes nil nil codes_valid codes_valid enc1_codes enc1_codes). *)
-(*   specialize (enc2_strictly_increasing codes codes bytes2 bytes2 nil nil codes_valid codes_valid enc2_codes enc2_codes). *)
-(*   rewrite enc1_strictly_increasing in enc2_strictly_increasing. *)
-  
-(* Admitted. *)
 
-(*   intros encoder decoder encoder_spec_compliant decoder_spec_compliant. *)
-(*   unfold utf8_encoder_spec, encoder_encode_correctly_implies_valid, encoder_encode_valid_codes_correctly, encoder_injective in encoder_spec_compliant. *)
-(*   destruct encoder_spec_compliant as [enc_implies_valid [valid_implies_enc enc_injective]]. *)
-(*   unfold utf8_decoder_spec, decoder_decode_correctly_implies_valid, decoder_decode_valid_utf8_bytes_correctly, decoder_injective in decoder_spec_compliant. *)
-(*   destruct decoder_spec_compliant as [dec_implies_valid [valid_implies_dec dec_injective]]. *)
-(*   split. *)
-(*   - intros codes bytes codes_rest encoder_bytes. *)
-(*     apply enc_implies_valid in encoder_bytes as G. *)
-(*     destruct G as [valid_bytes [codes_prefix [codes_eq encoder_prefix]]]. *)
-(*     apply valid_implies_dec in valid_bytes. *)
-(*     destruct valid_bytes as [codes2 codes2_eq]. *)
-(*     apply dec_implies_valid in codes2_eq as G. *)
-(*     destruct G as [codes2_valid [bytes_prefix [bytes_prefix_eq decode_bytes_prefix]]]. *)
-(*     apply valid_implies_enc in codes2_valid. *)
-(*     destruct codes2_valid as [bytes2 bytes2_enc]. *)
-(*     subst.  *)
-(*     exists codes2. subst. split. apply codes2_eq.  *)
-(*     apply List.app_inv_tail_iff. *)
-        
