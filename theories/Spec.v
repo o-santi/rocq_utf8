@@ -124,36 +124,26 @@ Record utf8_encoder_spec encoder := {
     enc_projects : encoder_projects encoder;
   }.
 
-Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 codes1 codes2,
-    decoder bytes1 = (codes1, nil) ->
-    decoder bytes2 = (codes2, nil) ->
-    codepoints_compare codes1 codes2 = bytes_compare bytes1 bytes2.
-
-Definition decoder_input_correct_iff (decoder: decoder_type) := forall bytes,
-    valid_codepoint_representation bytes <->
-    exists code, decoder bytes = ([code], []).
-
 Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-    decoder bytes = (codes, bytes_suffix) ->
-    (valid_codepoints codes /\
-       (exists bytes_prefix,
-           decoder bytes_prefix = (codes, [])
-           /\ bytes = bytes_prefix ++ bytes_suffix)).
+  decoder bytes = (codes, bytes_suffix) <->
+  exists bytes_prefix,
+    (bytes = bytes_prefix ++ bytes_suffix)
+    /\ (valid_utf8_bytes bytes_prefix)
+    /\ ((bytes_suffix = []) \/ ~ (valid_utf8_bytes bytes_suffix)).
 
-Definition decoder_projects (decoder: decoder_type) := forall xs ys,
-    decoder (xs ++ ys) =
-      match decoder xs with
-      | (codes, []) =>
-          let (codes2, rest) := decoder ys in
-          (codes ++ codes2, rest)
-      | (codes, rest) => (codes, rest ++ ys)
-      end.
+Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes0 bytes1 code0 code1,
+    decoder bytes0 = ([code0], nil) ->
+    decoder bytes1 = ([code1], nil) ->
+    Z.compare code0 code1 = bytes_compare bytes0 bytes1.
 
-Definition decoder_nil (decoder: decoder_type) := decoder nil = (nil, nil).
+Definition decoder_projects (decoder: decoder_type) := forall bytes codes_prefix codes_suffix,
+    decoder bytes = (codes_prefix ++ codes_suffix, []) ->
+    exists bytes_prefix bytes_suffix,
+      (bytes = bytes_prefix ++ bytes_suffix)
+      /\ (decoder bytes_prefix = (codes_prefix, []))
+      /\ (decoder bytes_suffix = (codes_suffix, [])).
 
 Record utf8_decoder_spec decoder := {
-    dec_nil : decoder_nil decoder;
-    dec_input : decoder_input_correct_iff decoder;
     dec_output : decoder_output_correct decoder;
     dec_increasing : decoder_strictly_increasing decoder;
     dec_projects : decoder_projects decoder;
