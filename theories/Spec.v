@@ -2,17 +2,18 @@ From Coq Require Import Lists.List.
 From Coq Require Import Hexadecimal.
 From Coq Require Import ZArith.BinInt.
 Import ListNotations.
-Require Import Utf8.Parser.
 
 Open Scope Z_scope.
 
 Definition codepoint : Type := Z.
+Definition byte : Type := Z.
 
 Definition unicode_str : Type := list codepoint.
-Definition byte_str : Type := list Z.
+Definition byte_str : Type := list byte.
 
 Definition codepoints_compare := List.list_compare Z.compare.
 Definition bytes_compare := List.list_compare Z.compare.
+
 
 Inductive unicode_decode_error :=
 | OverlongEncoding
@@ -125,7 +126,11 @@ Record utf8_encoder_spec encoder := {
   }.
 
 Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-  decoder bytes = (codes, bytes_suffix) <->
+  decoder bytes = (codes, bytes_suffix) ->
+  valid_codepoints codes.
+
+Definition decoder_input_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
+  decoder bytes = (codes, bytes_suffix) ->
   exists bytes_prefix,
     (bytes = bytes_prefix ++ bytes_suffix)
     /\ (valid_utf8_bytes bytes_prefix)
@@ -134,7 +139,7 @@ Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes 
 Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes0 bytes1 code0 code1,
     decoder bytes0 = ([code0], nil) ->
     decoder bytes1 = ([code1], nil) ->
-    Z.compare code0 code1 = bytes_compare bytes0 bytes1.
+    codepoints_compare code0 code1 = bytes_compare bytes0 bytes1.
 
 Definition decoder_projects (decoder: decoder_type) := forall bytes codes_prefix codes_suffix,
     decoder bytes = (codes_prefix ++ codes_suffix, []) ->
@@ -144,6 +149,7 @@ Definition decoder_projects (decoder: decoder_type) := forall bytes codes_prefix
       /\ (decoder bytes_suffix = (codes_suffix, [])).
 
 Record utf8_decoder_spec decoder := {
+    dec_input: decoder_input_correct decoder;
     dec_output : decoder_output_correct decoder;
     dec_increasing : decoder_strictly_increasing decoder;
     dec_projects : decoder_projects decoder;
