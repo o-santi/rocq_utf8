@@ -30,19 +30,19 @@ Assegurar que dada implementação segue as regras de negócio geradas na fase d
 
 Verificação formal de software denomina a área da verificação que oferece diretrizes para raciocinar formalmente sobre um programa, descrevendo axiomas, regras e práticas que permitem construir provas sobre o comportamento desse. Ao estruturar o programa para permitir o raciocínio matemático, torna-se possível atribuir uma semântica a um software, conferindo fortes garantias de corretude, e assegurando-se que esse está conforme as especificações da semântica. Para auxiliar nesse processo, várias ferramentas foram desenvolvidas, como _model checkers_, que tentam gerar provas automaticamente a partir de modelos fornecidos, e provadores de teorema interativos, que permitem o desenvolvedor de elaborar provas sobre programas utilizando linguagens específicas para construí-las.
 
-Por necessitar que programas sejam estruturados de maneira a facilitar o raciocínio lógico, a metodologia da verificação formal dificilmente é aplicada a projetos complexos já existentes, visto que tradicionalmente são feitos com outros objetivos em mente -- facilidade de desenvolvimento, agilidade em desenvolver novas capacidades, velocidade do programa gerado. Além disso, as ferramentas mais poderosas de verificação formal, os provadores de teoremas interativos, utilizam tipos dependentes, que nativamente utilizam linguagens funcionais para sua lógica interna, o que significa que expressar programas imperativos nessas geralmente requer muito mais trabalho. Assim, fica claro que existem certas barreiras para a adoção de métodos formais na indústria.
+Por necessitar que programas sejam estruturados de maneira a facilitar o raciocínio lógico, a metodologia da verificação formal dificilmente é aplicada a projetos complexos já existentes, visto que tradicionalmente são feitos com outros objetivos em mente -- facilidade de desenvolvimento, agilidade em desenvolver novas capacidades, ou até mesmo velocidade do programa gerado. Além disso, as ferramentas mais poderosas de verificação formal, os provadores de teoremas interativos, utilizam tipos dependentes, que nativamente utilizam linguagens funcionais para sua lógica interna, o que significa que expressar programas imperativos nessas geralmente requer muito mais trabalho. Assim, fica claro que existem certas barreiras para a adoção de métodos formais na indústria.
 
-O objetivo desse trabalho é, portanto, documentar os benefícios, bem como as dificuldades, da aplicação desses métodos a problemas suficientemente complexos, de forma a confirmar ou refutar o estigma existente na adoção da verificação formal. Em particular, o problema da codificação e decodificação de caracteres Unicode fora escolhido pela sua difusão em praticamente todos os contextos e linguagens de programação.
+O objetivo deste trabalho é, portanto, documentar os benefícios, bem como as dificuldades, da aplicação desses métodos a problemas suficientemente complexos, de forma a confirmar ou refutar o estigma existente na adoção da verificação formal. Em particular, o problema da codificação e decodificação de caracteres em UTF-8 fora escolhido pela sua difusão em praticamente todos os contextos e linguagens de programação.
 
-O padrão Unicode de representação de caracteres é ubíquito na comunicação na internet, e seu principal formato de codificação e decodificação, UTF-8, é utilizado em mais de 98% das páginas web (@Utf8Usage2025). Apesar disso, inúmeras CVEs estão associadas a programas que tratam UTF-8 incorretamente, especialmente por não implementarem totalmente a especificação, visto que muitos casos incomuns podem acabar sendo esquecidos.
+O padrão Unicode (@unicode) de representação de caracteres é ubíquito na comunicação na internet, e seu principal formato de codificação e decodificação, UTF-8, é utilizado em mais de 98% das páginas web (@Utf8Usage2025). Apesar disso, inúmeras CVEs estão associadas a programas que tratam UTF-8 incorretamente, especialmente por não implementarem totalmente a especificação, visto que muitos casos incomuns podem acabar sendo esquecidos.
 
 // https://herolab.usd.de/the-security-risks-of-overlong-utf-8-encodings/
 
-As vulnerabilidades CVE-2000-0884 (Microsoft IIS) e CVE-2008-2938 (APACHE Tomcat) estão diretamente associadas à má gestão de input ao ler caracteres UTF-8, permitindo ao atacante de ler arquivos em caminhos fora do inicialmente permitido (ataque conhecido como _directory traversal_). A CVE-2004-2579 (Novell iChain) está associada a um ataque que utiliza representações ilegais de caracteres de escape em UTF-8 para ultrapassar regras de controle. Além disso, o leitor de UTF-8 da linguagem PHP em versões mais antigas não tratava corretamente casos especiais desse sistema, tornando possível injeções de SQL (CVE-2009-4142), _cross site scripting_ (CVE-2010-3870), e _integer overflows_ (CVE-2009-5016).
+As vulnerabilidades CVE-2000-0884 (Microsoft IIS) e CVE-2008-2938 (APACHE Tomcat) estão diretamente associadas à má gestão de input ao ler caracteres UTF-8, permitindo ao atacante de ler arquivos em caminhos fora do inicialmente permitido (ataque conhecido como _directory traversal_). A CVE-2004-2579 (Novell iChain) está associada a um ataque que utiliza representações ilegais de caracteres de escape em UTF-8 para ultrapassar regras de controle. Além disso, o leitor de UTF-8 da linguagem PHP em versões mais antigas não tratava corretamente casos especiais desse sistema, tornando possível injeções de SQL (CVE-2009-4142), _cross site scripting_ (CVE-2010-3870), e _integer overflows_ (CVE-2009-5016). Dessa forma, fica claro que a formalização formal como forma de assegurar corretude e segurança é uma ferramenta valiosa.
 
 Este trabalho é estruturado nas seguintes seções:
-1. Na seção 2, a história por trás do sistema Unicode será revista, com o objetivo de motivar a estruturação atual dos sistemas de codificação UTF-8, UTF-16 e UTF-32, bem como algumas de suas limitações. 
-2. Na seção 3, será inspecionada a literatura existente, tanto sobre a especificação do Unicode quanto sobre abordagens e metodologias tradicionais de provar formalmente a corretude de codificadores e decodificadores de linguagens.
+1. Na seção 2, a história por trás do sistema Unicode será revista, com o objetivo de motivar a estruturação atual dos sistemas de codificação UTF-8, UTF-16 e UTF-32, bem como algumas de suas propriedades e  limitações. 
+2. Na seção 3, será inspecionada a literatura existente, tanto especificações existentes do Unicode quanto sobre abordagens e metodologias tradicionais de provar formalmente a corretude de codificadores e decodificadores de linguagens.
 3. Na seção 4, será elaborado um conjunto de regras formais que um codificador e decodificador, denominado de *especificação*, e serão provados teoremas que fundamentam a corretude desse.
 4. Na seção 5, serão desenvolvidos implementações práticas de um codificador e decodificador UTF-8, levando em consideração fatores como simplicidade, utilidade e eficiência, de maneira similar a como são implementados em linguagens "imperativas".
 5. Na seção 6, serão dadas as considerações finais, bem como aplicações naturais desse trabalho para cenários práticos.
@@ -54,21 +54,23 @@ Este trabalho é estruturado nas seguintes seções:
 // https://tonsky.me/blog/unicode/
 // https://www.joelonsoftware.com/2003/10/08/the-absolute-minimum-every-software-developer-absolutely-positively-must-know-about-unicode-and-character-sets-no-excuses
 
-Sistemas de codificação são padrões criados para transformar caracteres em números, como `A`=$65$, `Ã`=$195$ e `語`=$35486$, e posteriormente serializá-los em mensagens para enviá-los a outras pessoas. Unicode é o padrão mais utilizado hoje em dia por permitir codificar caracteres de praticamente todas as linguagens existentes de modo integrado, removendo a necessidade de utilizar outros sistemas de codificação. Para entender seu design e funcionamento, faz-se necessário entender como funcionavam os seus antecessores.
+Sistemas de codificação são padrões criados para transformar caracteres em números, como `A`=$65$, `Ã`=$195$ e `語`=$35486$, e posteriormente serializá-los em mensagens para enviá-los a outras pessoas. O padrão Unicode é o sistema de representação de caracteres mais utilizado mundialmente hoje em dia, por objetivar incluir todas as linguagens existentes de maneira integrado. O padrão define 3 esquemas de codificação distintos para transformar caracteres Unicode em sequências de bits: UTF-8, UTF-16 e UTF-32. Para entender o design e funcionamento desses, faz-se necessário entender como funcionavam os antecessores.
 
-#quote(block: true, [Definição: _*code point*_ (ou *valor escalar*) é o nome dado à representação numérica de um caractere. No formato Unicode, é comum representá-los no formato `U+ABCDEF`, onde `ABCDEF` armazena o número do _code point_ em hexadecimal. No caso em que o número é menor ou igual a `65535` (`xFFFF`), é tradicional omitir os zeros mais significativos. ])
+#quote(block: true, [Definição: _*code point*_ (ou *valor escalar*) é o nome dado à representação numérica de um caractere. No formato Unicode, é comum representá-los no formato `U+ABCDEF`, onde `ABCDEF` armazena o número do _code point_ em hexadecimal. ])
 
-Sem dúvidas o sistema de codificação mais influente da história, e precursor de quase todos que vieram a seguir é o ASCII. Criado para servir as necessidades da indústria americana de _teleprinters_, o ASCII define apenas 127 caracteres, focando principalmente em reduzir a quantidade de bits necessários para enviar uma mensagem, de forma que todo caracter pode ser expresso utilizando apenas 7 bits.
+#quote(block: true, [Definição: um *codificador* é um programa que recebe valores escalares e transforma-os sequências de bits, e um *decodificador* é um programa que le sequências de bits e transforma-os de volta em valores unitários. ])
 
-Com a evolução dos computadores, e a consolidação de um byte como 8 bits, muitos sistemas de codificação surgiram mantendo os primeiros 127 caracteres iguais a ASCII, e adicionando 128 caracteres no final, utilizando o último bit previamente ignorado. Esses foram criandos primariamente para adicionar suporte à caracteres especificos de cada linguagem, como `Ã`, `ç`, e `€`, de modo a manter compatibilidade com o ASCII, e ficaram conhecidos como codificações de ASCII estendido.
+Sem dúvidas o sistema de codificação mais influente da história é o ASCII. Criado para servir as necessidades da indústria americana de _teleprinters_, o ASCII define apenas 127 caracteres, focando principalmente em compactar a quantidade de bits necessários para enviar uma mensagem, de forma que todo caracter pode ser expresso utilizando apenas 7 bits.
+
+Com a evolução dos computadores, e a consolidação de um byte como 8 bits, muitos sistemas de codificação surgiram mantendo os primeiros 127 caracteres iguais a ASCII, e adicionando 128 caracteres no final, utilizando o oitavo bit previamente ignorado. Esses foram criandos primariamente para adicionar suporte à caracteres especificos de cada linguagem, como `Ã`, `ç`, e `€`, de modo a manter compatibilidade com o ASCII, e ficaram conhecidos como codificações de ASCII estendido.
 
 Tanto o ASCII quanto suas extensões utilizam um mapeamento um pra um entre o número dos caracteres e os bits das suas representações, tanto por simplicidade de codificação quanto por eficiência de armazenamento de memória. Programas que decodificam bytes em caracteres nesses sistemas são extremamente simples, e podem ser resumidos a tabelas de conversão direta, conhecidas como _code pages_.
 
-Apesar da simplicidade dos programas, representar um byte por caractere coloca uma severa limitação no número de caracteres que conseguem expressar ($<= 256$), fazendo com que cada linguagem diferente tivesse sua própria maneira distinta de representar seus caracteres, e que muitas vezes era incompatível com as outras. Assim, enviar textos pela internet era uma tarefa extremamente complicada, visto que não era garantido que o usuário que recebe a mensagem teria as tabelas necessárias para decodificá-la corretamente.
+Apesar da simplicidade dos programas, representar um byte por caractere coloca uma severa limitação no número de caracteres que conseguem expressar ($<= 256$), fazendo com que cada linguagem diferente tivesse sua própria maneira distinta de representar seus caracteres, e que muitas vezes era incompatível com as outras. Assim, enviar textos pela internet era uma tarefa complicada, visto que não era garantido que o usuário que recebe a mensagem teria as tabelas necessárias para decodificá-la corretamente.
 
 Para piorar a situação, linguagens baseadas em ideogramas, como japonês, coreano e chinês possuem milhares de caracteres, e codificá-las em apenas um byte é impossível. Tais linguagens foram pioneiras em encodings multi-bytes, em que um caractere é transformado em mais de um byte, tornando a codificação e decodificação significativamente mais complexa.
 
-O padrão Unicode fora criado então para que um único sistema de codificação consiga cobrir todas as linguagens, com todos seus caracteres específicos, de forma que qualquer texto escrito em qualquer linguagem possa ser escrito nele. Apesar de extremamente ambicioso, esse sistema rapidamente ganhou adoção mundial, massivamente simplificando a comunicação na internet.
+O padrão Unicode fora criado então para que um único sistema de codificação consiga cobrir todas as linguagens, com todos seus caracteres específicos, de forma que qualquer texto escrito em qualquer linguagem possa ser escrito nele. Apesar de ambicioso, esse sistema rapidamente ganhou adoção mundial, simplificando a comunicação na internet.
 
 == UCS-2 e UTF-16
 
@@ -81,10 +83,10 @@ O padrão Unicode fora criado então para que um único sistema de codificação
 
 Em 1991, a versão 1.0 do Unicode fora lançado pelo consórcio Unicode, com uma codificação de tamanho fixo de 16 bits conhecida por UCS-2 -- _Universal Coding System_ -- capaz de representar 65536 caracteres das mais diversas línguas. Rapidamente, esse sistema ganhou adoção em sistemas de grande relevância, como o sistema de UI Qt (1992), Windows NT 3.1 (1993) e até mesmo linguagens como Java (1995).
 
-Tal quantidade, apesar de muito maior do que os antigos 256, rapidamente provou-se não suficiente para todas as linguagens. Quando isso fora percebido, o sistema UCS-2 já estava em amplo uso, e trocá-lo por outro sistema já não era mais uma tarefa trivial. Assim, para estendê-lo mantendo-o retro compatível, decidiram reservar parte da tabela de caracteres para que dois _code points_ distintos (32 bits) representem um único _code point_, isto é, pares de caracteres, denominados _surrogate pairs_, representando um único caractere. Dessa forma, o sistema deixou de ter um tamanho fixo de 16 bits, e passou a ter um tamanho variável, dependendo de quais _code points_ são codificados.
+Tal quantidade, apesar de muito maior do que os antigos 256, rapidamente provou-se não suficiente para todas as linguagens. Quando isso fora percebido, o sistema UCS-2 já estava em amplo uso, e trocá-lo por outro sistema já não era mais uma tarefa trivial. Assim, para estendê-lo mantendo-o retro compatível, decidiram reservar parte da tabela de caracteres para que dois caracteres distintos (32 bits) representem um único _code point_. Dessa forma, o sistema deixou de ter um tamanho fixo de 16 bits, e passou a ter um tamanho variável, dependendo de quais _code points_ são codificados.
 
 // https://en.wikipedia.org/wiki/UTF-16
-O padrão UCS-2 estendido com _surrogate pairs_ tornou-se oficialmente o padrão UTF-16 (_Unicode Translation Format_) na versão 2.0 do Unicode. Desde então, o uso do UCS-2 é desencorajado, visto que UTF-16 é considerado uma extensão em todos os aspectos a ele. Hoje em dia, na versão 16.0 do padrão Unicode, 294645 _code points_ já foram definidos, muito além da projeção inicial de 65536.
+O padrão UCS-2 estendido com _surrogate pairs_ tornou-se oficialmente o padrão UTF-16 (_Unicode Translation Format_) na versão 2.0 do Unicode. Desde então, o uso do UCS-2 é desencorajado, visto que UTF-16 é considerado uma extensão em todos os aspectos a ele. Hoje em dia, na versão 17.0 do padrão Unicode, 297,334 _code points_ já foram definidos, muito além da projeção inicial de 65536.
 
 Para determinar se uma sequência de bytes é válida em UTF-16, faz se necessário determinar se o primeiro byte representa o início de um _surrogate pair_, representado por bytes entre `D800` e `DBFF`, seguido de bytes que representam o fim de um _surrogate pair_, entre `DC00` e `DFFF`. O esquema de serialização pode ser visto da seguinte forma:
 #figure(
@@ -143,7 +145,7 @@ Considerando que um _code point_ precisa de 21 bits para ser armazenado, podemos
     [`U+`#b(`1`)#r(`0`)#g(`0`)#p(`0`)#o(`0`)], [`U+`#m(`1`)#b(`0`)#r(`F`)#g(`F`)#p(`F`)#o(`F`)] , [`11110`#m(`u`)#b(`vv`)], [`10`#b(`vv`)#r(`wwww`)], [`10`#g(`xxxx`)#p(`yy`)], [`10`#p(`yy`)#o(`zzzz`)], "21 bits",
 )), caption: [Distribuição dos bits em bytes UTF-8.]) <UTF8_bits>
 
-É importante notar que os primeiros 127 _code points_ são representados exatamente igual caracteres ASCII (#text(fill:red, "e sistemas extendidos")), algo extremamente desejável não apenas para retro compatibilidade com sistemas antigos, mas para recuperar parte da eficiência de espaço perdida no UTF-16. Diferentemente do UTF-16, o UTF-8 também não possui ambiguidade de _endianness_, e portanto não precisa utilizar o BOM para distinguir; há apenas uma maneira de ordenar os bytes.
+É importante notar que os primeiros 127 _code points_ são representados exatamente igual caracteres ASCII (#text(fill:red, "e sistemas extendidos")), algo extremamente desejável não apenas para compatibilidade com sistemas antigos, mas para recuperar parte da eficiência de espaço perdida no UTF-16. Diferentemente do UTF-16, o UTF-8 também não possui ambiguidade de _endianness_, e portanto não precisa utilizar o BOM para distinguir; há apenas uma maneira de ordenar os bytes.
 
 O UTF-8 ainda precisa manter as limitações do UTF-16. Como _surrogate pairs_ não são mais utilizados para representar _code points_ estendidos, é necessário garantir que bytes do intervalo `D800..DFFF` não apareçam, já que não possuem significado.
 
@@ -227,7 +229,7 @@ Faz-se necessário, portanto, estudar como codificadores e decodificadores são 
 
 @thery2004 formalizou uma implementação do algoritmo de Huffman, frequentemente utilizado em padrões de compressão sem perda de dados. Similarmente @DeflateInCoq2016 construiram uma implementação completa do algoritmo de Deflate, usado em formatos como PNG e GZIP. Para mostrar a corretude, ambos provam a corretude mostrando que o codificador e decodificador são inversos.
 
-@Delaware2019 desenvolveram uma biblioteca em Rocq, _Narcissus_, que permite o usuário de descrever formatos binários de mensagens em uma DSL dentro do provador interativo. A principal contribuição do artigo é utilizar o maquinário nativo de Rocq para derivar tanto as implementações e as provas utilizando táticas -- uma espécie de macro para gerar provas -- de forma que o sistema seja extremamente expressivo. Em casos que a biblioteca não é forte o suficiente para gerar as provas, o usuário é capaz de fornecer provas manualmente escritas para a corretude, de forma a estender as capacidades do sistema.
+@Delaware2019 desenvolveram uma biblioteca em Rocq, _Narcissus_, que permite o usuário de descrever formatos binários de mensagens em uma DSL dentro do provador interativo. A principal contribuição do artigo é utilizar o maquinário nativo de Rocq para derivar tanto as implementações e as provas utilizando macros de forma que o sistema seja extremamente expressivo. Em casos que a biblioteca não é forte o suficiente para gerar as provas, o usuário é capaz de fornecer provas manualmente escritas para a corretude, de forma a estender as capacidades do sistema.
 
 @PulseParse2025 desenvolveram uma biblioteca parecida chamada _PulseParse_ na linguagem F\*, para implementar serializadores e desserializadores para vários formatos: CBOR, um formato binário inspirado em JSON, e CDDL, uma linguagem que especifica formatos estáticos CBOR. Utilizando essa biblioteca, os autores fornecem uma semântica ao CDDL e provam a corretude de programas gerados em cima desse conforme essa semântica.
 
@@ -276,18 +278,27 @@ Inductive comparison : Set :=
 
 A função `list_compare` transforma uma comparação entre elementos de um tipo `T` em uma comparação entre elementos de tipo `list T`, utilizando a semântica de comparação lexicográfica.
 
-Para formalizar a noção de codificador e decodificador, defini-se o que é um _parser_. De modo geral, _parser_ s processam listas de elementos e retornam algum valor. Diz-se que um _parser_
+Para formalizar codificadores e decodificadores, é utilizada a noção de _parser_. De modo geral, _parsers_ processam listas de elementos e retornam algum valor de tipo `A`, e são utilizados quando a transformação pode não funcionar em todos os casos. Assim, é tradicional utilizar alguma estrutura que envolve o resultado `A` em múltiplos casos para representar a falibilidade.
 
-Com essas definições, é possível definir os tipos do codificador -- o _encoder_ -- e do decodificador -- o _decoder_. Ambos são definidos como um _parser_ parcial, isto é, recebem uma lista de `input`, e retornam um par de lista de `output` e lista de `input`. 
-
+O exemplo mais comum dessa estrutura é `option A`, que pode ser tanto `Some` com um valor de tipo `A`, ou `None`, representando que o `parser` falhou em extrair informação da entrada.
 ```coq
-Definition partial_parser (input output: Type) := list input -> (list output * list input).
-
-Definition encoder_type := partial_parser codepoint byte.
-Definition decoder_type := partial_parser byte codepoint.
+Inductive option (A:Type) : Type :=
+  | Some : A -> option A
+  | None : option A.
 ```
 
-A semântica de um _parser_ parcial é de que a lista de `output` representa o resultado de "consumir" o prefixo válido da lista de entrada, enquanto a lista de `input` no resultado representa o sufixo não consumido da lista de entrada. Essa semântica é enforçada como propriedades na especificação, vistas mais a frente.
+Entretanto, o problema dessa definição é que é possível que uma sequência de bytes seja quase inteiramente UTF-8 válida, mas tenha algum erro por corrupção na hora da transmissão. Nesse caso, o `parser` retornaria `None`, e toda informação seria descartada. Ao invés disso, é tradicional que o `parser` tente sempre ler o maior número de bytes o possível do prefixo da entrada, e ao encontrar bytes inválidos, substitua-os pelo caractere '#str.from-unicode(65533)' (`U+FFFD`). Essa prática é tão difundida que o capítulo 3.9.6 do padrão Unicode dá guias gerais sobre como essa substituição deve ser feita.
+
+Este trabalho é restringido à leitura de prefixo válido na entrada, pois especificar a substituição tornaria-o complicado demais. Entretanto, é possível utilizar um _parser_ que lê o prefixo válido como parte de um parser que substitui as partes inválidas, em um trabalho futuro.
+
+Assim, são um _parser_  parcial será um elemento um _parser_ parcial, isto é, recebe uma lista de `input`, e retornam um par de `output` e lista de `input`. A semântica de um _parser_ parcial é de que a lista de `output` representa o resultado de "consumir" o prefixo válido da lista de entrada, enquanto a lista de `input` no resultado representa o sufixo não consumido. Essa semântica é enforçada como propriedades na especificação, vistas mais a frente.
+
+```coq
+Definition partial_parser (input output: Type) := list input -> (output * list input).
+
+Definition encoder_type := partial_parser codepoint (list byte).
+Definition decoder_type := partial_parser byte (list codepoint).
+```
 
 #quote(block: true, [
     *Definição*: É dito que um _parser_ parcial *aceita* a entrada quando todos elementos da lista de entrada são consumidos, ou seja, a parte não consumida do resultado é vazia.
@@ -489,7 +500,7 @@ Theorem utf8_spec_decoder_encoder_inverse_strong : forall encoder decoder,
       exists bytes_prefix, encoder codes = (bytes_prefix, nil) /\ bytes = (bytes_prefix ++ bytes_suffix)%list.
 Proof.
 ```
-Os dois primeiros teoremas descorrem sobre o fato de serem inversos. Por ser um _parser_ parcial, é preciso considerar que nem toda entrada irá ser aceita, e isso é levado em conta da seguinte forma: toda entrada deve necessariamente ter um prefixo UTF-8 válido -- que pode ser a lista vazia, de forma que o prefixo válido deve ser a entrada para o processador dual. Isto é, se `encoder codes = (bytes, codes_suffix)`, então necessariamente deve existir um prefixo de `codes` tal que `decoder bytes = (codes_prefix, [])`, e a propriedade dual é válida para o `decoder`. 
+Os dois primeiros teoremas descorrem sobre o fato de serem inversos. Por ser um _parser_ parcial, é preciso considerar que nem toda entrada irá ser aceita, e isso é levado em conta da seguinte forma: toda entrada deve necessariamente ter um prefixo UTF-8 válido -- que pode ser a lista vazia --  de forma que o prefixo válido deve ser a entrada para o processador dual. Isto é, se `encoder codes = (bytes, codes_suffix)`, então necessariamente deve existir um prefixo de `codes` tal que `decoder bytes = (codes_prefix, [])`, e a propriedade dual é válida para o `decoder`. 
 ```coq
 Theorem utf8_spec_encoder_unique : forall encoder1 decoder codes bytes rest,
     utf8_encoder_spec encoder1 ->
@@ -552,7 +563,7 @@ Record Ordered {T} (compare: T -> T -> comparison) := {
     trans : forall t1 t2 t3 res, compare t1 t2 = res -> compare t2 t3 = res -> compare t1 t3 = res;
   }.
 ```
-Uma prova de que um conjunto `T` é ordenado se existe uma relação de comparação, que é reflexiva, antisimétrica e transitiva. Além disso, é caracterizado a noção de ser "crescente" da seguinte forma:
+Para prova provar que um conjunto `T` é ordenado, basta mostrar que existe uma relação de comparação reflexiva, antisimétrica e transitiva. Além disso, é caracterizada a noção de ser "crescente" da seguinte forma:
 ```coq
 Definition increasing {T1 T2}
   (domain: T1 -> Prop)
@@ -580,7 +591,7 @@ Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop
 
 Um isomorfismo ordenado é um par de funções `from` e `to` que mapeiam entre conjuntos ordenados `T1` e `T2`, de forma que a composição deles dá a identidade. Além disso, é necessário mostrar que ambos formam morfismos entre seu respectivo domínio e imagem, e que pelo menos um deles é `increasing` -- por simplicidade, o `from`.
 
-Assim, é possível mostrar que as funções `nth_valid_codepoint` e `nth_valid_codepoint_representation` juntos de suas respectivas inversas formam isomorfismos ordenados com o conjunto dos inteiros de `0` a `10FFFF - 0x800`. Para utilizar esse fato na prova, é necessário provar o teorema principal de ordenação:
+É possível mostrar que as funções `nth_valid_codepoint` e `nth_valid_codepoint_representation` juntos de suas respectivas inversas formam isomorfismos ordenados com o conjunto dos inteiros de `0` a `10FFFF - 0x800`. Para utilizar esse fato na prova, é necessário provar o teorema principal de ordenação:
 ```coq
 Theorem partial_isomorphism_countable_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 from2 to0 to1 to2,
@@ -594,7 +605,9 @@ Theorem partial_isomorphism_countable_unique {T0 T1} (count: Z) (range0: T0 -> P
   /\ (pointwise_equal range1 from2 (and_then from1 to0)).
 ```
 
-Esse teorema permite provar que compor qualquer morfismo parcial entre `valid_codepoint` e `valid_codepoint_representation` que respeite a ordenação deve necessariamente ser igual (no sentido de `pointwise_equal`) a compor as operações de índice (`nth_valid_codepoint` e `nth_valid_codepoint_representation`). Assim, é possível mostrar que todo encoder e decoder que respeita ordenação deve concordar em todos os valores.
+Esse teorema permite provar que compor qualquer morfismo parcial entre `valid_codepoint` e `valid_codepoint_representation` que respeite a ordenação deve necessariamente ser igual (no sentido de `pointwise_equal`) a compor as operações de índice (`nth_valid_codepoint` e `nth_valid_codepoint_representation`).Com isso, torna-se possível derivar que todo encoder e decoder que respeita ordenação deve concordar em todos os valores.
+
+
 
 #show bibliography: set heading(numbering: "1.")
 #bibliography("references.bib", style: "associacao-brasileira-de-normas-tecnicas")
