@@ -8,26 +8,9 @@ Open Scope Z_scope.
 Definition codepoint : Type := Z.
 Definition byte : Type := Z.
 
-Definition unicode_str : Type := list codepoint.
 Definition byte_str : Type := list byte.
 
-Definition codepoints_compare := List.list_compare Z.compare.
 Definition bytes_compare := List.list_compare Z.compare.
-
-
-Inductive unicode_decode_error :=
-| OverlongEncoding
-| InvalidSurrogatePair
-| CodepointTooBig
-| InvalidContinuationHeader (x: option Byte.byte)
-| InvalidStartHeader (x: option Byte.byte).
-
-Inductive unicode_encode_error :=
-| EncodingCodepointTooBig (c: codepoint)
-| IllegalSurrogatePair (c: codepoint).
-
-Definition encoder_type := unicode_str -> byte_str * unicode_str.
-Definition decoder_type := byte_str -> unicode_str * byte_str.
 
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
   (code <= 0x10ffff).
@@ -38,9 +21,10 @@ Definition codepoint_is_not_surrogate (code: codepoint) : Prop :=
 Definition codepoint_not_negative (code: codepoint): Prop :=
   (code >= 0).
 
-Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code /\ codepoint_not_negative code.
-
-Definition valid_codepoints (codes: list codepoint) := Forall valid_codepoint codes.
+Definition valid_codepoint (code: codepoint) :=
+  codepoint_less_than_10ffff code
+  /\ codepoint_is_not_surrogate code
+  /\ codepoint_not_negative code.
 
 Inductive valid_codepoint_representation : list Z -> Prop :=
 | OneByte (b: Z) :
@@ -84,6 +68,24 @@ Inductive valid_codepoint_representation : list Z -> Prop :=
   0x80 <= b4 <= 0xbf ->
   valid_codepoint_representation [b1; b2; b3; b4].
 
+(* Se a gente considerasse apenas `encode_single : codepoint -> option byte_str`
+   e `decode_single : byte_str -> option codepoint`, morfismos parciais
+   ordenados entre `valid_codepoint` e `valid_codepoint_representation`, ficaria
+   mais tranquilo entender o que está acontecendo. Esses dois sub-ensembles são
+   finitos e têm o mesmo tamanho, o que significa que existe um único
+   isomorfismo parcial ordenado entre eles. A especificação inteira seria dizer
+   que o `encoder_single` mapeia `valid_codepoint` em
+   `valid_codepoint_representation` e `decode_single` faz o oposto. No entanto
+   não é assim... *)
+
+Definition unicode_str : Type := list codepoint.
+
+Definition codepoints_compare : unicode_str -> unicode_str -> comparison :=
+  List.list_compare Z.compare.
+
+Definition valid_codepoints (codes: list codepoint) : Prop :=
+  Forall valid_codepoint codes.
+
 Inductive valid_utf8_bytes: list Z ->  Prop :=
 | Utf8Nil : valid_utf8_bytes []
 | Utf8Concat (bytes tail: list Z) :
@@ -91,68 +93,113 @@ Inductive valid_utf8_bytes: list Z ->  Prop :=
     valid_utf8_bytes tail ->
     valid_utf8_bytes (bytes ++ tail).
 
-Definition encoder_nil (encoder: encoder_type) := encoder [] = ([], []).
+(* Dando mais um passo em direção a especificação completa precisamos considerar
+   encode_simple : unicode_str -> option byte_str
+   decode_simple : byte_str -> option unicode_str
+   que tencionam mapear valid_codepoints em valid_utf8_bytes e vice-versa. Agora
+   não podemos simplemente falar que este é um isomorfismo parcial ordenado.
+   Precisamos falar que `encode_simple` é um morfismo de monoides e que o
+   `decode_simple` é o conceito dual. Para que consigamos retornar ao nível de
+   abstração anterior vamos usar o fato de que `valid_codepoint_representation`
+   é um código prefixo. *)
 
-Definition encoder_input_correct_iff (encoder: encoder_type) := forall code,
-    valid_codepoint code <->
-    exists bytes, encoder [code] = (bytes, []).
+Definition encoder_type := unicode_str -> byte_str * unicode_str.
+Definition decoder_type := byte_str -> unicode_str * byte_str.
 
-Definition encoder_output_correct (encoder: encoder_type) := forall code,
-    match encoder [code] with
-    | (bytes, []) => valid_codepoint_representation bytes
-    | (bytes, rest) => bytes = [] /\ rest = [code]
-    end.
+Inductive unicode_decode_error :=
+| OverlongEncoding
+| InvalidSurrogatePair
+| CodepointTooBig
+| InvalidContinuationHeader (x: option Byte.byte)
+| InvalidStartHeader (x: option Byte.byte).
 
-Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2,
-    encoder codes1 = (bytes1, nil) ->
-    encoder codes2 = (bytes2, nil) ->
-    codepoints_compare codes1 codes2 = bytes_compare bytes1 bytes2.
+Inductive unicode_encode_error :=
+| EncodingCodepointTooBig (c: codepoint)
+| IllegalSurrogatePair (c: codepoint).
 
-Definition encoder_projects (encoder: encoder_type) := forall xs ys,
-    encoder (xs ++ ys) =
-      match encoder xs with
-      | (bytes, nil) =>
-          let (bytes2, rest) := encoder ys in
-          (bytes ++ bytes2, rest)
-      | (bytes, rest) => (bytes, rest ++ ys)
-      end.
+Definition prefix {X} (p : list X) (l : list X) :=
+  l = p ++ skipn (length p) l.
+
+Definition no_prefix {X} (valid : list X -> Prop) (l : list X) :=
+  forall (p : list X),
+    prefix p l ->
+    (p = [] \/ ~ (valid p)).
+
+(* Por fim, precisamos dar mais informação sobre o erro que aconteceu no retorno
+   da função. Aqui a ideia é que processamos o máximo possível da input. Ou
+   seja, não é só que o sufixo rejeitado não é válido, todo prefixo não-trivial
+   dos rejeitos é inválido. *)
+
+Definition encoder_error_suffix (encoder: encoder_type) :=
+  forall codes bytes rest,
+    encoder codes = (bytes, rest) ->
+    exists valid_prefix,
+    codes = valid_prefix ++ rest
+    /\ encoder valid_prefix = (bytes, [])
+    /\ no_prefix valid_codepoints rest.
+
+(* `valid_codepoints code` se e somente se rest = [] *)
+
+Definition encoder_monoid_morphism (encoder : encoder_type) :=
+  forall codes0 codes1 bytes0 bytes1,
+    encoder codes0 = (bytes0, []) ->
+    encoder codes1 = (bytes1, []) ->
+    encoder (codes0 ++ codes1)
+    = (bytes0 ++ bytes1, []).
+
+Definition encoder_output_single (encoder : encoder_type) :=
+  forall code bytes,
+    valid_codepoint code ->
+    encoder [code] = (bytes, []) ->
+    valid_codepoint_representation bytes.
+
+Definition encoder_strictly_increasing (encoder: encoder_type) :=
+  forall code0 code1 bytes0 bytes1,
+    encoder [code0] = (bytes0, []) ->
+    encoder [code1] = (bytes1, []) ->
+    Z.compare code0 code1 = bytes_compare bytes0 bytes1.
 
 Record utf8_encoder_spec encoder := {
-    enc_nil : encoder_nil encoder;
+    enc_error : encoder_error_suffix encoder;
+    enc_morphism : encoder_monoid_morphism encoder;
+    enc_output : encoder_output_single encoder;
     enc_increasing : encoder_strictly_increasing encoder;
-    enc_input : encoder_input_correct_iff encoder;
-    enc_output : encoder_output_correct encoder;
-    enc_projects : encoder_projects encoder;
   }.
 
-Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-  decoder bytes = (codes, bytes_suffix) ->
-  valid_codepoints codes.
+Definition decoder_error_suffix (decoder : decoder_type) :=
+  forall bytes codes rest,
+    decoder bytes = (codes, rest) ->
+    exists valid_prefix,
+    bytes = valid_prefix ++ rest
+    /\ decoder valid_prefix = (codes, [])
+    /\ no_prefix valid_utf8_bytes rest.
 
-Definition decoder_input_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-  decoder bytes = (codes, bytes_suffix) ->
-  exists bytes_prefix,
-    (bytes = bytes_prefix ++ bytes_suffix)
-    /\ (valid_utf8_bytes bytes_prefix)
-    /\ ((bytes_suffix = []) \/ ~ (valid_utf8_bytes bytes_suffix)).
-
-Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes0 bytes1 code0 code1,
-    decoder bytes0 = ([code0], nil) ->
-    decoder bytes1 = ([code1], nil) ->
-    codepoints_compare code0 code1 = bytes_compare bytes0 bytes1.
-
-Definition decoder_projects (decoder: decoder_type) := forall bytes codes_prefix codes_suffix,
+Definition decoder_comonoid_morphism (decoder : decoder_type) :=
+  forall bytes codes_prefix codes_suffix,
     decoder bytes = (codes_prefix ++ codes_suffix, []) ->
     exists bytes_prefix bytes_suffix,
       (bytes = bytes_prefix ++ bytes_suffix)
       /\ (decoder bytes_prefix = (codes_prefix, []))
       /\ (decoder bytes_suffix = (codes_suffix, [])).
 
+Definition decoder_output_single (decoder : decoder_type) :=
+  forall bytes,
+  valid_codepoint_representation bytes ->
+  exists code,
+    decoder bytes = ([code], [])
+    /\ valid_codepoint code.
+
+Definition decoder_strictly_increasing (decoder : decoder_type) :=
+  forall bytes0 bytes1 code0 code1,
+    decoder bytes0 = ([code0], nil) ->
+    decoder bytes1 = ([code1], nil) ->
+    bytes_compare bytes0 bytes1 = Z.compare code0 code1.
+
 Record utf8_decoder_spec decoder := {
-    dec_input: decoder_input_correct decoder;
-    dec_output : decoder_output_correct decoder;
+    dec_error : decoder_error_suffix decoder;
+    dec_morphism : decoder_comonoid_morphism decoder;
+    dec_output : decoder_output_single decoder;
     dec_increasing : decoder_strictly_increasing decoder;
-    dec_projects : decoder_projects decoder;
   }.
 
 Record utf8_spec encoder decoder := {

@@ -138,7 +138,7 @@ Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop
 
 (* TODO: the inverse function is unique in the sense of pointwise_equal *)
 
-Theorem partial_isomorphism_countable_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
+Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 from2 to0 to1 to2,
     OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
     OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 to1 from1 ->
