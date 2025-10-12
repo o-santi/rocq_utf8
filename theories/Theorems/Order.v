@@ -793,19 +793,23 @@ Definition inverse_nth_valid_codepoint_representation (bytes: byte_str) : option
         Some ((b1 mod 64) * 64 + (b2 mod 64))
       else None
   | [b1; b2; b3] =>
-      let fst := andb (andb (b1 =? 0xed) (between b2 0x80 0x9f)) (between b3 0x80 0xbf) in
-      let snd := andb (andb (b1 =? 0xe0) (between b2 0xa0 0xbf)) (between b3 0x80 0xbf) in
-      let trd := andb (andb (between b1 0xe1 0xec) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      let fst := andb (andb (b1 =? 0xe0) (between b2 0xa0 0xbf)) (between b3 0x80 0xbf) in
+      let snd := andb (andb (between b1 0xe1 0xec) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      let trd := andb (andb (b1 =? 0xed) (between b2 0x80 0x9f)) (between b3 0x80 0xbf) in
       let frth := andb (andb (between b1 0xee 0xef) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
-      if orb (orb (orb fst snd) trd) frth then
-        Some (((b1 - 224) * 4096) + (b2 mod 64) * 64 + (b3 mod 64))
-      else None
+      let n := ((b1 - 224) * 64 * 64) + (b2 mod 64) * 64 + (b3 mod 64) in
+      if orb (orb fst snd) trd then
+        Some n
+      else if frth then
+        Some (n - 2048)
+      else 
+        None
   | [b1; b2; b3; b4] =>
       let fst := andb (andb (andb (b1 =? 0xf0) (between b2 0x90 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
-      let snd := andb (andb (andb (between b1 0xf1 0xf3) (between b2 0x90 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      let snd := andb (andb (andb (between b1 0xf1 0xf3) (between b2 0x80 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
       let trd := andb (andb (andb (b1 =? 0xf4) (between b2 0x80 0x8f)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
       if orb (orb fst snd) trd then
-        Some ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64))
+        Some ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64) - 0x800)
       else None
   | _ => None
   end.
@@ -875,33 +879,72 @@ Proof.
     specialize (Z.div_small_iff n (64 * 64) ltac:(lia)) as [G1 G2].
     rewrite Z.div_div in b1eq.
     apply G1 in b1eq. destruct b1eq. all: lia.
-  - crush_comparisons; try discriminate; try lia;
-      match goal with | [|- (if ?cond then _ else _) = _] => replace cond with true by lia end;
+  - crush_comparisons; try discriminate; try lia; 
+      repeat match goal with
+      | [|- (if ?cond then _ else _) = _] =>
+          let c := fresh "Cond" in  
+          destruct cond eqn:c end; try lia;
       apply some_injective in bytes_nth;
       apply list_equals_3 in bytes_nth; destruct bytes_nth as [b1eq [b2eq b3eq]];
-      rewrite <- some_injective; destruct H; rewrite <- b1eq, <- b2eq, <- b3eq.
+      rewrite <- b1eq, <- b2eq, <- b3eq.
     + replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
-      replace ((128 + (n / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
-      replace ((128 + n mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
       specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod.
-      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
-    + replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
-      replace ((128 + (n / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
-      replace ((128 + n mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
-      specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod.
-      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
-    + replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) by lia.
-      replace ((128 + ((n + 2048) / 64) mod 64) mod 64) with ((n + 2048) / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
-      replace ((128 + (n + 2048) mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).  
-      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod. 
-      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia. 
-    + apply (f_equal (fun c => c - 224)) in b1eq.
-      replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) in b1eq |- * by lia.
-      (* apply Zdiv.Z_div_le with (c:= 64 * 64) in less_than_eq1; try lia. *)
-      (* rewrite Z.div_div in b1eq |-; try lia. *)
-      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod. 
-      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod.
-      admit.
+      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2.
+      rewrite div_mod2 in div_mod.
+      rewrite <- some_injective. 
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; lia.
+    + destruct H. lia. 
+      replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+      apply Z.lt_le_incl in less_than0.
+      specialize (Zdiv.Z_div_le n 55296 (64 * 64) ltac:(lia) less_than0) as G. 
+      vm_compute (55296 / (64*64)) in G.
+      destruct H. rewrite <- b1eq in H.
+      rewrite Z.div_div in H; lia.
+    + destruct H.
+      ++ destruct H as [H H2].
+         rewrite <- b1eq in H,H2.
+         specialize (Zdiv.Z_div_le (n + 2048) 65535 (64 * 64) ltac:(lia) less_than_eq1) as G.
+         apply Z.nlt_ge in less_than0.
+         specialize (Zorder.Zplus_le_compat_r 55296 n 2048 less_than0) as G1.
+         specialize (Zdiv.Z_div_le (55296 + 2048) (n + 2048) (64 * 64) ltac:(lia) G1) as G2.
+         vm_compute ((55296 + 2048) / (64 * 64)) in G2.
+         rewrite Z.div_div in H,H2; lia.
+      ++ lia.
+    + destruct H.
+      ++ destruct H as [H H2].
+         rewrite <- b1eq in H,H2.
+         specialize (Zdiv.Z_div_le (n + 2048) 65535 (64 * 64) ltac:(lia) less_than_eq1) as G.
+         apply Z.nlt_ge in less_than0.
+         specialize (Zorder.Zplus_le_compat_r 55296 n 2048 less_than0) as G1.
+         specialize (Zdiv.Z_div_le (55296 + 2048) (n + 2048) (64 * 64) ltac:(lia) G1) as G2.
+         vm_compute ((55296 + 2048) / (64 * 64)) in G2.
+         rewrite Z.div_div in H,H2; lia.
+      ++ clear Cond. clear Cond0. rewrite <- some_injective. 
+         specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod.
+         specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2.
+         rewrite div_mod2 in div_mod.
+         replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) by lia.
+         rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+         rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+         rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+         rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+  - crush_comparisons; try discriminate; try lia; 
+      repeat match goal with
+      | [|- (if ?cond then _ else _) = _] =>
+          let c := fresh "Cond" in  
+          destruct cond eqn:c end; try lia;
+      apply some_injective in bytes_nth;
+      apply list_equals_3 in bytes_nth; destruct bytes_nth as [b1eq [b2eq b3eq]];
+      rewrite <- b1eq, <- b2eq, <- b3eq.
+    + subst. clear Cond. rewrite <- some_injective. rewrite H.
+      
 Admitted.
 
 
