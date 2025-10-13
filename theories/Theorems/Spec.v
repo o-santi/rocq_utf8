@@ -3,7 +3,6 @@ From Coq Require Import Lia.
 From Coq Require Import Lists.List. Import ListNotations.
 From Coq Require Import ZArith.BinInt.
 
-Require Import Utf8.Parser.
 Require Import Utf8.Spec.
 Require Import Utf8.Theorems.Enumerations.
 Require Import Utf8.Theorems.Order.
