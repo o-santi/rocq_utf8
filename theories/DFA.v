@@ -132,8 +132,3 @@ Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsi
 
 Definition utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
   utf8_dfa_decode_rec bytes 0x00 Initial nil.
-
-From Coq Require Import List.
-Import ListNotations.
-
-Compute (utf8_dfa_decode [0xe0; 0xbf; 0xbf; 0x8f]).
