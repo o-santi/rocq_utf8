@@ -1,7 +1,48 @@
 From Coq Require Import ZArith.BinInt.
+From Coq Require Import Lists.List.
+Import ListNotations.
 
 Require Import Utf8.Spec.
-From Coq Require Import Lia.
+
+(* The definition of UTF-8 prohibits encoding character numbers between *)
+(* U+D800 and U+DFFF and characters bigger than U+10FFFF*)
+Definition utf8_encode_codepoint (n: codepoint) : @option (list byte) :=
+  if (n <? 0) then
+    None
+  else if (n <=? 127) then
+    Some [ n ]
+  else if (n <=? 0x7ff) then
+    let b1 := n / 64 in
+    let b2 := n mod 64 in
+    Some [ 192 + b1; 128 + b2]
+  else if (n <? 0xffff) then
+    let r := n / 64 in
+    let b1 := r / 64 in
+    let b2 := r mod 64 in
+    let b3 := n mod 64 in
+    Some [ 224 + b1; 128 + b2; 128 + b3]
+  else if (n <=? 0x10ffff) then
+    let r1 := n / 64 in
+    let r2 := r1 / 64 in
+    let b1 := r2 / 64 in
+    let b2 := r2 mod 64 in
+    let b3 := r1 mod 64 in
+    let b4 := n mod 64 in
+    Some [ 240 + b1; 128 + b2; 128 + b3; 128 + b4]
+  else
+    None.
+
+Fixpoint utf8_encode (unicode: unicode_str) : (list byte) * (list codepoint) :=
+  match unicode with
+  | [] => ([], [])
+  | code :: unicode_rest =>
+      match utf8_encode_codepoint code with
+      | None => ([], code :: unicode_rest)
+      | Some bytes => 
+          let (bytes_rest, unicode_rest) := utf8_encode unicode_rest in
+          (bytes ++ bytes_rest, unicode_rest)
+      end
+  end.
 
 (* An implementation of the fast and efficient UTF8 decoding DFA *)
 (* presented in the following post: *)
@@ -126,7 +167,7 @@ Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsi
           (cons codep vals, rest)
       | Some (More state codep) =>
           utf8_dfa_decode_rec rest codep state (b :: consumed)
-      | None => (nil, consumed ++ bytes)
+      | None => (nil, app consumed bytes)
       end
   end.
 
