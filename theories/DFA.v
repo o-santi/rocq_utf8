@@ -1,13 +1,7 @@
-From Coq Require Import Strings.Byte.
+From Coq Require Import ZArith.BinInt.
 
 Require Import Utf8.Spec.
-Require Import Utf8.Parser.
 From Coq Require Import Lia.
-
-Local Notation "0" := false.
-Local Notation "1" := true.
-Definition zero_codep : codepoint := (0, b4_zero, b4_zero, b4_zero, b4_zero, b4_zero).
-
 
 (* An implementation of the fast and efficient UTF8 decoding DFA *)
 (* presented in the following post: *)
@@ -23,81 +17,123 @@ Inductive parsing_state :=
 | Expecting_3_90_BF
 | Expecting_3_80_8F.
 
+Inductive byte_range :=
+| Range_00_7F 
+| Range_80_8F
+| Range_90_9F
+| Range_A0_BF
+| Range_C2_DF
+| Byte_E0      
+| Range_E1_EC
+| Byte_ED
+| Range_EE_EF
+| Byte_F0
+| Range_F1_F3
+| Byte_F4
+.
+
+Definition push_bottom_bits (carry: codepoint) (b: byte): codepoint :=
+  carry * 64 + (b mod 64).
+
+Definition extract_7_bits (b: byte) : codepoint :=
+  b mod 128.
+
+Definition extract_5_bits (b: byte) : codepoint :=
+  b mod 32.
+
+Definition extract_4_bits (b: byte) : codepoint :=
+  b mod 16.
+
+Definition extract_3_bits (b: byte) : codepoint :=
+  b mod 8.
+
+Definition byte_range_dec (b: byte) : option byte_range :=
+  if b <? 0 then
+    None
+  else if b <=? 0x7f then
+    Some Range_00_7F
+  else if b <=? 0x8f then
+    Some Range_80_8F
+  else if b <=? 0x9f then
+    Some Range_90_9F
+  else if b <=? 0xbf then
+    Some Range_A0_BF
+  else if b <=? 0xc1 then
+    None
+  else if b <=? 0xdf then
+    Some Range_C2_DF
+  else if b  =? 0xe0 then
+    Some Byte_E0
+  else if b <=? 0xec then
+    Some Range_E1_EC
+  else if b  =? 0xe then
+    Some Byte_ED
+  else if b <=? 0xef then
+    Some Range_EE_EF
+  else if b  =? 0xf0 then
+    Some Byte_F0
+  else if b <=? 0xf3 then
+    Some Range_F1_F3
+  else if b  =? 0xf4 then
+    Some Byte_F4
+  else
+    None.
+
 Inductive parsing_result :=
   Finished (codep: codepoint)
 | More (state: parsing_state) (acc: codepoint).
 
-Definition push_bottom_bits (carry: codepoint) (b: byte): codepoint :=
-  let '(_, _, (_, b1, b2, b3), (b4, b5, b6, b7), (b8, b9, b10, b11), (b12, b13, b14, b15)) := carry in
-  let '(b21, (b20, (b19, (b18, (b17, (b16, (h1, h2))))))) := Byte.to_bits b in
-  (b1, (b2, b3, b4, b5), (b6, b7, b8, b9), (b10, b11, b12, b13), (b14, b15, b16, b17), (b18, b19, b20, b21)).
-
-Definition extract_7_bits (b: byte) : codepoint :=
-  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
-  (0, b4_zero, b4_zero, b4_zero, (0, b7, b6, b5), (b4, b3, b2, b1)).
-
-Definition extract_5_bits (b: byte) : codepoint :=
-  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
-  (0, b4_zero, b4_zero, b4_zero, (0, 0, 0, b5), (b4, b3, b2, b1)).
-
-Definition extract_4_bits (b: byte) : codepoint :=
-  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
-  (0, b4_zero, b4_zero, b4_zero, b4_zero, (b4, b3, b2, b1)).
-
-Definition extract_3_bits (b: byte) : codepoint :=
-  let '(b1, (b2, (b3, (b4, (b5, (b6, (b7, b8))))))) := Byte.to_bits b in
-  (0, b4_zero, b4_zero, b4_zero, b4_zero, (0, b3, b2, b1)).
-
-Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @result parsing_result unicode_decode_error :=
-  match (state, byte_range b) with
-  | (Initial, Range_00_7F) => Ok (Finished (extract_7_bits b))
-  | (Initial, Range_C2_DF) => Ok (More Expecting_1_80_BF (extract_5_bits b))
-  | (Initial, Byte_E0)     => Ok (More Expecting_2_A0_BF (extract_4_bits b))
-  | (Initial, Range_E1_EC)
-  | (Initial, Range_EE_EF) => Ok (More Expecting_2_80_BF (extract_4_bits b))
-  | (Initial, Byte_ED)     => Ok (More Expecting_2_80_9F (extract_4_bits b))
-  | (Initial, Byte_F0)     => Ok (More Expecting_3_90_BF (extract_3_bits b))
-  | (Initial, Range_F1_F3) => Ok (More Expecting_3_80_BF (extract_3_bits b))
-  | (Initial, Byte_F4)     => Ok (More Expecting_3_80_8F (extract_3_bits b))
-  | (Initial, _) => Err (InvalidStartHeader (Some b))
-  | (Expecting_1_80_BF, Range_A0_BF)
-  | (Expecting_1_80_BF, Range_90_9F)
-  | (Expecting_1_80_BF, Range_80_8F) => Ok (Finished (push_bottom_bits carry b))
-  | (Expecting_2_80_BF, Range_80_8F)
-  | (Expecting_2_80_BF, Range_90_9F)
-  | (Expecting_2_80_9F, Range_80_8F)
-  | (Expecting_2_80_9F, Range_90_9F)
-  | (Expecting_2_80_BF, Range_A0_BF) => Ok (More Expecting_1_80_BF (push_bottom_bits carry b))
-  | (Expecting_3_80_BF, Range_80_8F)
-  | (Expecting_3_80_BF, Range_90_9F)
-  | (Expecting_3_80_BF, Range_A0_BF)
-  | (Expecting_3_90_BF, Range_90_9F)
-  | (Expecting_3_90_BF, Range_A0_BF)
-  | (Expecting_3_80_8F, Range_80_8F) => Ok (More Expecting_2_80_BF (push_bottom_bits carry b))
-  | (Expecting_2_A0_BF, Range_A0_BF) => Ok (More Expecting_1_80_BF (push_bottom_bits carry b))
-  | (Expecting_3_80_8F, Range_90_9F)
-  | (Expecting_3_80_8F, Range_A0_BF) => Err CodepointTooBig
-  | _ => Err (InvalidContinuationHeader (Some b))
+Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @option parsing_result :=
+  match (state, byte_range_dec b) with
+  | (Initial, Some Range_00_7F) => Some (Finished (extract_7_bits b))
+  | (Initial, Some Range_C2_DF) => Some (More Expecting_1_80_BF (extract_5_bits b))
+  | (Initial, Some Byte_E0)     => Some (More Expecting_2_A0_BF (extract_4_bits b))
+  | (Initial, Some Range_E1_EC)
+  | (Initial, Some Range_EE_EF) => Some (More Expecting_2_80_BF (extract_4_bits b))
+  | (Initial, Some Byte_ED)     => Some (More Expecting_2_80_9F (extract_4_bits b))
+  | (Initial, Some Byte_F0)     => Some (More Expecting_3_90_BF (extract_3_bits b))
+  | (Initial, Some Range_F1_F3) => Some (More Expecting_3_80_BF (extract_3_bits b))
+  | (Initial, Some Byte_F4)     => Some (More Expecting_3_80_8F (extract_3_bits b))
+  | (Initial, _) => None
+  | (Expecting_1_80_BF, Some Range_A0_BF)
+  | (Expecting_1_80_BF, Some Range_90_9F)
+  | (Expecting_1_80_BF, Some Range_80_8F) => Some (Finished (push_bottom_bits carry b))
+  | (Expecting_2_80_BF, Some Range_80_8F)
+  | (Expecting_2_80_BF, Some Range_90_9F)
+  | (Expecting_2_80_9F, Some Range_80_8F)
+  | (Expecting_2_80_9F, Some Range_90_9F)
+  | (Expecting_2_80_BF, Some Range_A0_BF) => Some (More Expecting_1_80_BF (push_bottom_bits carry b))
+  | (Expecting_3_80_BF, Some Range_80_8F)
+  | (Expecting_3_80_BF, Some Range_90_9F)
+  | (Expecting_3_80_BF, Some Range_A0_BF)
+  | (Expecting_3_90_BF, Some Range_90_9F)
+  | (Expecting_3_90_BF, Some Range_A0_BF)
+  | (Expecting_3_80_8F, Some Range_80_8F) => Some (More Expecting_2_80_BF (push_bottom_bits carry b))
+  | (Expecting_2_A0_BF, Some Range_A0_BF) => Some (More Expecting_1_80_BF (push_bottom_bits carry b))
+  | (Expecting_3_80_8F, Some Range_90_9F)
+  | (Expecting_3_80_8F, Some Range_A0_BF) => None
+  | _ => None
   end.
 
-Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state)
-  : @result (unicode_str * (list byte)) unicode_decode_error :=
+Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state) (consumed: list byte)
+  : unicode_str * (list byte) :=
   match bytes with
-  | nil =>
-      match state with
-      | Initial => Ok (nil, nil)
-      | _ => Err (InvalidContinuationHeader None)
-      end 
+  | nil => (nil, nil)
   | cons b rest =>
-      let* next := next_state state carry b in
-      match next with
-      | Finished codep =>
-          let* (vals, rest) := utf8_dfa_decode_rec rest zero_codep Initial in
-          Ok (cons codep vals, rest)
-      | More state codep =>
-          utf8_dfa_decode_rec rest codep state
+      match next_state state carry b with
+      | Some (Finished codep) =>
+          let (vals, rest) := utf8_dfa_decode_rec rest 0x00 Initial nil in
+          (cons codep vals, rest)
+      | Some (More state codep) =>
+          utf8_dfa_decode_rec rest codep state (b :: consumed)
+      | None => (nil, consumed ++ bytes)
       end
   end.
 
-Definition utf8_dfa_decode (bytes: list byte) : @result (unicode_str * (list byte)) unicode_decode_error :=
-  utf8_dfa_decode_rec bytes zero_codep Initial.
+Definition utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
+  utf8_dfa_decode_rec bytes 0x00 Initial nil.
+
+From Coq Require Import List.
+Import ListNotations.
+
+Compute (utf8_dfa_decode [0xe0; 0xbf; 0xbf; 0x8f]).
