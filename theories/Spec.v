@@ -130,6 +130,8 @@ Definition no_prefix {X} (valid : list X -> Prop) (l : list X) :=
    seja, não é só que o sufixo rejeitado não é válido, todo prefixo não-trivial
    dos rejeitos é inválido. *)
 
+Definition valid_prefix (codes : unicode_str) : unicode_str. Admitted.
+
 Definition encoder_error_suffix (encoder: encoder_type) :=
   forall codes bytes rest,
     encoder codes = (bytes, rest) ->
@@ -174,7 +176,7 @@ Definition decoder_error_suffix (decoder : decoder_type) :=
     /\ decoder valid_prefix = (codes, [])
     /\ no_prefix valid_utf8_bytes rest.
 
-Definition decoder_comonoid_morphism (decoder : decoder_type) :=
+Definition decoder_dual_monoid_morphism (decoder : decoder_type) :=
   forall bytes codes_prefix codes_suffix,
     decoder bytes = (codes_prefix ++ codes_suffix, []) ->
     exists bytes_prefix bytes_suffix,
@@ -197,7 +199,7 @@ Definition decoder_strictly_increasing (decoder : decoder_type) :=
 
 Record utf8_decoder_spec decoder := {
     dec_error : decoder_error_suffix decoder;
-    dec_morphism : decoder_comonoid_morphism decoder;
+    dec_morphism : decoder_dual_monoid_morphism decoder;
     dec_output : decoder_output_single decoder;
     dec_increasing : decoder_strictly_increasing decoder;
   }.
