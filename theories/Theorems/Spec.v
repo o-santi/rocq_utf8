@@ -16,12 +16,12 @@ Proof.
   rewrite <- app_assoc. apply Utf8Concat. apply H. apply IHvalid_bytes1. apply valid_bytes2.
 Qed.
 
-Lemma list_equals_self_append_implies_nil {T}: forall (list1 list2: list T),
-    list1 = list1 ++ list2 ->
-    list2 = nil.
+Lemma list0_list0_app_list1 {T}: forall (list0 list1: list T),
+    list0 = list0 ++ list1 ->
+    list1 = nil.
 Proof.
   intros.
-  rewrite <- (app_nil_r list1) in H at 1.
+  rewrite <- (app_nil_r list0) in H at 1.
   apply app_inv_head in H. symmetry.
   assumption.
 Qed.
@@ -32,12 +32,96 @@ Lemma encode_nil : forall encoder,
 Proof.
 Admitted.
 
+Lemma prefix_transitive : forall {X} (l0 l1 l2 : list X),
+  prefix l0 l1 ->
+  prefix l1 l2 ->
+  prefix l0 l2.
+Proof.
+Admitted.
+
+Lemma prefix_antisym : forall {X} (l0 l1 : list X),
+  prefix l0 l1 ->
+  prefix l1 l0 ->
+  l0 = l1.
+Proof.
+Admitted.
+
+Lemma prefix_app : forall {X} (l p s : list X),
+  l = p ++ s ->
+  prefix p l.
+Proof.
+Admitted.
+
+Lemma prefix_reflexive : forall {X} (l : list X),
+  prefix l l.
+Proof.
+Admitted.
+
+(*
+Lemma prefix_length : forall {X} (p l : list X),
+  prefix p l ->
+  (length p <= length l)%nat.
+Proof.
+Admitted.
+
+Lemma prefix_not_bigger : forall {X} (p l : list X),
+  (length p > length l)%nat ->
+  ~ (prefix p l).
+Proof.
+  unfold not.
+  intros X p l bound is_prefix.
+  apply prefix_length in is_prefix.
+  lia.
+Qed.
+ *)
+
 Lemma encode_error_unique : forall encoder0 encoder1 codes,
   utf8_encoder_spec encoder0 ->
   utf8_encoder_spec encoder1 ->
   snd (encoder0 codes) = snd (encoder1 codes).
 Proof.
-Admitted.
+  intros encoder0 encoder1 codes encoder0_spec encoder1_spec.
+  generalize
+    (enc_error encoder0 encoder0_spec codes
+      (fst (encoder0 codes)) (snd (encoder0 codes))
+      ltac:(apply surjective_pairing)); intros error0.
+  destruct error0 as [valid_prefix0 [codes_app0 [is_valid0 [maximal0 _]]]].
+  generalize (prefix_app _ _ _ codes_app0); intros is_codes_prefix0.
+  generalize
+    (enc_error encoder1 encoder1_spec codes
+      (fst (encoder1 codes)) (snd (encoder1 codes))
+      ltac:(apply surjective_pairing)); intros error1.
+  destruct error1 as [valid_prefix1 [codes_app1 [is_valid1 [maximal1 _]]]].
+  generalize (prefix_app _ _ _ codes_app1); intros is_codes_prefix1.
+  specialize (maximal0 valid_prefix1 is_codes_prefix1 is_valid1).
+  specialize (maximal1 valid_prefix0 is_codes_prefix0 is_valid0).
+  generalize (prefix_antisym valid_prefix0 valid_prefix1 maximal1 maximal0);
+  intros prefixes_equal.
+  rewrite codes_app0 in codes_app1 at 1.
+  rewrite <- prefixes_equal in codes_app1.
+  apply app_inv_head with (l := valid_prefix0).
+  apply codes_app1.
+Qed.
+
+Lemma encode_valid_codepoints : forall encoder codes,
+  utf8_encoder_spec encoder ->
+  valid_codepoints codes ->
+  snd (encoder codes) = [].
+Proof.
+  intros encoder codes encoder_spec codes_valid.
+  generalize
+    (enc_error encoder encoder_spec codes
+      (fst (encoder codes)) (snd (encoder codes))
+      ltac:(apply surjective_pairing)); intros error.
+  destruct error as [valid_prefix [codes_app [is_valid [maximal _]]]].
+  generalize (prefix_app _ _ _ codes_app); intros is_codes_prefix.
+  specialize (maximal codes (prefix_reflexive codes) codes_valid).
+  generalize (prefix_antisym _ _ maximal is_codes_prefix);
+  intros codes_prefix_equal.
+  rewrite <- codes_prefix_equal in codes_app.
+  apply list0_list0_app_list1 with (list0 := codes).
+  apply codes_app.
+Qed.
 
 Definition encoder_to_option (encoder: encoder_type) code :=
   match encoder [code] with
@@ -85,7 +169,7 @@ Proof.
   specialize (enc_increasing encoder encoder_spec [code1] [code2] bytes1 bytes2 encoder_code1 encoder_code2) as increasing.
   simpl in increasing.
   destruct (code1 ?= code2); assumption.
-   *)
+  *)
 Admitted.
 
 Theorem utf8_spec_encoder_unique_single : forall encoder0 encoder1 code,
@@ -94,17 +178,8 @@ Theorem utf8_spec_encoder_unique_single : forall encoder0 encoder1 code,
     valid_codepoint code ->
     encoder0 [code] = encoder1 [code].
 Proof.
+  (* TODO *)
   (* This is where the magic happens *)
-Admitted.
-
-Lemma encode_extend_uniqueness : forall encoder0 encoder1 codes,
-  utf8_encoder_spec encoder0 ->
-  utf8_encoder_spec encoder1 ->
-  (forall code,
-    valid_codepoint code -> 
-    encoder0 [code] = encoder1 [code]) ->
-  fst (encoder0 codes) = fst (encoder1 codes).
-Proof.
 Admitted.
 
 Theorem utf8_spec_encoder_unique : forall encoder0 encoder1 codes,
@@ -116,10 +191,12 @@ Proof.
   rewrite (surjective_pairing (encoder1 codes)).
   rewrite (surjective_pairing (encoder0 codes)).
   rewrite (encode_error_unique encoder0 encoder1); try assumption.
-  rewrite (encode_extend_uniqueness encoder0 encoder1); try assumption.
-  - reflexivity.
-  - intros code. apply utf8_spec_encoder_unique_single; assumption.
-Qed.
+  assert (fst (encoder0 codes) = fst (encoder1 codes)) as encodings_equal.
+  - generalize (fun code =>
+      (utf8_spec_encoder_unique_single encoder0 encoder1 code encoder0_spec encoder1_spec)); intros.
+      admit. (* TODO *)
+  - rewrite encodings_equal. reflexivity.
+Admitted.
 
 Theorem decoder_decode_valid_bytes : forall decoder,
     utf8_decoder_spec decoder ->
@@ -152,7 +229,6 @@ Definition decoder_to_option (decoder: decoder_type) bytes :=
   | _ => None
   end.
 
-   
 Lemma decoder_partial_morphism : forall decoder,
     utf8_decoder_spec decoder ->
     partial_morphism valid_codepoint_representation valid_codepoint (decoder_to_option decoder).

@@ -136,18 +136,21 @@ Definition encoder_error_suffix (encoder: encoder_type) :=
   forall codes bytes rest,
     encoder codes = (bytes, rest) ->
     exists valid_prefix,
-    codes = valid_prefix ++ rest
-    /\ encoder valid_prefix = (bytes, [])
-    /\ no_prefix valid_codepoints rest.
+      codes = valid_prefix ++ rest
+      /\ valid_codepoints valid_prefix
+      /\ (forall lesser,
+        prefix lesser codes ->
+        valid_codepoints lesser ->
+        prefix lesser valid_prefix)
+      /\ encoder valid_prefix = (bytes, []).
 
 (* `valid_codepoints code` se e somente se rest = [] *)
 
 Definition encoder_monoid_morphism (encoder : encoder_type) :=
-  forall codes0 codes1 bytes0 bytes1,
-    encoder codes0 = (bytes0, []) ->
-    encoder codes1 = (bytes1, []) ->
-    encoder (codes0 ++ codes1)
-    = (bytes0 ++ bytes1, []).
+  forall codes0 codes1,
+    valid_codepoints codes0 ->
+    valid_codepoints codes1 ->
+    fst (encoder (codes0 ++ codes1)) = fst (encoder codes0) ++ fst (encoder codes1).
 
 Definition encoder_output_single (encoder : encoder_type) :=
   forall code bytes,
