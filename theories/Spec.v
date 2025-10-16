@@ -130,19 +130,20 @@ Definition no_prefix {X} (valid : list X -> Prop) (l : list X) :=
    seja, não é só que o sufixo rejeitado não é válido, todo prefixo não-trivial
    dos rejeitos é inválido. *)
 
-Definition valid_prefix (codes : unicode_str) : unicode_str. Admitted.
+Definition maximal_prefix {X} (P : list X -> Prop) (p l : list X) : Prop :=
+  (P p)
+  /\ (forall lesser,
+      prefix lesser l ->
+      P lesser ->
+      prefix lesser p).
 
 Definition encoder_error_suffix (encoder: encoder_type) :=
   forall codes bytes rest,
     encoder codes = (bytes, rest) ->
     exists valid_prefix,
       codes = valid_prefix ++ rest
-      /\ valid_codepoints valid_prefix
-      /\ (forall lesser,
-        prefix lesser codes ->
-        valid_codepoints lesser ->
-        prefix lesser valid_prefix)
-      /\ encoder valid_prefix = (bytes, []).
+      /\ (maximal_prefix valid_codepoints valid_prefix codes)
+      /\ fst (encoder valid_prefix) = bytes.
 
 (* `valid_codepoints code` se e somente se rest = [] *)
 

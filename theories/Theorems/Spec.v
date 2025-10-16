@@ -57,6 +57,12 @@ Lemma prefix_reflexive : forall {X} (l : list X),
 Proof.
 Admitted.
 
+Lemma maximal_prefix_unique : forall {X} (P : list X -> Prop) (p0 p1 l : list X),
+  maximal_prefix P p0 l ->
+  maximal_prefix P p1 l ->
+  p0 = p1.
+Proof.
+Admitted.
 (*
 Lemma prefix_length : forall {X} (p l : list X),
   prefix p l ->
@@ -85,13 +91,13 @@ Proof.
     (enc_error encoder0 encoder0_spec codes
       (fst (encoder0 codes)) (snd (encoder0 codes))
       ltac:(apply surjective_pairing)); intros error0.
-  destruct error0 as [valid_prefix0 [codes_app0 [is_valid0 [maximal0 _]]]].
+  destruct error0 as [valid_prefix0 [codes_app0 [[is_valid0 maximal0] _]]].
   generalize (prefix_app _ _ _ codes_app0); intros is_codes_prefix0.
   generalize
     (enc_error encoder1 encoder1_spec codes
       (fst (encoder1 codes)) (snd (encoder1 codes))
       ltac:(apply surjective_pairing)); intros error1.
-  destruct error1 as [valid_prefix1 [codes_app1 [is_valid1 [maximal1 _]]]].
+  destruct error1 as [valid_prefix1 [codes_app1 [[is_valid1 maximal1] _]]].
   generalize (prefix_app _ _ _ codes_app1); intros is_codes_prefix1.
   specialize (maximal0 valid_prefix1 is_codes_prefix1 is_valid1).
   specialize (maximal1 valid_prefix0 is_codes_prefix0 is_valid0).
@@ -113,7 +119,7 @@ Proof.
     (enc_error encoder encoder_spec codes
       (fst (encoder codes)) (snd (encoder codes))
       ltac:(apply surjective_pairing)); intros error.
-  destruct error as [valid_prefix [codes_app [is_valid [maximal _]]]].
+  destruct error as [valid_prefix [codes_app [[is_valid maximal] _]]].
   generalize (prefix_app _ _ _ codes_app); intros is_codes_prefix.
   specialize (maximal codes (prefix_reflexive codes) codes_valid).
   generalize (prefix_antisym _ _ maximal is_codes_prefix);
@@ -182,6 +188,14 @@ Proof.
   (* This is where the magic happens *)
 Admitted.
 
+Lemma utf8_spec_encoder_unique_valid : forall encoder0 encoder1 codes,
+    utf8_encoder_spec encoder0 ->
+    utf8_encoder_spec encoder1 ->
+    valid_codepoints codes ->
+    fst (encoder0 codes) = fst (encoder1 codes).
+Proof.
+Admitted.
+
 Theorem utf8_spec_encoder_unique : forall encoder0 encoder1 codes,
     utf8_encoder_spec encoder0 ->
     utf8_encoder_spec encoder1 ->
@@ -194,9 +208,27 @@ Proof.
   assert (fst (encoder0 codes) = fst (encoder1 codes)) as encodings_equal.
   - generalize (fun code =>
       (utf8_spec_encoder_unique_single encoder0 encoder1 code encoder0_spec encoder1_spec)); intros.
-      admit. (* TODO *)
+    generalize
+      (enc_error encoder0 encoder0_spec codes
+        (fst (encoder0 codes)) (snd (encoder0 codes))
+        ltac:(apply surjective_pairing));
+      intros [valid_prefix0 [_ [maximal0 fst_equal0]]].
+    generalize
+      (enc_error encoder1 encoder1_spec codes
+        (fst (encoder1 codes)) (snd (encoder1 codes))
+        ltac:(apply surjective_pairing));
+      intros [valid_prefix1 [_ [maximal1 fst_equal1]]].
+    assert (valid_prefix0 = valid_prefix1)
+    by (
+      apply maximal_prefix_unique with (P := valid_codepoints) (l := codes); assumption
+    ); subst valid_prefix1.
+    rewrite <- fst_equal0.
+    rewrite <- fst_equal1.
+    clear - maximal0 encoder0_spec encoder1_spec.
+    destruct maximal0 as [valid _].
+    apply utf8_spec_encoder_unique_valid; assumption.
   - rewrite encodings_equal. reflexivity.
-Admitted.
+Qed.
 
 Theorem decoder_decode_valid_bytes : forall decoder,
     utf8_decoder_spec decoder ->
