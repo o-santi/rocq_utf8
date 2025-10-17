@@ -57,6 +57,16 @@ Lemma prefix_reflexive : forall {X} (l : list X),
 Proof.
 Admitted.
 
+Definition singleton {X Y} (f : list X -> list Y) : X -> list Y :=
+  fun x => f (cons x nil).
+
+Theorem monoid_morphism_classification {X Y} :
+  forall (foo : list X -> list Y),
+    (forall xs ys, foo (xs ++ ys) = (foo xs) ++ (foo ys)) ->
+    forall xs, foo xs = List.concat (List.map (singleton foo) xs).
+Proof.
+Admitted.
+
 Lemma maximal_prefix_unique : forall {X} (P : list X -> Prop) (p0 p1 l : list X),
   maximal_prefix P p0 l ->
   maximal_prefix P p1 l ->
@@ -182,7 +192,7 @@ Theorem utf8_spec_encoder_unique_single : forall encoder0 encoder1 code,
     utf8_encoder_spec encoder0 ->
     utf8_encoder_spec encoder1 ->
     valid_codepoint code ->
-    encoder0 [code] = encoder1 [code].
+    fst (encoder0 [code]) = fst (encoder1 [code]).
 Proof.
   (* TODO *)
   (* This is where the magic happens *)
@@ -194,7 +204,20 @@ Lemma utf8_spec_encoder_unique_valid : forall encoder0 encoder1 codes,
     valid_codepoints codes ->
     fst (encoder0 codes) = fst (encoder1 codes).
 Proof.
-Admitted.
+    intros encoder0 encoder1 codes encoder_spec0 encoder_spec1 codes_valid.
+    induction codes_valid as [| h t h_valid t_valid induction_hypothesis].
+    - rewrite encode_nil; try assumption; simpl.
+      rewrite encode_nil; try assumption.
+      reflexivity.
+    - replace (h :: t) with ([h] ++ t) by reflexivity.
+      assert (valid_codepoints [h]) as h_valid'.
+      apply Forall_cons; try assumption; apply Forall_nil.
+      rewrite (enc_morphism encoder0 encoder_spec0 [h] t); try assumption.
+      rewrite (enc_morphism encoder1 encoder_spec1 [h] t); try assumption.
+      rewrite <- induction_hypothesis.
+      apply f_equal with (f := fun x => x ++ fst (encoder0 t)).
+      apply utf8_spec_encoder_unique_single; assumption.
+Qed.
 
 Theorem utf8_spec_encoder_unique : forall encoder0 encoder1 codes,
     utf8_encoder_spec encoder0 ->
