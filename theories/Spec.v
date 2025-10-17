@@ -130,22 +130,28 @@ Definition no_prefix {X} (valid : list X -> Prop) (l : list X) :=
    seja, não é só que o sufixo rejeitado não é válido, todo prefixo não-trivial
    dos rejeitos é inválido. *)
 
+Definition maximal_prefix {X} (P : list X -> Prop) (p l : list X) : Prop :=
+  (P p)
+  /\ (forall lesser,
+      prefix lesser l ->
+      P lesser ->
+      prefix lesser p).
+
 Definition encoder_error_suffix (encoder: encoder_type) :=
   forall codes bytes rest,
     encoder codes = (bytes, rest) ->
     exists valid_prefix,
-    codes = valid_prefix ++ rest
-    /\ encoder valid_prefix = (bytes, [])
-    /\ no_prefix valid_codepoints rest.
+      codes = valid_prefix ++ rest
+      /\ (maximal_prefix valid_codepoints valid_prefix codes)
+      /\ fst (encoder valid_prefix) = bytes.
 
 (* `valid_codepoints code` se e somente se rest = [] *)
 
 Definition encoder_monoid_morphism (encoder : encoder_type) :=
-  forall codes0 codes1 bytes0 bytes1,
-    encoder codes0 = (bytes0, []) ->
-    encoder codes1 = (bytes1, []) ->
-    encoder (codes0 ++ codes1)
-    = (bytes0 ++ bytes1, []).
+  forall codes0 codes1,
+    valid_codepoints codes0 ->
+    valid_codepoints codes1 ->
+    fst (encoder (codes0 ++ codes1)) = fst (encoder codes0) ++ fst (encoder codes1).
 
 Definition encoder_output_single (encoder : encoder_type) :=
   forall code bytes,
@@ -174,7 +180,7 @@ Definition decoder_error_suffix (decoder : decoder_type) :=
     /\ decoder valid_prefix = (codes, [])
     /\ no_prefix valid_utf8_bytes rest.
 
-Definition decoder_comonoid_morphism (decoder : decoder_type) :=
+Definition decoder_dual_monoid_morphism (decoder : decoder_type) :=
   forall bytes codes_prefix codes_suffix,
     decoder bytes = (codes_prefix ++ codes_suffix, []) ->
     exists bytes_prefix bytes_suffix,
@@ -197,7 +203,7 @@ Definition decoder_strictly_increasing (decoder : decoder_type) :=
 
 Record utf8_decoder_spec decoder := {
     dec_error : decoder_error_suffix decoder;
-    dec_morphism : decoder_comonoid_morphism decoder;
+    dec_morphism : decoder_dual_monoid_morphism decoder;
     dec_output : decoder_output_single decoder;
     dec_increasing : decoder_strictly_increasing decoder;
   }.
