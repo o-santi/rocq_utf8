@@ -1,6 +1,7 @@
 -R theories Utf8
-theories/Parser.v
 theories/Spec.v
+theories/Codec.v
 theories/Theorems/Enumerations.v
 theories/Theorems/Order.v
 theories/Theorems/Spec.v
+theories/Theorems/Codec.v

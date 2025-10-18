@@ -139,7 +139,7 @@ Definition decoder_input_correct (decoder: decoder_type) := forall bytes codes b
 Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes0 bytes1 code0 code1,
     decoder bytes0 = ([code0], nil) ->
     decoder bytes1 = ([code1], nil) ->
-    codepoints_compare code0 code1 = bytes_compare bytes0 bytes1.
+    Z.compare code0 code1 = bytes_compare bytes0 bytes1.
 
 Definition decoder_projects (decoder: decoder_type) := forall bytes codes_prefix codes_suffix,
     decoder bytes = (codes_prefix ++ codes_suffix, []) ->
