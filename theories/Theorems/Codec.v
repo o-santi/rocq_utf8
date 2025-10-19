@@ -215,8 +215,44 @@ Qed.
 Lemma utf8_encode_increasing: encoder_strictly_increasing utf8_encode.
 Proof.
   intros code1 code2 bytes1 bytes2 encode_code1 encode_code2.
-  
-Admitted.
+  simpl in encode_code1, encode_code2.
+  destruct (utf8_encode_codepoint code1) as [bytes1'|] eqn:enc_code1; [|inversion encode_code1].
+  destruct (utf8_encode_codepoint code2) as [bytes2'|] eqn:enc_code2; [|inversion encode_code2]. rewrite app_nil_r in *.
+  inversion encode_code1. inversion encode_code2. subst.
+  clear encode_code1. clear encode_code2.
+  unfold utf8_encode_codepoint in enc_code1, enc_code2.
+  repeat match goal with
+         | [G: context[if (?code <=? ?val) then _ else _] |- _] =>
+             let range := fresh "range" in
+             destruct (code <=? val) eqn:range; try discriminate; try lia
+         | [G: context[if ?code <? ?val then _ else _] |- _] =>
+             let range := fresh "range" in
+             destruct (code <? val) eqn:range; try discriminate; try lia
+         | [G: context[if andb ?b false then _ else _] |- _] =>
+             replace (andb b false) with false in G by reflexivity
+         | [G: context[if andb false ?b then _ else _] |- _] =>
+             replace (andb false b) with false in G by reflexivity
+         | [G: context[if andb true true then _ else _] |- _] =>
+             replace (andb true true) with true in G by reflexivity               
+         | [G: context[if andb ?a ?b then _ else _] |- _] =>
+             let range1 := fresh "range" in
+             let range2 := fresh "range" in
+             destruct a eqn:range1; try discriminate; try lia;
+             destruct b eqn:range2; try discriminate; try lia
+         end; rewrite <- some_injective in enc_code1; rewrite <- some_injective in enc_code2; subst; unfold bytes_compare, list_compare.
+  1: destruct (code1 ?= code2); reflexivity.
+  all: (repeat match goal with
+          | |- context[match ?a ?= ?b with | _ => _ end] =>
+              let comp := fresh "compare" in
+              add_bounds a; add_bounds b;
+              destruct (Z.compare_spec a b) as [comp | comp | comp]
+          end);
+    match goal with
+    | [|- (?n1 ?= ?n2 = Eq)] => apply Z.compare_eq_iff
+    | [|- (?n1 ?= ?n2 = Lt)] => fold (Z.lt n1 n2)
+    | [|- (?n1 ?= ?n2 = Gt)] => fold (Z.gt n1 n2)
+    end; subst; try discriminate; lia.
+Qed.
 
 Theorem utf8_encode_spec_compliant : utf8_encoder_spec utf8_encode.
 Proof.
@@ -227,59 +263,35 @@ Proof.
   - apply utf8_encode_output.
   - apply utf8_encode_projects.
 Qed.
-
- 
   
-Lemma utf8_dfa_error_suffix_strong: forall (bytes_big bytes: byte_str) (codes : unicode_str) (rest : byte_str),
-    ((length bytes) <= (length bytes_big))%nat ->
-    utf8_dfa_decode bytes = (codes, rest) ->
-    exists valid_prefix : list byte,
-      bytes = valid_prefix ++ rest /\ utf8_dfa_decode valid_prefix = (codes, []) /\ no_prefix valid_utf8_bytes rest.
-Proof.
-  induction bytes_big; intros bytes codes rest less_than decode_bytes.
-  - inversion less_than. apply length_zero_iff_nil in H0. subst.
-    inversion decode_bytes. subst.
-    exists []. repeat split.
-    intros p p_prefix.
-    unfold prefix in p_prefix. symmetry in p_prefix.
-    apply app_eq_nil in p_prefix. destruct p_prefix. auto.
-  - destruct bytes as [| b1 bytes].
-    -- inversion decode_bytes. subst.
-       exists []. repeat split.
-       intros p p_prefix.
-       unfold prefix in p_prefix. symmetry in p_prefix.
-       apply app_eq_nil in p_prefix. destruct p_prefix. auto.
-    -- unfold utf8_dfa_decode, utf8_dfa_decode_rec in decode_bytes.
-       fold utf8_dfa_decode_rec in decode_bytes.
-       unfold next_state in decode_bytes.
-       destruct (byte_range_dec b1) as [b1_range|] eqn:B1Range.
-       --- admit.
-       --- admit.
-Admitted.
-
-Lemma utf8_dfa_error_suffix : decoder_error_suffix utf8_dfa_decode.
-Proof.
-Admitted.  
-  
-
-Lemma utf8_dfa_comonoid : decoder_comonoid_morphism utf8_dfa_decode.
-Proof.
-Admitted.
-
-Lemma utf8_dfa_output_single : decoder_output_single utf8_dfa_decode.
+Lemma utf8_dfa_nil : decoder_nil utf8_dfa_decode.
 Proof.
 Admitted.
 
 Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
+Proof.
+Admitted.  
+  
+
+Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
+Proof.
+Admitted.
+
+Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
+Proof.
+Admitted.
+
+Lemma utf8_dfa_input : decoder_input_correct_iff utf8_dfa_decode.
 Proof.
 Admitted.
         
 Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.
 Proof.
   split.
-  - apply utf8_dfa_error_suffix.
-  - apply utf8_dfa_comonoid.
-  - apply utf8_dfa_output_single.
+  - apply utf8_dfa_nil.
+  - apply utf8_dfa_input.
+  - apply utf8_dfa_output.
   - apply utf8_dfa_increasing.
+  - apply utf8_dfa_projects.
 Qed.
-    
+

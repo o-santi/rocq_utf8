@@ -793,19 +793,23 @@ Definition inverse_nth_valid_codepoint_representation (bytes: byte_str) : option
         Some ((b1 mod 64) * 64 + (b2 mod 64))
       else None
   | [b1; b2; b3] =>
-      let fst := andb (andb (b1 =? 0xed) (between b2 0x80 0x9f)) (between b3 0x80 0xbf) in
-      let snd := andb (andb (b1 =? 0xe0) (between b2 0xa0 0xbf)) (between b3 0x80 0xbf) in
-      let trd := andb (andb (between b1 0xe1 0xec) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      let fst := andb (andb (b1 =? 0xe0) (between b2 0xa0 0xbf)) (between b3 0x80 0xbf) in
+      let snd := andb (andb (between b1 0xe1 0xec) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      let trd := andb (andb (b1 =? 0xed) (between b2 0x80 0x9f)) (between b3 0x80 0xbf) in
       let frth := andb (andb (between b1 0xee 0xef) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
-      if orb (orb (orb fst snd) trd) frth then
-        Some (((b1 - 224) * 4096) + (b2 mod 64) * 64 + (b3 mod 64))
-      else None
+      let n := ((b1 - 224) * 64 * 64) + (b2 mod 64) * 64 + (b3 mod 64) in
+      if orb (orb fst snd) trd then
+        Some n
+      else if frth then
+        Some (n - 2048)
+      else 
+        None
   | [b1; b2; b3; b4] =>
       let fst := andb (andb (andb (b1 =? 0xf0) (between b2 0x90 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
-      let snd := andb (andb (andb (between b1 0xf1 0xf3) (between b2 0x90 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      let snd := andb (andb (andb (between b1 0xf1 0xf3) (between b2 0x80 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
       let trd := andb (andb (andb (b1 =? 0xf4) (between b2 0x80 0x8f)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
       if orb (orb fst snd) trd then
-        Some ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64))
+        Some ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64) - 0x800)
       else None
   | _ => None
   end.
@@ -822,12 +826,12 @@ Ltac crush_comparisons :=
 
 Lemma list_equals_1 {T}: forall (a b: T), [a] = [b] -> a = b. 
 Proof. intros. inversion H. reflexivity. Qed.
-Lemma list_equals_2 {T}: forall (a1 a2 b1 b2: T), [a1;a2] = [b1;b2] -> a1 = b1 /\ a2 = b2. 
-Proof. intros. inversion H. split; reflexivity. Qed.
-Lemma list_equals_3 {T}: forall (a1 a2 a3 b1 b2 b3: T), [a1;a2;a3] = [b1;b2;b3] -> a1 = b1 /\ a2 = b2 /\ a3 = b3.
- Proof. intros. inversion H. do 2 split; reflexivity. Qed.
-Lemma list_equals_4 {T}: forall (a1 a2 a3 a4 b1 b2 b3 b4: T), [a1;a2;a3;a4] = [b1;b2;b3;b4] -> a1 = b1 /\ a2 = b2 /\ a3 = b3 /\ a4 = b4. 
-Proof. intros. inversion H. do 3 split; reflexivity. Qed.
+Lemma list_equals_2 {T}: forall (a1 a2 b1 b2: T), [a1;a2] = [b1;b2] <-> a1 = b1 /\ a2 = b2. 
+Proof. intros. split; intros. inversion H. split; reflexivity. destruct H; subst. reflexivity. Qed.
+Lemma list_equals_3 {T}: forall (a1 a2 a3 b1 b2 b3: T), [a1;a2;a3] = [b1;b2;b3] <-> a1 = b1 /\ a2 = b2 /\ a3 = b3.
+Proof. intros. split; intros. inversion H. repeat split; reflexivity. repeat (destruct H as [H0 H]; subst). reflexivity. Qed.
+Lemma list_equals_4 {T}: forall (a1 a2 a3 a4 b1 b2 b3 b4: T), [a1;a2;a3;a4] = [b1;b2;b3;b4] <-> a1 = b1 /\ a2 = b2 /\ a3 = b3 /\ a4 = b4. 
+Proof. intros. split; intros. inversion H. repeat split; reflexivity. repeat (destruct H as [H0 H]; subst). reflexivity. Qed.
 
 Theorem nth_valid_codepoint_representation_invertible : forall n bytes,
     nth_valid_codepoint_representation n = Some bytes ->
@@ -875,37 +879,147 @@ Proof.
     specialize (Z.div_small_iff n (64 * 64) ltac:(lia)) as [G1 G2].
     rewrite Z.div_div in b1eq.
     apply G1 in b1eq. destruct b1eq. all: lia.
-  - crush_comparisons; try discriminate; try lia;
-      match goal with | [|- (if ?cond then _ else _) = _] => replace cond with true by lia end;
+  - crush_comparisons; try discriminate; try lia; 
+      repeat match goal with
+      | [|- (if ?cond then _ else _) = _] =>
+          let c := fresh "Cond" in  
+          destruct cond eqn:c end; try lia;
       apply some_injective in bytes_nth;
       apply list_equals_3 in bytes_nth; destruct bytes_nth as [b1eq [b2eq b3eq]];
-      rewrite <- some_injective; destruct H; rewrite <- b1eq, <- b2eq, <- b3eq.
+      rewrite <- b1eq, <- b2eq, <- b3eq.
     + replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
-      replace ((128 + (n / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
-      replace ((128 + n mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
       specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod.
-      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
-    + replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
-      replace ((128 + (n / 64) mod 64) mod 64) with (n / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
-      replace ((128 + n mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
+      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2.
+      rewrite div_mod2 in div_mod.
+      rewrite <- some_injective. 
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; lia.
+    + destruct H. lia. 
+      replace (224 + n / 64 / 64 - 224) with (n / 64 / 64) by lia.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+      apply Z.lt_le_incl in less_than0.
+      specialize (Zdiv.Z_div_le n 55296 (64 * 64) ltac:(lia) less_than0) as G. 
+      vm_compute (55296 / (64*64)) in G.
+      destruct H. rewrite <- b1eq in H.
+      rewrite Z.div_div in H; lia.
+    + destruct H.
+      ++ destruct H as [H H2].
+         rewrite <- b1eq in H,H2.
+         specialize (Zdiv.Z_div_le (n + 2048) 65535 (64 * 64) ltac:(lia) less_than_eq1) as G.
+         apply Z.nlt_ge in less_than0.
+         specialize (Zorder.Zplus_le_compat_r 55296 n 2048 less_than0) as G1.
+         specialize (Zdiv.Z_div_le (55296 + 2048) (n + 2048) (64 * 64) ltac:(lia) G1) as G2.
+         vm_compute ((55296 + 2048) / (64 * 64)) in G2.
+         rewrite Z.div_div in H,H2; lia.
+      ++ lia.
+    + destruct H.
+      ++ destruct H as [H H2].
+         rewrite <- b1eq in H,H2.
+         specialize (Zdiv.Z_div_le (n + 2048) 65535 (64 * 64) ltac:(lia) less_than_eq1) as G.
+         apply Z.nlt_ge in less_than0.
+         specialize (Zorder.Zplus_le_compat_r 55296 n 2048 less_than0) as G1.
+         specialize (Zdiv.Z_div_le (55296 + 2048) (n + 2048) (64 * 64) ltac:(lia) G1) as G2.
+         vm_compute ((55296 + 2048) / (64 * 64)) in G2.
+         rewrite Z.div_div in H,H2; lia.
+      ++ clear Cond. clear Cond0. rewrite <- some_injective. 
+         specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod.
+         specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2.
+         rewrite div_mod2 in div_mod.
+         replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) by lia.
+         rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+         rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+         rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+         rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+  - crush_comparisons; try discriminate; try lia; 
+      repeat match goal with
+      | [|- (if ?cond then _ else _) = _] =>
+          let c := fresh "Cond" in  
+          destruct cond eqn:c end; try lia;
+      apply some_injective in bytes_nth;
+      apply list_equals_3 in bytes_nth; destruct bytes_nth as [b1eq [b2eq b3eq]];
+      rewrite <- b1eq, <- b2eq, <- b3eq.
+    + subst. clear Cond. rewrite <- some_injective. rewrite H.
       specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod.
-      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia.
-    + replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) by lia.
-      replace ((128 + ((n + 2048) / 64) mod 64) mod 64) with ((n + 2048) / 64 mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; repeat rewrite Z.mod_mod; lia).
-      replace ((128 + (n + 2048) mod 64) mod 64) with (n mod 64) by (rewrite Zdiv.Zplus_mod; rewrite Z.add_0_l; rewrite Z.mod_mod; [|lia]; rewrite Zdiv.Zplus_mod; rewrite Z.add_0_r; repeat rewrite Z.mod_mod; lia).  
-      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod. 
-      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod. lia. 
-    + apply (f_equal (fun c => c - 224)) in b1eq.
-      replace (224 + (n + 2048) / 64 / 64 - 224) with ((n + 2048) / 64 / 64) in b1eq |- * by lia.
-      (* apply Zdiv.Z_div_le with (c:= 64 * 64) in less_than_eq1; try lia. *)
-      (* rewrite Z.div_div in b1eq |-; try lia. *)
-      specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod. 
-      specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2. rewrite div_mod2 in div_mod.
-      admit.
-Admitted.
-
-
-
+      specialize (Zdiv.Z_div_mod_eq_full (n / 64) 64) as div_mod2.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+      rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+      rewrite Z.add_0_l. repeat rewrite Z.mod_mod; lia. 
+    + subst. clear Cond.
+      apply Z.nlt_ge in less_than0.
+      specialize (Zorder.Zplus_le_compat_r 55296 n 2048 less_than0) as G1.
+      specialize (Zdiv.Z_div_le (55296 + 2048) (n + 2048) (64 * 64) ltac:(lia) G1) as G2.
+      apply (f_equal (fun a => -224 + a)) in H. rewrite Z.add_assoc in H.
+      vm_compute (-224 + 224) in H. vm_compute (-224 + 237) in H. rewrite Z.add_0_l in H.
+      rewrite Z.div_div in H.
+      rewrite H in G2. vm_compute ((55296 + 2048) / (64 * 64)) in G2. all: lia.
+  - crush_comparisons; try discriminate; try lia; 
+      repeat match goal with
+      | [|- (if ?cond then _ else _) = _] =>
+          let c := fresh "Cond" in  
+          destruct cond eqn:c end; try lia;
+      apply some_injective in bytes_nth;
+      apply list_equals_4 in bytes_nth; destruct bytes_nth as [b1eq [b2eq [b3eq b4eq]]].
+    subst. rewrite <- some_injective.
+    clear Cond.
+    specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod.
+    specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2.
+    specialize (Zdiv.Z_div_mod_eq_full (((n + 2048) / 64) / 64) 64) as div_mod3.
+    rewrite div_mod3 in div_mod2. rewrite div_mod2 in div_mod.
+    replace (240 + (n + 2048) / 64 / 64 / 64 - 240) with ((n + 2048) / 64 / 64 / 64) by lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; lia.
+  - crush_comparisons; try discriminate; try lia; 
+      repeat match goal with
+      | [|- (if ?cond then _ else _) = _] =>
+          let c := fresh "Cond" in  
+          destruct cond eqn:c end; try lia;
+      apply some_injective in bytes_nth;
+      apply list_equals_4 in bytes_nth; destruct bytes_nth as [b1eq [b2eq [b3eq b4eq]]].
+    subst. rewrite <- some_injective. clear Cond.
+    replace (240 + (n + 2048) / 64 / 64 / 64 - 240) with ((n + 2048) / 64 / 64 / 64) by lia.
+    specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod.
+    specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2.
+    specialize (Zdiv.Z_div_mod_eq_full (((n + 2048) / 64) / 64) 64) as div_mod3.
+    rewrite div_mod3 in div_mod2. rewrite div_mod2 in div_mod.
+    replace (240 + (n + 2048) / 64 / 64 / 64 - 240) with ((n + 2048) / 64 / 64 / 64) by lia. 
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; lia.
+  - crush_comparisons; try discriminate; try lia; 
+      repeat match goal with
+      | [|- (if ?cond then _ else _) = _] =>
+          let c := fresh "Cond" in  
+          destruct cond eqn:c end; try lia;
+      apply some_injective in bytes_nth;
+      apply list_equals_4 in bytes_nth; destruct bytes_nth as [b1eq [b2eq [b3eq b4eq]]].
+    subst. rewrite <- some_injective. clear Cond.
+    replace (240 + (n + 2048) / 64 / 64 / 64 - 240) with ((n + 2048) / 64 / 64 / 64) by lia.
+    specialize (Zdiv.Z_div_mod_eq_full (n + 2048) 64) as div_mod.
+    specialize (Zdiv.Z_div_mod_eq_full ((n + 2048) / 64) 64) as div_mod2.
+    specialize (Zdiv.Z_div_mod_eq_full (((n + 2048) / 64) / 64) 64) as div_mod3.
+    rewrite div_mod3 in div_mod2. rewrite div_mod2 in div_mod.
+    replace (240 + (n + 2048) / 64 / 64 / 64 - 240) with ((n + 2048) / 64 / 64 / 64) by lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; try lia.
+    rewrite Zdiv.Zplus_mod; replace (128 mod 64) with 0 by reflexivity.
+    rewrite Z.add_0_l. repeat rewrite Z.mod_mod; lia.
+Qed.
+    
 Lemma bytes_compare_single : forall b1 b2,
     bytes_compare [b1] [b2] = Z.compare b1 b2.
 Proof.
@@ -1022,6 +1136,26 @@ Proof.
   apply Z.compare_antisym.
 Qed.
 
+  Ltac add_bounds G :=
+    let mul_div := fresh "mul_div" in
+    let div_mod := fresh "div_mod" in
+    let mod_bound := fresh "mod_bound" in
+    lazymatch G with
+    | (?n mod 64)%Z =>
+        specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
+        specialize (Z.mod_pos_bound n 64 ltac:(lia)) as mod_bound;
+        add_bounds n
+    | (?n / 64)%Z =>
+        specialize (Z.mul_div_le n 64 ltac:(lia)) as mul_div;
+        specialize (Z.mod_pos_bound n 64 ltac:(lia)) as mod_bound;
+        specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
+        add_bounds n
+    | (?a + ?n) %Z =>
+        add_bounds n
+    | ?a => idtac 
+    end.
+
+
 Theorem nth_valid_codepoint_representation_compare_compat: forall n1 n2 bytes1 bytes2,
     nth_valid_codepoint_representation n1 = Some bytes1 -> 
     nth_valid_codepoint_representation n2 = Some bytes2 -> 
@@ -1094,21 +1228,6 @@ Proof.
       apply some_injective in G; apply list_equals_4 in G; destruct G as [H1 [H2 [H3 H4]]]; subst
      end);
     unfold bytes_compare, list_compare.
-  Ltac add_bounds G :=
-    let mul_div := fresh "mul_div" in
-    let div_mod := fresh "div_mod" in
-    let mod_bound := fresh "mod_bound" in
-    lazymatch G with
-    | (?n mod 64)%Z =>
-        specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
-        specialize (Z.mod_pos_bound n 64 ltac:(lia)) as mod_bound;
-        add_bounds n
-    | (?n / 64)%Z =>
-        specialize (Z.mul_div_le n 64 ltac:(lia)) as mul_div;
-        specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
-        add_bounds n
-    | ?a => idtac 
-    end.
   Ltac crush_lia :=
     (repeat 
        let comp_eq := fresh "comp_eq" in
@@ -1154,7 +1273,7 @@ Proof.
     | [ |- ?g] => idtac
     end.
   1: destruct (b ?= b0); reflexivity.
-  par: crush_lia; try lia.
+  all: crush_lia; try lia.
 Qed.
 
 Lemma nth_valid_codepoint_representation_none : forall n : Z,
@@ -1169,15 +1288,135 @@ Qed.
 Lemma inverse_nth_valid_codepoint_representation_bounds : forall bytes n,
     inverse_nth_valid_codepoint_representation bytes = Some n ->
     interval (0x10ffff - 0x7ff) n.
-Admitted.
+Proof.
+  Ltac break_and :=
+    repeat match goal with
+      | [G: context[andb ?a ?b] |- _] =>
+            let p1 := fresh "P" in
+            let p2 := fresh "P" in
+            destruct a eqn:p1; 
+            destruct b eqn:p2; try discriminate; simpl in G
+      end.
+  
+  intros bytes n inverse_is_some.
+  unfold interval.
+  unfold inverse_nth_valid_codepoint_representation in inverse_is_some.
+  destruct bytes as [| b1 bytes]; [discriminate|].
+  specialize (Z.mod_pos_bound b1 64 ltac:(lia)) as b1_bound.
+  destruct bytes as [| b2 bytes].
+  - break_and.
+    rewrite <- some_injective in inverse_is_some.
+    lia.
+  - specialize (Z.mod_pos_bound b2 64 ltac:(lia)) as b2_bound.
+    destruct bytes as [| b3 bytes].
+    + break_and. rewrite <- some_injective in inverse_is_some.
+      lia.
+    + specialize (Z.mod_pos_bound b3 64 ltac:(lia)) as b3_bound.
+      destruct bytes as [| b4 bytes].
+      ++ break_and; rewrite <- some_injective in inverse_is_some; try lia.
+      ++ specialize (Z.mod_pos_bound b4 64 ltac:(lia)) as b4_bound.
+         destruct bytes; [| discriminate].
+         break_and; rewrite <- some_injective in inverse_is_some; try lia.
+         +++  apply Z.eqb_eq in P7. subst.
+              split; try lia. vm_compute (240 -240).
+              simpl. apply Z.leb_le in P9.
+              assert (16 <= b2 mod 64). { 
+                specialize (Zdiv.Z_div_mod_eq_full b2 64) as div_mod.
+                apply (f_equal (fun x => - 64 * (b2 / 64) + x)) in div_mod.
+                rewrite Z.add_assoc in div_mod.
+                replace (-64 * (b2 / 64) + (64 * (b2 / 64))) with 0 in div_mod by lia.
+                rewrite Z.add_0_l in div_mod.
+                lia.
+              }
+              lia.
+         +++ split; try lia.
+             subst.
+             apply Z.eqb_eq in P7. subst.
+             vm_compute (244 -240).
+             vm_compute (4 * 64 * 64 * 64). 
+             apply Z.leb_nle in P25.
+             apply Z.nle_gt in P25.
+             assert (b2 mod 64 <= 15). {  
+               specialize (Zdiv.Z_div_mod_eq_full b2 64) as div_mod.
+               apply (f_equal (fun x => - 64 * (b2 / 64) + x)) in div_mod.
+               rewrite Z.add_assoc in div_mod.
+               replace (-64 * (b2 / 64) + (64 * (b2 / 64))) with 0 in div_mod by lia.
+               rewrite Z.add_0_l in div_mod.
+               lia.
+             }
+             lia.
+Qed.
+
+Ltac simplify_mod_div :=
+  repeat match goal with
+    | |- context[?b + ?d - ?a + ?a] => replace (b + d - a + a) with (b + d) by lia
+    | |- context[?a * ?b + ?c * ?b] => rewrite <- Z.mul_add_distr_r
+    | |- context[(?a * ?b + ?c) / ?b] => rewrite Z.div_add_l; try lia
+    | |- context[(?a mod ?b) / ?b] => rewrite Z.mod_div; try lia
+    | |- context[?a + 0] => rewrite Z.add_0_r
+    | |- context[0 + ?a] => rewrite Z.add_0_l
+    | |- context[(?a * ?b) mod ?b] => rewrite Z.mod_mul; try lia
+    | |- context[(?a mod ?b) mod ?b] => rewrite Z.mod_mod; try lia
+    | |- context[(?a * ?b + ?c) mod ?b] => rewrite Z.add_mod; try lia
+    end.
 
 Lemma inverse_nth_valid_codepoint_representation_invertible : forall bytes n,
     valid_codepoint_representation bytes ->
     inverse_nth_valid_codepoint_representation bytes = Some n ->
     nth_valid_codepoint_representation n = Some bytes.
-Admitted.
-
-
+Proof.
+  intros bytes n bytes_valid invertible.
+  unfold inverse_nth_valid_codepoint_representation in invertible.
+  unfold nth_valid_codepoint_representation.
+  destruct bytes as [| b1 bytes]; [discriminate|].
+  destruct bytes as [| b2 bytes].
+  - break_and. rewrite <- some_injective in invertible. subst.
+    replace (n <? 55296) with true by lia.
+    replace (n <? 0) with false by lia.
+    replace (n <=? 127) with true by lia. reflexivity.
+  - destruct bytes as [| b3 bytes].
+    + break_and. rewrite <- some_injective in invertible.
+      add_bounds (b1 mod 64).
+      add_bounds (b2 mod 64).
+      replace (n <? 55296) with true by lia.
+      replace (n <? 0) with false by lia.
+      replace (n <=? 127) with false by lia.
+      replace (n <=? 2047) with true by lia.
+      rewrite <- some_injective. rewrite <- invertible.
+      apply list_equals_2. split; simplify_mod_div.
+    + destruct bytes as [| b4 bytes].
+      * break_and; try discriminate; try lia; rewrite <- some_injective in invertible;
+        add_bounds (b1 mod 64);
+        add_bounds (b2 mod 64);
+        add_bounds (b3 mod 64);
+          (replace (n <? 55296) with true by lia) || (replace (n <? 55296) with false by lia);
+          match goal with
+          | |- context[if ?k <? 0 then _ else _] =>
+              replace (k <? 0) with false by lia;
+              replace (k <=? 127) with false by lia;
+              replace (k <=? 2047) with false by lia;
+              replace (k <=? 65535) with true by lia
+          end; rewrite <- some_injective; apply list_equals_3;
+          rewrite <- invertible; repeat split; simplify_mod_div.
+      * destruct bytes; [| discriminate].
+        break_and; try discriminate; try lia; rewrite <- some_injective in invertible;
+          add_bounds (b1 mod 64);
+          add_bounds (b2 mod 64);
+          add_bounds (b3 mod 64);
+          add_bounds (b4 mod 64);
+          replace (n <? 55296) with false by lia;
+          match goal with
+          | |- context[if ?k <? 0 then _ else _] =>
+              replace (k <? 0) with false by lia;
+              replace (k <=? 127) with false by lia;
+              replace (k <=? 2047) with false by lia;
+              replace (k <=? 65535) with false by lia;
+              replace (k <=? 1114111) with true by lia
+          end; rewrite <- some_injective; apply list_equals_4;
+          rewrite <- invertible; repeat split; simplify_mod_div.
+Qed.
+                        
+      
 Definition BytesOrder : Ordered bytes_compare.
 Proof.
   unfold bytes_compare.
