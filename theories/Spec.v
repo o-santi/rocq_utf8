@@ -5,15 +5,14 @@ Import ListNotations.
 
 Open Scope Z_scope.
 
-Definition codepoint : Type := Z.
 Definition byte : Type := Z.
+Definition codepoint : Type := Z.
 
 Definition unicode_str : Type := list codepoint.
 Definition byte_str : Type := list byte.
 
 Definition codepoints_compare := List.list_compare Z.compare.
 Definition bytes_compare := List.list_compare Z.compare.
-
 
 Inductive unicode_decode_error :=
 | OverlongEncoding
@@ -103,10 +102,10 @@ Definition encoder_output_correct (encoder: encoder_type) := forall code,
     | (bytes, rest) => bytes = [] /\ rest = [code]
     end.
 
-Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2,
-    encoder codes1 = (bytes1, nil) ->
-    encoder codes2 = (bytes2, nil) ->
-    codepoints_compare codes1 codes2 = bytes_compare bytes1 bytes2.
+Definition encoder_strictly_increasing (encoder: encoder_type) := forall code1 code2 bytes1 bytes2,
+    encoder [code1] = (bytes1, nil) ->
+    encoder [code2] = (bytes2, nil) ->
+    Z.compare code1 code2 = bytes_compare bytes1 bytes2.
 
 Definition encoder_projects (encoder: encoder_type) := forall xs ys,
     encoder (xs ++ ys) =
@@ -125,31 +124,36 @@ Record utf8_encoder_spec encoder := {
     enc_projects : encoder_projects encoder;
   }.
 
-Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-  decoder bytes = (codes, bytes_suffix) ->
-  valid_codepoints codes.
-
-Definition decoder_input_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-  decoder bytes = (codes, bytes_suffix) ->
-  exists bytes_prefix,
-    (bytes = bytes_prefix ++ bytes_suffix)
-    /\ (valid_utf8_bytes bytes_prefix)
-    /\ ((bytes_suffix = []) \/ ~ (valid_utf8_bytes bytes_suffix)).
-
-Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes0 bytes1 code0 code1,
-    decoder bytes0 = ([code0], nil) ->
+Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 code1 code2,
     decoder bytes1 = ([code1], nil) ->
-    Z.compare code0 code1 = bytes_compare bytes0 bytes1.
+    decoder bytes2 = ([code2], nil) ->
+    Z.compare code1 code2 = bytes_compare bytes1 bytes2.
 
-Definition decoder_projects (decoder: decoder_type) := forall bytes codes_prefix codes_suffix,
-    decoder bytes = (codes_prefix ++ codes_suffix, []) ->
-    exists bytes_prefix bytes_suffix,
-      (bytes = bytes_prefix ++ bytes_suffix)
-      /\ (decoder bytes_prefix = (codes_prefix, []))
-      /\ (decoder bytes_suffix = (codes_suffix, [])).
+Definition decoder_input_correct_iff (decoder: decoder_type) := forall bytes,
+    valid_codepoint_representation bytes <->
+    exists code, decoder bytes = ([code], []).
+
+Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
+    decoder bytes = (codes, bytes_suffix) ->
+    (valid_codepoints codes /\
+       (exists bytes_prefix,
+           decoder bytes_prefix = (codes, [])
+           /\ bytes = bytes_prefix ++ bytes_suffix)).
+
+Definition decoder_projects (decoder: decoder_type) := forall xs ys,
+    decoder (xs ++ ys) =
+      match decoder xs with
+      | (codes, []) =>
+          let (codes2, rest) := decoder ys in
+          (codes ++ codes2, rest)
+      | (codes, rest) => (codes, rest ++ ys)
+      end.
+
+Definition decoder_nil (decoder: decoder_type) := decoder nil = (nil, nil).
 
 Record utf8_decoder_spec decoder := {
-    dec_input: decoder_input_correct decoder;
+    dec_nil : decoder_nil decoder;
+    dec_input : decoder_input_correct_iff decoder;
     dec_output : decoder_output_correct decoder;
     dec_increasing : decoder_strictly_increasing decoder;
     dec_projects : decoder_projects decoder;

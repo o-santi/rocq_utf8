@@ -75,139 +75,160 @@ Example test4_decode : utf8_dfa_decode [0xef; 0xbb; 0xbf; 0xf0; 0xa3; 0x8e; 0xb4
   reflexivity.
 Qed.
 
+Lemma utf8_encode_nil : encoder_nil utf8_encode.
+Proof.
+  reflexivity.
+Qed.
+
 Lemma utf8_encode_codepoint_input : forall code,
-    valid_codepoint code ->
+    valid_codepoint code <->
     exists bytes, utf8_encode_codepoint code = Some bytes.
 Proof.
-  intros code valid_code.
-  destruct (utf8_encode_codepoint code) as [bytes |] eqn:encode_code.
-  - exists bytes. reflexivity.
-  - unfold utf8_encode_codepoint in encode_code.
-    destruct valid_code as [c1 [c2 c3]].
-    unfold codepoint_less_than_10ffff in c1.
-    unfold codepoint_is_not_surrogate in c2.
-    unfold codepoint_not_negative in c3.
+  intro code; split. 
+  - intro valid_code.
+    destruct (utf8_encode_codepoint code) as [bytes |] eqn:encode_code.
+    + exists bytes. reflexivity.
+    + unfold utf8_encode_codepoint in encode_code.
+      destruct valid_code as [c1 [c2 c3]].
+      unfold codepoint_less_than_10ffff in c1.
+      unfold codepoint_is_not_surrogate in c2.
+      unfold codepoint_not_negative in c3.
+      repeat match goal with
+             | [G: context[if (code <=? ?val) then _ else _] |- _] =>
+                 let range := fresh "range" in
+                 destruct (code <=? val) eqn:range; try discriminate; try lia
+             | [G: context[if code <? ?val then _ else _] |- _] =>
+                 let range := fresh "range" in
+                 destruct (code <? val) eqn:range; try discriminate; try lia
+             | [G: context[if andb ?a ?b then _ else _] |- _] =>
+                 let range1 := fresh "range" in
+                 let range2 := fresh "range" in
+                 destruct a eqn:range1;
+                 destruct b eqn:range2; simpl in G;
+                 try discriminate; try lia
+             end.
+  - intros [bytes encode_code].
+    unfold utf8_encode_codepoint in encode_code.
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
     repeat match goal with
-      | [G: context[if (code <=? ?val) then _ else _] |- _] =>
-          
-          let range := fresh "range" in
-          destruct (code <=? val) eqn:range; try discriminate; try lia
-      | [G: context[if code <? ?val then _ else _] |- _] =>
-          let range := fresh "range" in
-          destruct (code <? val) eqn:range; try discriminate; try lia
-      end.
+           | [G: context[if (code <=? ?val) then _ else _] |- _] =>
+               let range := fresh "range" in
+               destruct (code <=? val) eqn:range; try discriminate; try lia
+           | [G: context[if code <? ?val then _ else _] |- _] =>
+               let range := fresh "range" in
+               destruct (code <? val) eqn:range; try discriminate; try lia
+           | [G: context[if andb ?a ?b then _ else _] |- _] =>
+               let range1 := fresh "range" in
+               let range2 := fresh "range" in
+               destruct a eqn:range1;
+               destruct b eqn:range2; simpl in G;
+               try discriminate; try lia
+           end.
 Qed.
 
-Lemma utf8_encode_error_suffix : encoder_error_suffix utf8_encode.
+
+Lemma utf8_encode_correct : encoder_input_correct_iff utf8_encode.
 Proof.
-  intro codes. induction codes as [| code codes]; intros bytes rest encoder_codes.
-  - inversion encoder_codes. subst.
-    exists []. repeat split. intros p p_prefix. unfold prefix in p_prefix.
-    symmetry in p_prefix.
-    apply app_eq_nil in p_prefix. destruct p_prefix. auto.
-  - unfold utf8_encode in encoder_codes.
-    fold utf8_encode in encoder_codes.
-    destruct (utf8_encode_codepoint code) as [bytes2 |] eqn:encode_codepoint_code.
-    + destruct (utf8_encode codes) as [bytes3 rest2] eqn:encode_codes.
-      specialize (IHcodes bytes3 rest2 ltac:(reflexivity)) as G.
-      destruct G as [prefix [codes_eq [encode_prefix no_prefix_rest]]].
-      inversion encoder_codes. subst.
-      exists (code :: prefix). repeat split.
-      * unfold utf8_encode. fold utf8_encode.
-        rewrite encode_codepoint_code.
-        rewrite encode_prefix.
-        reflexivity.
-      * assumption.
-    + inversion encoder_codes. subst.
-      exists []. repeat split.
-      intros p p_prefix. unfold prefix in p_prefix.
-      apply (f_equal utf8_encode) in p_prefix.
-      unfold utf8_encode in p_prefix. fold utf8_encode in p_prefix.
-      rewrite encode_codepoint_code in p_prefix.
-      destruct p.
-      * left. reflexivity.
-      * right. intro p_valid. simpl in p_prefix.
-        inversion p_valid. apply utf8_encode_codepoint_input in H1.
-        destruct H1 as [bytes encode_c]. rewrite encode_c in p_prefix.
-        destruct (utf8_encode (p ++ skipn (length p) codes)) as [bytes2 rest].
-        inversion p_prefix. symmetry in H3. apply app_eq_nil in H3.
-        destruct H3; subst.
-        unfold utf8_encode_codepoint in encode_c.
-        repeat match goal with
-               | [G: context[if c <? ?v then _ else _] |- _] =>
-                   destruct (c <? v); try discriminate
-               | [G: context[if c <=? ?v then _ else _] |- _] =>
-                   destruct (c <=? v); try discriminate
-        end.
+  intros code. split.
+  - intro valid_code.
+    destruct (utf8_encode [code]) as [bytes rest] eqn: enc.
+    exists bytes. apply pair_equal_spec. repeat split.
+    simpl in enc.
+    apply utf8_encode_codepoint_input in valid_code.
+    destruct valid_code as [bytes2 enc_code]. rewrite enc_code in enc.
+    inversion enc. reflexivity.
+  - intros [bytes enc_code].
+    simpl in enc_code.
+    destruct (utf8_encode_codepoint code) as [bytes2 |] eqn:enc_single; [| discriminate].
+    inversion enc_code. subst.
+    apply utf8_encode_codepoint_input.
+    exists bytes2. assumption.
 Qed.
 
-Lemma utf8_encode_monoid : encoder_monoid_morphism utf8_encode.
+Lemma utf8_encode_output : encoder_output_correct utf8_encode.
 Proof.
-  intro codes1. induction codes1 as [| code1 codes1]; intros codes2 bytes1 bytes2 encode_codes1 encode_codes2.
-  - inversion encode_codes1. subst. assumption.
-  - unfold utf8_encode in encode_codes1. fold utf8_encode in encode_codes1.
-    destruct (utf8_encode_codepoint code1) as [bytes_code1|] eqn:encode_code1; [| inversion encode_codes1].
-    destruct (utf8_encode codes1) as [bytes_codes1 rest] eqn:encode_codes1_eq.
-    inversion encode_codes1. subst.
-    specialize (IHcodes1 codes2 bytes_codes1 bytes2 ltac:(reflexivity) encode_codes2).
-    simpl. rewrite encode_code1. rewrite IHcodes1.
-    rewrite app_assoc. reflexivity.
-Qed.
-    
-Lemma utf8_encode_output : encoder_output_single utf8_encode.
-Proof.
-  intros code bytes codes_valid encode_codes.
-  apply utf8_encode_codepoint_input in codes_valid as G.
-  destruct G as [bytes2 encode_codepoint_code].
-  simpl in encode_codes. rewrite encode_codepoint_code in encode_codes.
-  inversion encode_codes. rewrite app_nil_r in *. subst.
-  clear encode_codes.
-  unfold utf8_encode_codepoint in encode_codepoint_code.
-  unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in codes_valid.
-  destruct codes_valid as [c1 [c2 c3]].
+  intros code.
+  destruct (utf8_encode [code]) as [bytes rest] eqn:encode_single.
+  simpl in encode_single.
+  destruct (utf8_encode_codepoint code) as [bytes2 |] eqn:encode_code; [| inversion encode_single; split; reflexivity].
+  assert (exists bytes, utf8_encode_codepoint code = Some bytes) as code_valid. exists bytes2. assumption.
+  apply utf8_encode_codepoint_input in code_valid.
+  unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in code_valid.
+  destruct code_valid as [c1 [c2 c3]].
+  inversion encode_single. rewrite app_nil_r in *. subst.
+  unfold utf8_encode_codepoint in encode_code.
   repeat match goal with
          | [G: context[if (code <=? ?val) then _ else _] |- _] =>
-          
-          let range := fresh "range" in
-          destruct (code <=? val) eqn:range; try discriminate; try lia
-      | [G: context[if code <? ?val then _ else _] |- _] =>
-          let range := fresh "range" in
-          destruct (code <? val) eqn:range; try discriminate; try lia
-         end; rewrite <- some_injective in encode_codepoint_code; subst.
-  - apply OneByte. lia.
-  - add_bounds (code mod 64). apply TwoByte; lia.
-  - add_bounds (code mod 64).
+             let range := fresh "range" in
+             destruct (code <=? val) eqn:range; try discriminate; try lia
+         | [G: context[if code <? ?val then _ else _] |- _] =>
+             let range := fresh "range" in
+             destruct (code <? val) eqn:range; try discriminate; try lia
+         | [G: context[if andb ?b false then _ else _] |- _] =>
+             replace (andb b false) with false in G by reflexivity
+         | [G: context[if andb false ?b then _ else _] |- _] =>
+             replace (andb false b) with false in G by reflexivity
+         | [G: context[if andb true true then _ else _] |- _] =>
+             replace (andb true true) with true in G by reflexivity               
+         | [G: context[if andb ?a ?b then _ else _] |- _] =>
+             let range1 := fresh "range" in
+             let range2 := fresh "range" in
+             destruct a eqn:range1; try discriminate; try lia;
+             destruct b eqn:range2; try discriminate; try lia
+         end; rewrite <- some_injective in encode_code; subst.
+  + apply OneByte. lia.
+  + add_bounds (code mod 64). apply TwoByte; lia.
+  + add_bounds (code mod 64).
     add_bounds ((code / 64) mod 64).
     destruct c2.
-    + destruct (code / 64 / 64 =? 0) eqn:is_e0.
-      * apply ThreeByte1; lia.
-      * destruct (code <? 0xd000) eqn:code_less_d000.
-        ** apply ThreeByte2. left. all: lia.
-        ** apply ThreeByte3; lia.
-    + apply ThreeByte2. right. all: lia.
-  - add_bounds (code mod 64).
+    * destruct (code / 64 / 64 =? 0) eqn:is_e0.
+      -- apply ThreeByte1; lia.
+      -- destruct (code <? 0xd000) eqn:code_less_d000.
+         --- apply ThreeByte2. left. all: lia.
+         --- apply ThreeByte3; lia.
+    * apply ThreeByte2. right. all: lia.
+  + add_bounds (code mod 64).
     add_bounds (code / 64 mod 64).
     add_bounds ((code / 64 / 64) mod 64).
     destruct (code / 64 / 64 / 64 =? 0) eqn:is_f0.
-    + apply FourBytes1; try lia. split; try lia.
-      apply (f_equal (fun x => - 64 * (code / 64 / 64 / 64) + x)) in div_mod2.
-      rewrite Z.add_assoc in div_mod2.
-      replace (-64 * (code / 64 / 64 / 64) + 64 * (code / 64 / 64 / 64)) with 0 in div_mod2 by lia. rewrite Z.add_0_l in div_mod2.
-      rewrite <- div_mod2.
-      lia.
-  
+    * apply FourBytes1; try lia.
+    * destruct (code / 64 / 64 / 64 =? 4) eqn:is_f4.
+      -- apply FourBytes3; try lia.
+      -- apply FourBytes2; try lia.
+Qed.
+
+Lemma utf8_encode_projects : encoder_projects utf8_encode.
+Proof.
+  intro xs. induction xs as [|x xs]; intros ys.
+  - rewrite utf8_encode_nil. rewrite app_nil_l.
+    destruct (utf8_encode ys). reflexivity.
+  - rewrite <- app_comm_cons.
+    unfold utf8_encode. fold utf8_encode.
+    destruct (utf8_encode_codepoint x) as [bytes |]eqn:encode_x.
+    + rewrite IHxs.
+      destruct (utf8_encode xs). destruct (utf8_encode ys).
+      destruct l0. rewrite app_assoc. reflexivity. reflexivity.
+    + rewrite app_comm_cons. reflexivity.
+Qed.
+
+ 
 Lemma utf8_encode_increasing: encoder_strictly_increasing utf8_encode.
+Proof.
+  intros code1 code2 bytes1 bytes2 encode_code1 encode_code2.
+  
 Admitted.
 
 Theorem utf8_encode_spec_compliant : utf8_encoder_spec utf8_encode.
 Proof.
   split.
-  - apply utf8_encode_error_suffix.
-  - apply utf8_encode_monoid.
-  - apply utf8_encode_output.
+  - apply utf8_encode_nil.
   - apply utf8_encode_increasing.
+  - apply utf8_encode_correct.
+  - apply utf8_encode_output.
+  - apply utf8_encode_projects.
 Qed.
-  
+
+ 
   
 Lemma utf8_dfa_error_suffix_strong: forall (bytes_big bytes: byte_str) (codes : unicode_str) (rest : byte_str),
     ((length bytes) <= (length bytes_big))%nat ->

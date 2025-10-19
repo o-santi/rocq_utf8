@@ -3,7 +3,6 @@ From Coq Require Import Lia.
 From Coq Require Import Lists.List. Import ListNotations.
 From Coq Require Import ZArith.BinInt.
 
-Require Import Utf8.Parser.
 Require Import Utf8.Spec.
 Require Import Utf8.Theorems.Enumerations.
 Require Import Utf8.Theorems.Order.
@@ -27,40 +26,6 @@ Proof.
   - apply (f_equal (@length T)) in H.
     rewrite List.length_app in H. simpl in H. rewrite <- plus_Sn_m in H.
     destruct list2. reflexivity. simpl in H. lia.
-Qed.
-
-Lemma encoder_spec_injective : forall encoder,
-    utf8_encoder_spec encoder ->
-    forall (codes1 codes2: list codepoint) bytes,
-      encoder codes1 = (bytes, []) ->
-      encoder codes2 = (bytes, []) ->
-      codes1 = codes2.
-Proof.
-  intros encoder encoder_spec_compliant.
-  intros codes1 codes2 bytes encoder_codes1 encoder_codes2.
-  destruct encoder_spec_compliant.
-  specialize (enc_increasing codes1 codes2 bytes bytes encoder_codes1 encoder_codes2) as compare_codes.
-  unfold bytes_compare in compare_codes.
-  rewrite list_compare_refl_if in compare_codes. 2: apply Z.compare_eq_iff.
-  unfold codepoints_compare in compare_codes. apply list_compare_refl in compare_codes. apply compare_codes.
-  apply Z.compare_eq_iff.
-Qed.
-
-Lemma decoder_spec_injective : forall decoder,
-    utf8_decoder_spec decoder ->
-    forall (bytes1 bytes2: byte_str) codes,
-      decoder bytes1 = (codes, []) ->
-      decoder bytes2 = (codes, []) ->
-      bytes1 = bytes2.
-Proof.
-  intros decoder decoder_spec_compliant.
-  destruct decoder_spec_compliant.
-  intros bytes1 bytes2 codes decoder_bytes1 decoder_bytes2.
-  specialize (dec_increasing bytes1 bytes2 codes codes decoder_bytes1 decoder_bytes2) as compare_codes.
-  unfold codepoints_compare in compare_codes.
-  rewrite list_compare_refl_if in compare_codes. 2: apply Z.compare_eq_iff.
-  unfold bytes_compare in compare_codes. symmetry in compare_codes. rewrite list_compare_refl in compare_codes.
-  apply compare_codes. apply Z.compare_eq_iff.
 Qed.
 
 Theorem decoder_decode_valid_bytes : forall decoder,
@@ -188,7 +153,7 @@ Proof.
   destruct code1_valid as [bytes1 encoder_code1].
   destruct code2_valid as [bytes2 encoder_code2].
   rewrite encoder_code1. rewrite encoder_code2.
-  specialize (enc_increasing encoder encoder_spec [code1] [code2] bytes1 bytes2 encoder_code1 encoder_code2) as increasing.
+  specialize (enc_increasing encoder encoder_spec code1 code2 bytes1 bytes2 encoder_code1 encoder_code2) as increasing.
   simpl in increasing.
   destruct (code1 ?= code2); assumption.
 Qed.
@@ -205,7 +170,7 @@ Proof.
   destruct bytes1_valid as [code1 decoder_bytes1].
   destruct bytes2_valid as [code2 decoder_bytes2].
   rewrite decoder_bytes1, decoder_bytes2.
-  specialize (dec_increasing decoder decoder_spec bytes1 bytes2 [code1] [code2] decoder_bytes1 decoder_bytes2) as increasing.
+  specialize (dec_increasing decoder decoder_spec bytes1 bytes2 code1 code2 decoder_bytes1 decoder_bytes2) as increasing.
   simpl in increasing. symmetry in increasing.
   destruct (code1 ?= code2); assumption.
 Qed.
@@ -422,9 +387,10 @@ Proof.
         -- rewrite dec_projects; [| assumption].
            rewrite decoder_bytes_code. rewrite decoder_bytes1. subst. reflexivity.
         -- assumption.
-        -- rewrite <- app_assoc. rewrite tail_eq. repeat rewrite app_assoc. reflexivity.
+        -- repeat rewrite <- app_assoc.
+           replace (tail ++ bytes_suffix) with (bytes1 ++ bytes2 ++ bytes_suffix).
+           repeat rewrite app_assoc. reflexivity.
 Qed.
-    (* + replace (x :: xs)  *)
       
 Theorem utf8_spec_decoder_encoder_inverse_strong : forall encoder decoder,
     utf8_encoder_spec encoder ->
@@ -436,10 +402,31 @@ Theorem utf8_spec_decoder_encoder_inverse_strong : forall encoder decoder,
 Proof.
   intros encoder decoder encoder_spec decoder_spec.
   induction codes as [| code codes]; intros bytes bytes_suffix length decoder_bytes.
-  - exists []. split. apply enc_nil. assumption. apply dec_output in decoder_bytes. destruct decoder_bytes as [_ [bytes_prefix [decoder_bytes_prefix bytes_eq]]].
-    specialize (decoder_spec_injective decoder decoder_spec [] bytes_prefix [] (dec_nil decoder decoder_spec) decoder_bytes_prefix) as G. subst. reflexivity. assumption.
+  - exists []. split. apply enc_nil. assumption. apply dec_output in decoder_bytes; [|assumption]. destruct decoder_bytes as [_ [bytes_prefix [decoder_bytes_prefix bytes_eq]]].
+    destruct bytes_prefix.
+    + assumption.
+    + replace (b :: bytes_prefix) with ([b] ++ bytes_prefix) in decoder_bytes_prefix by reflexivity.
+      rewrite dec_projects in decoder_bytes_prefix; try assumption.
+      destruct (decoder [b]) as [code rest] eqn:decode_b.
+      destruct rest; [|inversion decoder_bytes_prefix].
+      destruct (decoder bytes_prefix) as [codes rest2] eqn:decode_prefix.
+      inversion decoder_bytes_prefix. subst.
+      apply app_eq_nil in H0. destruct H0. subst.
+      apply utf8_spec_decoder_correct in decode_b; try assumption.
+      destruct decode_b as [prefix2 [decode_prefix2 [prefix2_valid prefix2_eq]]].
+      rewrite app_nil_r in prefix2_eq. subst.
+      inversion prefix2_valid.
+      replace [b] with ([b] ++ []) in H by reflexivity.
+      destruct bytes.
+      * inversion H0.
+      * rewrite app_nil_r in H. inversion H. 
+        apply app_eq_nil in H4. destruct H4. subst.
+        rewrite app_nil_r in H.
+        specialize (dec_input decoder decoder_spec [b]) as [G1 G2].
+        specialize (G1 H0) as [code decode_bytes]. rewrite decode_prefix2 in decode_bytes.
+        inversion decode_bytes.
   - replace (code :: codes) with ([code] ++ codes) in decoder_bytes |- * by reflexivity.
-    eapply utf8_spec_decoder_project_dual with (xs_big := [code] ++ codes) in decoder_bytes; [| apply encoder_spec | assumption | rewrite length_app; lia].
+    eapply utf8_spec_decoder_project_dual in decoder_bytes; [| apply encoder_spec | assumption ].
     destruct decoder_bytes as [bytes1 [bytes2 [decoder_bytes1 [decoder_bytes2 bytes_eq]]]].
     eapply utf8_spec_decoder_encoder_inverse_single in decoder_bytes1; [| apply encoder_spec | assumption].
     apply IHcodes in decoder_bytes2; [|  simpl in length; lia].
@@ -448,8 +435,8 @@ Proof.
     rewrite decoder_bytes1. rewrite encoder_codes.
     exists (bytes1 ++ bytes_prefix).
     split. reflexivity. inversion bytes2_eq. inversion bytes_eq. subst.
-    rewrite app_assoc. reflexivity.
-    Qed.
+    rewrite app_assoc. rewrite app_nil_r. reflexivity.
+Qed.
 
 Theorem utf8_spec_encoder_unique_single : forall encoder1 decoder code bytes,
     utf8_encoder_spec encoder1 ->
@@ -520,5 +507,4 @@ Proof.
     reflexivity.
     all: assumption.
 Qed.
-
 

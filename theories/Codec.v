@@ -15,13 +15,13 @@ Definition utf8_encode_codepoint (n: codepoint) : @option (list byte) :=
     let b1 := n / 64 in
     let b2 := n mod 64 in
     Some [ 192 + b1; 128 + b2]
-  else if (n <? 0xffff) then
+  else if (andb (n <=? 0xffff) (orb (n <? 0xd800) (n >? 0xdfff))) then
     let r := n / 64 in
     let b1 := r / 64 in
     let b2 := r mod 64 in
     let b3 := n mod 64 in
     Some [ 224 + b1; 128 + b2; 128 + b3]
-  else if (n <=? 0x10ffff) then
+  else if (andb (n <=? 0x10ffff) (n >? 0xffff)) then
     let r1 := n / 64 in
     let r2 := r1 / 64 in
     let b1 := r2 / 64 in
