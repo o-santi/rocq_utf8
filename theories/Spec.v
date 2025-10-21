@@ -133,21 +133,20 @@ Definition decoder_input_correct_iff (decoder: decoder_type) := forall bytes,
     valid_codepoint_representation bytes <->
     exists code, decoder bytes = ([code], []).
 
-Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-    decoder bytes = (codes, bytes_suffix) ->
-    (valid_codepoints codes /\
-       (exists bytes_prefix,
-           decoder bytes_prefix = (codes, [])
-           /\ bytes = bytes_prefix ++ bytes_suffix)).
+Definition decoder_output_correct (decoder: decoder_type) := forall bytes suffix codes,
+    decoder bytes = (codes, suffix) ->
+    valid_codepoints codes /\
+      (exists prefix,
+          decoder prefix = (codes, [])
+          /\ valid_utf8_bytes prefix
+          /\ bytes = prefix ++ suffix).
 
 Definition decoder_projects (decoder: decoder_type) := forall xs ys,
+    valid_codepoint_representation xs ->
     decoder (xs ++ ys) =
-      match decoder xs with
-      | (codes, []) =>
-          let (codes2, rest) := decoder ys in
-          (codes ++ codes2, rest)
-      | (codes, rest) => (codes, rest ++ ys)
-      end.
+      let (codes, _) := decoder xs in
+      let (codes2, rest) := decoder ys in
+      (codes ++ codes2, rest).
 
 Definition decoder_nil (decoder: decoder_type) := decoder nil = (nil, nil).
 
