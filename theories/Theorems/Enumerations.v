@@ -82,12 +82,11 @@ Proof.
   - apply f_domain.
 Qed.
 
-(* TODO strengthen induction *)
 Theorem partial_induction {X Y}
   (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
   (P : option Y -> Prop) :
   partial_morphism domain range f ->
-  (forall y, (range y) -> P (Some y)) ->
+  (forall y, (range y) -> (exists x, f x = Some y ) -> P (Some y)) ->
   forall x, (domain x) -> P (f x).
 Proof.
   unfold partial_morphism.
@@ -95,6 +94,7 @@ Proof.
   destruct (f x) eqn:current_case.
   - assert (range y) by (apply (f_range x y current_case)).
     apply (induction_principle y H).
+    exists x. apply current_case.
   - assert (~ (domain x)).
     + apply f_domain. apply current_case.
     + exfalso. apply (H x_in_domain).
@@ -126,6 +126,7 @@ Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop
     to_from_id : pointwise_equal range (and_then from to) (fun x => Some x);
     from_preserves_compare : increasing domain compare1 compare2 to;
   }.
+
 
 (* Lemma interval_enumeration_unique : forall count f g,
   ordered_enumeration (interval count) count f g ->
