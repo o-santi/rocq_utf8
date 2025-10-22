@@ -82,19 +82,19 @@ Proof.
   - apply f_domain.
 Qed.
 
-Theorem partial_induction {X Y}
+Theorem partial_morphism_induction {X Y}
   (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
-  (P : option Y -> Prop) :
+  (P : X -> option Y -> Prop) :
   partial_morphism domain range f ->
-  (forall y, (range y) -> (exists x, f x = Some y ) -> P (Some y)) ->
-  forall x, (domain x) -> P (f x).
+  (forall x y, (domain x) -> (range y) -> (f x = Some y) -> P x (Some y)) ->
+  forall (x: X), (domain x) -> P x (f x).
 Proof.
   unfold partial_morphism.
   intros [f_range f_domain] induction_principle x x_in_domain.
   destruct (f x) eqn:current_case.
   - assert (range y) by (apply (f_range x y current_case)).
-    apply (induction_principle y H).
-    exists x. apply current_case.
+    apply (induction_principle x y x_in_domain H).
+    apply current_case.
   - assert (~ (domain x)).
     + apply f_domain. apply current_case.
     + exfalso. apply (H x_in_domain).
@@ -116,16 +116,129 @@ Definition increasing {T1 T2}
       | _ => False
       end.
 
-Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1)
-   := {
-    ordered1 : @Ordered T1 compare1;
-    ordered2 : @Ordered T2 compare2;
+Record PartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop)
+  (to: T1 -> option T2) (from: T2 -> option T1) :=
+  {
     from_morphism : partial_morphism domain range to;
     to_morphism: partial_morphism range domain from;
     from_to_id : pointwise_equal domain (and_then to from) (fun x => Some x);
     to_from_id : pointwise_equal range (and_then from to) (fun x => Some x);
-    from_preserves_compare : increasing domain compare1 compare2 to;
   }.
+
+(* TODO: bundle the data in a record *)
+Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1)
+   := {
+    ordered1 : @Ordered T1 compare1;
+    ordered2 : @Ordered T2 compare2;
+    iso : @PartialIsomorphism T1 T2 domain range to from;
+    to_preserves_compare : increasing domain compare1 compare2 to;
+  }.
+
+Lemma some_injective : forall {X} (x0 x1 : X),
+  Some x0 = Some x1 ->
+  x0 = x1.
+Proof.
+  intros.
+  inversion H; reflexivity.
+Qed.
+
+(* TODO: too general unfortunately
+Theorem partial_isomorphism_induction {X Y}
+  (domain : X -> Prop) (range : Y -> Prop) (to : X -> option Y)
+  (from : Y -> option X) (P : X -> Y -> option X -> option Y -> Prop) :
+  PartialIsomorphism domain range to from ->
+  (forall x y,
+    (domain x) ->
+    (range y) ->
+    (from y = Some x) ->
+    (to x = Some y) ->
+    P x y (Some x) (Some y))->
+  forall (x: X) (y : Y), (domain x) -> (range y) -> P x y (from y) (to x).
+Proof.
+Admitted.
+ *)
+
+Lemma ordered_partial_isomorphism_from_increasing {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1) :
+  OrderedPartialIsomorphism domain range compare1 compare2 to from ->
+  increasing range compare2 compare1 from.
+Proof.
+  (* TODO: we need partial_isomorphism_induction *)
+  intros iso. destruct iso as [_ _ [from_morphism to_morphism from_to_id to_from_id] to_preserves_compare].
+  unfold increasing. intros x0 x1 range_x0 range_x1.
+  apply partial_morphism_induction with (domain:=range) (range:=domain) (f:= from); try assumption.
+  clear x0 range_x0.
+  intros x0 y0 range_x0 domain_y0 y0_definition.
+  apply partial_morphism_induction with (domain:=range) (range:=domain) (f:= from); try assumption.
+  clear x1 range_x1.
+  intros x1 y1 range_x1 domain_y1 y1_definition.
+  generalize (to_preserves_compare y0 y1 domain_y0 domain_y1).
+  revert y0_definition.
+  apply partial_morphism_induction with (domain:=domain) (range:=range) (f:=to) (x := y0); try assumption.
+  clear y0 domain_y0.
+  intros y0 x0' domain_y0 range_x0' x0'_definition y0_definition.
+  revert y1_definition.
+  apply partial_morphism_induction with (domain:=domain) (range:=range) (f:=to) (x := y1); try assumption.
+  clear y1 domain_y1.
+  intros y1 x1' domain_y1 range_x1' x1'_definition y1_definition compare_eq.
+  rewrite compare_eq.
+  replace x0' with x0.
+  replace x1' with x1.
+  reflexivity.
+  - apply some_injective.
+    replace (Some x1') with (and_then from to x1).
+    + symmetry. unfold pointwise_equal in to_from_id.
+      apply to_from_id; try assumption.
+    + unfold and_then. rewrite y1_definition.
+      apply x1'_definition.
+  - apply some_injective.
+    replace (Some x0') with (and_then from to x0).
+    + symmetry. unfold pointwise_equal in to_from_id.
+      apply to_from_id; try assumption.
+    + unfold and_then. rewrite y0_definition.
+      apply x0'_definition.
+Qed.
+
+Definition covers {X} (compare : X -> X -> comparison) (x0 x1 : X) : Prop :=
+  (compare x0 x1 = Lt)
+  /\ (forall x2, not ((compare x0 x2 = Lt) /\ (compare x2 x1 = Lt))).
+
+Theorem Z_covering_classification : forall n m,
+  covers Z.compare n m <-> m = (n + 1)%Z.
+Proof.
+  intros n m; split; intros.
+  - destruct H as [n_m_compare covering_property].
+    destruct (Z.compare m (n+1))%Z eqn:m_Sn_compare.
+    + apply Z.compare_eq; try assumption.
+    + exfalso. rewrite Z.compare_lt_iff in n_m_compare.
+      rewrite Z.compare_lt_iff in m_Sn_compare. lia.
+    + exfalso. apply covering_property with (x2 := (n+1)%Z).
+      split.
+      * rewrite -> Z.compare_lt_iff. lia.
+      * rewrite -> Z.compare_lt_iff. rewrite Z.compare_gt_iff in m_Sn_compare.
+        rewrite Z.compare_lt_iff in n_m_compare. lia.
+  - unfold covers. subst m. split.
+    + rewrite Z.compare_lt_iff. lia.
+    + intros x2 [H0 H1]. rewrite Z.compare_lt_iff in H0.
+      rewrite Z.compare_lt_iff in H1. lia.
+Qed.
+
+Theorem covers_unique {X} (compare : X -> X -> comparison) (x0 x1 x2 : X) :
+  Ordered compare ->
+  covers compare x0 x1 ->
+  covers compare x0 x2 ->
+  x1 = x2.
+Proof.
+  unfold covers.
+  intros [eq antisym trans]
+    [x0_x1_compare x0_x1_no_between]
+    [x0_x2_compare x0_x2_no_between].
+  destruct (compare x1 x2) eqn:x1_x2_compare.
+  - rewrite <- eq. apply x1_x2_compare.
+  - exfalso. apply (x0_x2_no_between x1); split; assumption.
+  - exfalso. generalize (antisym x2 x1). rewrite x1_x2_compare; simpl.
+    clear x1_x2_compare. intros x1_x2_compare.
+    apply (x0_x1_no_between x2); split; assumption.
+Qed.
 
 
 (* Lemma interval_enumeration_unique : forall count f g,
@@ -165,10 +278,10 @@ Proof.
   (*         unfold ordered_enumeration in H; destruct H as [a [b c]]; apply b). *)
   (*       assert (partial_morphism range (interval 1) g1) by ( *)
   (*         unfold ordered_enumeration in H0; destruct H0 as [a [b c]]; apply b). *)
-  (*       apply partial_induction *)
+  (*       apply partial_morphism_induction *)
   (*         with (f := g0) (x := x) (domain := range) (range := (interval 1)); *)
   (*         try assumption; intros. (* that's what I'm talking about! *) *)
-  (*       apply partial_induction *)
+  (*       apply partial_morphism_induction *)
   (*         with (f := g1) (x := x) (domain := range) (range := (interval 1)); *)
   (*         try assumption; intros. *)
   (*       unfold interval in H3, H4. assert (y = y0%Z) by lia. *)
