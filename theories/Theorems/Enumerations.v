@@ -142,60 +142,45 @@ Proof.
   inversion H; reflexivity.
 Qed.
 
-(* TODO: too general unfortunately
+Theorem partial_isomorphism_symmetry  {X Y}
+  (domain : X -> Prop) (range : Y -> Prop)
+  (to : X -> option Y) (from : Y -> option X)
+  (iso : PartialIsomorphism domain range to from):
+  PartialIsomorphism range domain from to.
+Proof.
+Admitted.
+
 Theorem partial_isomorphism_induction {X Y}
   (domain : X -> Prop) (range : Y -> Prop) (to : X -> option Y)
-  (from : Y -> option X) (P : X -> Y -> option X -> option Y -> Prop) :
+  (from : Y -> option X) (P : X -> option Y -> Prop) :
   PartialIsomorphism domain range to from ->
   (forall x y,
     (domain x) ->
     (range y) ->
     (from y = Some x) ->
     (to x = Some y) ->
-    P x y (Some x) (Some y))->
-  forall (x: X) (y : Y), (domain x) -> (range y) -> P x y (from y) (to x).
+    P x (Some y))->
+  forall (x: X), (domain x) -> P x (to x).
 Proof.
 Admitted.
- *)
 
 Lemma ordered_partial_isomorphism_from_increasing {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1) :
   OrderedPartialIsomorphism domain range compare1 compare2 to from ->
   increasing range compare2 compare1 from.
 Proof.
   (* TODO: we need partial_isomorphism_induction *)
-  intros iso. destruct iso as [_ _ [from_morphism to_morphism from_to_id to_from_id] to_preserves_compare].
+  intros iso. destruct iso as [_ _ iso to_preserves_compare].
   unfold increasing. intros x0 x1 range_x0 range_x1.
-  apply partial_morphism_induction with (domain:=range) (range:=domain) (f:= from); try assumption.
+  apply partial_isomorphism_symmetry in iso.
+  apply partial_isomorphism_induction with (domain:=range) (range:=domain) (from:= to) (to := from); try assumption.
   clear x0 range_x0.
-  intros x0 y0 range_x0 domain_y0 y0_definition.
-  apply partial_morphism_induction with (domain:=range) (range:=domain) (f:= from); try assumption.
+  intros x0 y0 range_x0 domain_y0 x0_definition y0_definition.
+  apply partial_isomorphism_induction with (domain:=range) (range:=domain) (to:= from) (from := to); try assumption.
   clear x1 range_x1.
-  intros x1 y1 range_x1 domain_y1 y1_definition.
+  intros x1 y1 range_x1 domain_y1 x1_definition y1_definition.
   generalize (to_preserves_compare y0 y1 domain_y0 domain_y1).
-  revert y0_definition.
-  apply partial_morphism_induction with (domain:=domain) (range:=range) (f:=to) (x := y0); try assumption.
-  clear y0 domain_y0.
-  intros y0 x0' domain_y0 range_x0' x0'_definition y0_definition.
-  revert y1_definition.
-  apply partial_morphism_induction with (domain:=domain) (range:=range) (f:=to) (x := y1); try assumption.
-  clear y1 domain_y1.
-  intros y1 x1' domain_y1 range_x1' x1'_definition y1_definition compare_eq.
-  rewrite compare_eq.
-  replace x0' with x0.
-  replace x1' with x1.
-  reflexivity.
-  - apply some_injective.
-    replace (Some x1') with (and_then from to x1).
-    + symmetry. unfold pointwise_equal in to_from_id.
-      apply to_from_id; try assumption.
-    + unfold and_then. rewrite y1_definition.
-      apply x1'_definition.
-  - apply some_injective.
-    replace (Some x0') with (and_then from to x0).
-    + symmetry. unfold pointwise_equal in to_from_id.
-      apply to_from_id; try assumption.
-    + unfold and_then. rewrite y0_definition.
-      apply x0'_definition.
+  rewrite x0_definition, x1_definition.
+  intros; symmetry; assumption.
 Qed.
 
 Definition covers {X} (compare : X -> X -> comparison) (x0 x1 : X) : Prop :=
