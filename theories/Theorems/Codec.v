@@ -266,16 +266,26 @@ Qed.
   
 Lemma utf8_dfa_nil : decoder_nil utf8_dfa_decode.
 Proof.
-Admitted.
+  reflexivity.
+Qed.
 
 Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
 Proof.
-Admitted.  
-  
+Admitted.
+
+(* Lemma utf8_dfa_accepts_codepoint_repr : forall bytes, *)
+(*     valid_codepoint_representation bytes -> *)
+(*     exists code, utf8_dfa_decode bytes = ([code], []). *)
+(* Proof. *)
+(*   Admitted. *)
 
 Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
 Proof.
-Admitted.
+  intros xs ys valid_xs.
+  destruct valid_xs.
+  2: { 
+  - 
+  unfold next_state. 
 
 Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
 Proof.
