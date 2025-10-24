@@ -78,6 +78,9 @@ Definition partially_covers {X} (domain : X -> Prop) (compare : X -> X -> compar
   (compare x0 x1 = Lt)
   /\ (forall x2, not ((compare x0 x2 = Lt) /\ (compare x2 x1 = Lt) /\ (domain x2))).
 
+Definition partially_minimum {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 : X) : Prop :=
+  forall x1, ~ (domain x1 /\ compare x0 x1 = Lt).
+
 Theorem partial_compose {X Y Z} : forall
   (first : X -> Prop) (second : Y -> Prop) (third : Z -> Prop)
   (f : X -> option Y) (g : Y -> option Z),
@@ -234,7 +237,12 @@ Proof.
       rewrite Z.compare_lt_iff in H1. lia.
 Qed.
 
-Theorem covers_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 x2 : X) :
+Theorem Z_inteval_minimum_zero : forall n,
+  partially_minimum (interval n) Z.compare 0%Z.
+Proof.
+Admitted.
+
+Theorem partially_covers_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 x2 : X) :
   Ordered compare ->
   domain x0 -> domain x1 -> domain x2 ->
   partially_covers domain compare x0 x1 ->
@@ -253,6 +261,14 @@ Proof.
     clear x1_x2_compare. intros x1_x2_compare.
     apply (x0_x1_no_between x2). do 2 (try split; try assumption).
 Qed.
+
+Theorem partially_minimum_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 : X) :
+  domain x0 -> domain x1 ->
+  partially_minimum domain compare x0 ->
+  partially_minimum domain compare x1 ->
+  x0 = x1.
+Proof.
+Admitted.
 
 Theorem ordered_isomorphism_preserves_cover {T1 T2}
   (domain: T1 -> Prop) (range: T2 -> Prop)
@@ -291,12 +307,29 @@ Proof.
     + assumption.
 Qed.
 
-(* Lemma interval_enumeration_unique : forall count f g,
-  ordered_enumeration (interval count) count f g ->
-   ((pointwise_equal (interval count) f (fun x => Some x))
-   /\ (pointwise_equal (interval count) g (fun x => Some x))).
-   Admitted. *)
-(* TODO: the inverse function is unique in the sense of pointwise_equal *)
+Theorem ordered_isomorphism_preserves_minimum {T1 T2}
+  (domain: T1 -> Prop) (range: T2 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) (from: T2 -> option T1)
+  (x : T1) (y : T2) :
+  OrderedPartialIsomorphism domain range compare1 compare2 to from ->
+  domain x -> range y ->
+  to x = Some y -> from y = Some x ->
+  partially_minimum domain compare1 x ->
+  partially_minimum range compare2 y.
+Proof.
+Admitted.
+
+Lemma interval_enumeration_unique {T}
+  (count: Z) (range: T -> Prop) (compare: T -> T -> comparison)
+  (to0: Z -> option T) (to1: Z -> option T)
+  (from0: T -> option Z) (from1: T -> option Z) :
+  OrderedPartialIsomorphism (interval count) range Z.compare compare to0 from0 ->
+  OrderedPartialIsomorphism (interval count) range Z.compare compare to1 from1 ->
+  (pointwise_equal (interval count) to0 to1)
+  /\ (pointwise_equal range from0 from1).
+Proof.
+Admitted.
 
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 from2 to0 to1 to2,
