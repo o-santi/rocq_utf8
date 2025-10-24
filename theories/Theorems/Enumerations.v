@@ -36,6 +36,48 @@ Definition pointwise_equal {X Y}
   (domain : X -> Prop) (f g : X -> option Y) : Prop :=
   forall x, domain x -> f x = g x.
 
+Record Ordered {T} (compare: T -> T -> comparison) := {
+    eq : forall t1 t2, compare t1 t2 = Eq <-> t1 = t2;
+    antisym : forall t1 t2, compare t1 t2 = CompOpp (compare t2 t1);
+    trans : forall t1 t2 t3 res, compare t1 t2 = res -> compare t2 t3 = res -> compare t1 t3 = res;
+  }.
+
+Definition increasing {T1 T2}
+  (domain: T1 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) :=
+  forall n m, (domain n) -> (domain m) ->
+      match (to n, to m) with
+      | (Some a, Some b) => (compare1 n m) = (compare2 a b)
+      | _ => False
+      end.
+
+Record PartialIsomorphism {T1 T2}
+  (domain: T1 -> Prop) (range: T2 -> Prop)
+  (to: T1 -> option T2) (from: T2 -> option T1) :=
+  {
+    from_morphism : partial_morphism domain range to;
+    to_morphism: partial_morphism range domain from;
+    from_to_id : pointwise_equal domain (and_then to from) (fun x => Some x);
+    to_from_id : pointwise_equal range (and_then from to) (fun x => Some x);
+  }.
+
+(* TODO: bundle the data in a record *)
+Record OrderedPartialIsomorphism {T1 T2}
+  (domain: T1 -> Prop) (range: T2 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) (from: T2 -> option T1)
+   := {
+    opi_ordered1 : @Ordered T1 compare1;
+    opi_ordered2 : @Ordered T2 compare2;
+    opi_isomorphism : @PartialIsomorphism T1 T2 domain range to from;
+    opi_to_preserves_compare : increasing domain compare1 compare2 to;
+  }.
+
+Definition partially_covers {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 : X) : Prop :=
+  (compare x0 x1 = Lt)
+  /\ (forall x2, not ((compare x0 x2 = Lt) /\ (compare x2 x1 = Lt) /\ (domain x2))).
+
 Theorem partial_compose {X Y Z} : forall
   (first : X -> Prop) (second : Y -> Prop) (third : Z -> Prop)
   (f : X -> option Y) (g : Y -> option Z),
@@ -100,40 +142,6 @@ Proof.
     + exfalso. apply (H x_in_domain).
 Qed.
 
-Record Ordered {T} (compare: T -> T -> comparison) := {
-    eq : forall t1 t2, compare t1 t2 = Eq <-> t1 = t2;
-    antisym : forall t1 t2, compare t1 t2 = CompOpp (compare t2 t1);
-    trans : forall t1 t2 t3 res, compare t1 t2 = res -> compare t2 t3 = res -> compare t1 t3 = res;
-  }.
-
-Definition increasing {T1 T2}
-  (domain: T1 -> Prop)
-  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
-  (to: T1 -> option T2) :=
-  forall n m, (domain n) -> (domain m) ->
-      match (to n, to m) with
-      | (Some a, Some b) => (compare1 n m) = (compare2 a b)
-      | _ => False
-      end.
-
-Record PartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop)
-  (to: T1 -> option T2) (from: T2 -> option T1) :=
-  {
-    from_morphism : partial_morphism domain range to;
-    to_morphism: partial_morphism range domain from;
-    from_to_id : pointwise_equal domain (and_then to from) (fun x => Some x);
-    to_from_id : pointwise_equal range (and_then from to) (fun x => Some x);
-  }.
-
-(* TODO: bundle the data in a record *)
-Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1)
-   := {
-    opi_ordered1 : @Ordered T1 compare1;
-    opi_ordered2 : @Ordered T2 compare2;
-    opi_isomorphism : @PartialIsomorphism T1 T2 domain range to from;
-    opi_to_preserves_compare : increasing domain compare1 compare2 to;
-  }.
-
 Lemma some_injective : forall {X} (x0 x1 : X),
   Some x0 = Some x1 ->
   x0 = x1.
@@ -176,7 +184,10 @@ Lemma ordered_partial_isomorphism_increasing {T1 T2}
 Proof.
 Admitted.
 
-Lemma ordered_partial_isomorphism_from_increasing {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1) :
+Lemma ordered_partial_isomorphism_from_increasing {T1 T2}
+  (domain: T1 -> Prop) (range: T2 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) (from: T2 -> option T1) :
   OrderedPartialIsomorphism domain range compare1 compare2 to from ->
   increasing range compare2 compare1 from.
 Proof.
@@ -194,15 +205,14 @@ Proof.
   intros; symmetry; assumption.
 Qed.
 
-Lemma ordered_partial_isomorphism_symmetry  {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1) :
+Lemma ordered_partial_isomorphism_symmetry  {T1 T2}
+  (domain: T1 -> Prop) (range: T2 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) (from: T2 -> option T1) :
   OrderedPartialIsomorphism domain range compare1 compare2 to from ->
   OrderedPartialIsomorphism range domain compare2 compare1 from to.
 Proof.
 Admitted.
-
-Definition partially_covers {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 : X) : Prop :=
-  (compare x0 x1 = Lt)
-  /\ (forall x2, not ((compare x0 x2 = Lt) /\ (compare x2 x1 = Lt) /\ (domain x2))).
 
 Theorem Z_covering_classification : forall n m,
   partially_covers (fun _ => True) Z.compare n m <-> m = (n + 1)%Z.
@@ -226,9 +236,7 @@ Qed.
 
 Theorem covers_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 x2 : X) :
   Ordered compare ->
-  domain x0 ->
-  domain x1 ->
-  domain x2 ->
+  domain x0 -> domain x1 -> domain x2 ->
   partially_covers domain compare x0 x1 ->
   partially_covers domain compare x0 x2 ->
   x1 = x2.
@@ -288,10 +296,6 @@ Qed.
    ((pointwise_equal (interval count) f (fun x => Some x))
    /\ (pointwise_equal (interval count) g (fun x => Some x))).
    Admitted. *)
-(* TODO: parameterize other type in ordered_enumeration *)
-
-(* TODO: if get_nth is increasing then so is get_index *)
-
 (* TODO: the inverse function is unique in the sense of pointwise_equal *)
 
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
