@@ -159,7 +159,7 @@ Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @opt
 Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state) (consumed: list byte)
   : unicode_str * (list byte) :=
   match bytes with
-  | nil => (nil, nil)
+  | nil => (nil, consumed)
   | cons b rest =>
       match next_state state carry b with
       | Some (Finished codep) =>

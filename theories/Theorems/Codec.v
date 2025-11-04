@@ -269,15 +269,59 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma utf8_dfa_decode_invalid: forall bytes suffix,
+    utf8_dfa_decode bytes = ([], suffix) ->
+    bytes = suffix.
+Proof.
+  intros bytes suffix decode_bytes.
+  unfold utf8_dfa_decode in decode_bytes.
+  destruct bytes as [| byte1 bytes].
+  - simpl in decode_bytes. inversion decode_bytes. reflexivity.
+  - do 2 lazymatch goal with
+           | [NextState: context[next_state ?state ?carry ?byte] |- _] =>
+               unfold next_state in NextState;
+               let range := fresh "range" in
+               idtac byte;
+               destruct (byte_range_dec byte) as [range|];
+               [| inversion NextState; reflexivity];
+               destruct range;
+               try (inversion NextState; reflexivity)
+           | [Decode: context[utf8_dfa_decode_rec (?byte :: ?rest) ?code ?state ?consumed] |- _] =>
+               simpl in Decode
+           | [Decode: context[utf8_dfa_decode_rec ?bytes 0 Initial ?consumed] |- _] =>
+               destruct (utf8_dfa_decode_rec bytes 0 Initial); inversion Decode
+           | [Decode: context[utf8_dfa_decode_rec ?bytes ?code ?state ?consumed] |- _] =>
+               let byte := fresh "byte" in
+               let rest := fresh "bytes" in
+               destruct bytes as [| byte rest]; simpl in Decode;
+               [inversion Decode; reflexivity|]
+           end.
+
+Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
+Proof.
+  intros bytes suffix codes decode_bytes.
+  induction codes.
+  - split. constructor.
+    exists []. repeat split. constructor.
+    apply utf8_dfa_decode_invalid in decode_bytes.
+    subst. reflexivity.
+    
+    
+
+Lemma utf8_dfa_input : decoder_input_correct_iff utf8_dfa_decode.
+Proof.
+Admitted.
+
+
 Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
 Proof.
 Admitted.
 
-(* Lemma utf8_dfa_accepts_codepoint_repr : forall bytes, *)
-(*     valid_codepoint_representation bytes -> *)
-(*     exists code, utf8_dfa_decode bytes = ([code], []). *)
-(* Proof. *)
-(*   Admitted. *)
+Lemma utf8_dfa_accepts_codepoint_repr : forall bytes,
+    valid_codepoint_representation bytes ->
+    exists code, utf8_dfa_decode bytes = ([code], []).
+Proof.
+  Admitted.
 
 Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
 Proof.
@@ -286,15 +330,7 @@ Proof.
   2: { 
   - 
   unfold next_state. 
-
-Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
-Proof.
-Admitted.
-
-Lemma utf8_dfa_input : decoder_input_correct_iff utf8_dfa_decode.
-Proof.
-Admitted.
-        
+       
 Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.
 Proof.
   split.
