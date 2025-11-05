@@ -421,7 +421,7 @@ Qed.
 Lemma one_byte_bounds : forall byte code,
     valid_codepoint_representation [byte] ->
     utf8_dfa_decode [byte] = ([code], []) ->
-    0 <= code <= 0x7f.
+    code = byte /\ 0 <= code <= 0x7f.
 Proof.
   intros.
   unfold utf8_dfa_decode in H0. simpl in H0.
@@ -432,13 +432,14 @@ Qed.
 Lemma two_byte_bounds : forall byte1 byte2 code,
     valid_codepoint_representation [byte1; byte2] ->
     utf8_dfa_decode [byte1; byte2] = ([code], []) ->
-    0x80 <= code <= 0x7ff.
+    code = byte1 mod 32 * 64 + byte2 mod 64
+    /\ (0x80 <= code <= 0x7ff).
 Proof.
   intros.
   unfold utf8_dfa_decode in H0. simpl in H0.
   unfold next_state, byte_range_dec in H0.
   lia_simplify_hyp H0; inversion H0;
-    unfold push_bottom_bits, extract_5_bits in *;
+    unfold push_bottom_bits, extract_5_bits in *; split; try reflexivity;
     match goal with
     | |- ?a <= ?code <= ?b =>
         add_bounds code; lia
@@ -448,13 +449,14 @@ Qed.
 Lemma three_byte_bounds : forall byte1 byte2 byte3 code,
     valid_codepoint_representation [byte1; byte2; byte3] ->
     utf8_dfa_decode [byte1; byte2; byte3] = ([code], []) ->
-    0x800 <= code <= 0xffff.
+    code = (byte1 mod 16 * 64 + byte2 mod 64) * 64 + byte3 mod 64 /\
+      (0x800 <= code <= 0xffff).
 Proof.
   intros.
   unfold utf8_dfa_decode in H0. simpl in H0.
   unfold next_state, byte_range_dec in H0.
   lia_simplify_hyp H0; inversion H0;
-    unfold push_bottom_bits, extract_4_bits in *;
+    unfold push_bottom_bits, extract_4_bits in *; split; try reflexivity;
     match goal with
     | |- ?a <= ?code <= ?b =>
         add_bounds code; lia
@@ -464,17 +466,18 @@ Qed.
 Lemma four_byte_bounds : forall byte1 byte2 byte3 byte4 code,
     valid_codepoint_representation [byte1; byte2; byte3; byte4] ->
     utf8_dfa_decode [byte1; byte2; byte3; byte4] = ([code], []) ->
-    0x1000 <= code <= 0x10ffff.
+    code = ((byte1 mod 8 * 64 + byte2 mod 64) * 64 + byte3 mod 64) * 64 + byte4 mod 64 /\
+      0x1000 <= code <= 0x10ffff.
 Proof.
   intros.
   unfold utf8_dfa_decode in H0. simpl in H0.
   unfold next_state, byte_range_dec in H0.
   lia_simplify_hyp H0; inversion H0;
-    unfold push_bottom_bits, extract_3_bits in *;
+    unfold push_bottom_bits, extract_3_bits in *; split; try reflexivity;
     match goal with
     | |- ?a <= ?code <= ?b =>
-        add_bounds code; try lia
-    end.
+        add_bounds code; lia
+    end; reflexivity.
 Qed.
 
 Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
@@ -487,19 +490,31 @@ Proof.
   apply utf8_dfa_decode_invalid in decode_rest1, decode_rest2. subst. repeat rewrite app_nil_r in *.
   clear decode_bytes1. clear decode_bytes2.
   let rec break bytes bytes_valid decode :=
-    let b := fresh "bounds" in
+    let b1 := fresh "bounds" in
+    let b2 := fresh "bounds" in
     (destruct bytes;
      [ inversion bytes_valid
      | destruct bytes;
-       [apply one_byte_bounds in decode as b|
+       [apply one_byte_bounds in decode as [b1 b2]|
          destruct bytes;
-         [apply two_byte_bounds in decode as b|
+         [apply two_byte_bounds in decode as [b1 b2]|
            destruct bytes;
-           [apply three_byte_bounds in decode as b|
+           [apply three_byte_bounds in decode as [b1 b2]|
              destruct bytes;
-             [apply four_byte_bounds in decode as b| inversion bytes_valid]]]]])
-  in (break prefix1 prefix_valid1 decode_prefix1); (break prefix2 prefix_valid2 decode_prefix2); try assumption.
-  all: simpl. match goal
+             [apply four_byte_bounds in decode as [b1 b2]| inversion bytes_valid]]]]])
+  in (break prefix1 prefix_valid1 decode_prefix1); (break prefix2 prefix_valid2 decode_prefix2); try assumption; simpl;
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in code_valid1, code_valid2;
+    destruct code_valid1 as [code1_less [code1_not_surrogate code1_not_neg]], code_valid2 as [code2_less [code2_not_surrogate code2_not_neg]];
+    destruct bounds0; destruct bounds2;
+  inversion prefix_valid1; inversion prefix_valid2;
+    subst;
+    repeat match goal with
+      | |- context[?a ?= ?b] =>
+          let comp := fresh "compare" in
+          add_bounds a; add_bounds b;
+          destruct (Z.compare_spec a b) as [comp | comp | comp]
+      end; try reflexivity; try lia.
+Qed.
   
 Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.
 Proof.
