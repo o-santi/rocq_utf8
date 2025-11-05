@@ -1141,17 +1141,21 @@ Qed.
     let div_mod := fresh "div_mod" in
     let mod_bound := fresh "mod_bound" in
     lazymatch G with
-    | (?n mod 64)%Z =>
-        specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
-        specialize (Z.mod_pos_bound n 64 ltac:(lia)) as mod_bound;
+    | (?n mod ?m)%Z =>
+        specialize (Zdiv.Z_div_mod_eq_full n m) as div_mod;
+        specialize (Z.mod_pos_bound n m ltac:(lia)) as mod_bound;
         add_bounds n
-    | (?n / 64)%Z =>
+    | (?n / ?m)%Z =>
         specialize (Z.mul_div_le n 64 ltac:(lia)) as mul_div;
         specialize (Z.mod_pos_bound n 64 ltac:(lia)) as mod_bound;
         specialize (Zdiv.Z_div_mod_eq_full n 64) as div_mod;
         add_bounds n
     | (?a + ?n) %Z =>
+        add_bounds a;
         add_bounds n
+    | (?a * ?b) %Z =>
+        add_bounds a;
+        add_bounds b
     | ?a => idtac 
     end.
 

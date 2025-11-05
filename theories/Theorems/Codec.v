@@ -269,6 +269,20 @@ Proof.
   reflexivity.
 Qed.
 
+Ltac lia_simplify_hyp H :=
+  repeat match type of H with
+    | context[match (if ?cond then ?a else ?b) with | _ => _ end] =>
+        (replace cond with false in H by lia)
+            || (replace cond with true in H by lia)
+            || let C := fresh "cond" in destruct cond eqn:C
+    end.
+
+Ltac lia_simplify :=
+  repeat match goal with
+    | |- context[match (if ?cond then ?a else ?b) with | _ => _ end] =>
+        ((replace cond with false by lia) || (replace cond with true by lia) || (destruct cond))
+    end.
+
 Lemma utf8_dfa_decode_invalid: forall bytes suffix,
     utf8_dfa_decode bytes = ([], suffix) ->
     bytes = suffix.
@@ -277,11 +291,10 @@ Proof.
   unfold utf8_dfa_decode in decode_bytes.
   destruct bytes as [| byte1 bytes].
   - simpl in decode_bytes. inversion decode_bytes. reflexivity.
-  - do 2 lazymatch goal with
+  - repeat lazymatch goal with
            | [NextState: context[next_state ?state ?carry ?byte] |- _] =>
                unfold next_state in NextState;
                let range := fresh "range" in
-               idtac byte;
                destruct (byte_range_dec byte) as [range|];
                [| inversion NextState; reflexivity];
                destruct range;
@@ -293,44 +306,201 @@ Proof.
            | [Decode: context[utf8_dfa_decode_rec ?bytes ?code ?state ?consumed] |- _] =>
                let byte := fresh "byte" in
                let rest := fresh "bytes" in
-               destruct bytes as [| byte rest]; simpl in Decode;
-               [inversion Decode; reflexivity|]
+               destruct bytes as [| byte rest]; simpl in Decode; [inversion Decode; reflexivity|]
            end.
-
-Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
-Proof.
-  intros bytes suffix codes decode_bytes.
-  induction codes.
-  - split. constructor.
-    exists []. repeat split. constructor.
-    apply utf8_dfa_decode_invalid in decode_bytes.
-    subst. reflexivity.
-    
-    
-
-Lemma utf8_dfa_input : decoder_input_correct_iff utf8_dfa_decode.
-Proof.
-Admitted.
-
-
-Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
-Proof.
-Admitted.
-
-Lemma utf8_dfa_accepts_codepoint_repr : forall bytes,
-    valid_codepoint_representation bytes ->
-    exists code, utf8_dfa_decode bytes = ([code], []).
-Proof.
-  Admitted.
+Qed.
 
 Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
 Proof.
   intros xs ys valid_xs.
-  destruct valid_xs.
-  2: { 
-  - 
-  unfold next_state. 
-       
+  unfold utf8_dfa_decode.
+  Time destruct valid_xs; simpl; unfold next_state, byte_range_dec; lia_simplify;
+    destruct (utf8_dfa_decode_rec ys 0 Initial []); reflexivity.
+Qed.
+
+Lemma utf8_dfa_decode_prefix: forall bytes code codes suffix,
+    utf8_dfa_decode bytes = (code :: codes, suffix) ->
+    exists prefix rest,
+      valid_codepoint code /\
+        valid_codepoint_representation prefix /\ 
+        utf8_dfa_decode prefix = ([code], []) /\
+        utf8_dfa_decode rest = (codes, suffix) /\
+        bytes = prefix ++ rest.
+Proof.
+  intros bytes code codes suffix decode_bytes.
+  destruct bytes as [| byte1 bytes1] eqn:bytes_eq; [ inversion decode_bytes|].
+  unfold utf8_dfa_decode in decode_bytes. simpl in decode_bytes.
+  unfold next_state, byte_range_dec in decode_bytes.
+  lia_simplify_hyp decode_bytes; try (inversion decode_bytes);
+  let rec destruct_bytes :=
+      match goal with
+      | G: context[utf8_dfa_decode_rec ?bytes 0 Initial []] |- _ =>
+          let codes := fresh "codes" in
+          let suffix := fresh "suffix" in
+          let dec := fresh "decode_bytes" in
+          destruct (utf8_dfa_decode_rec bytes 0 Initial []) as [codes suffix] eqn:dec;
+          inversion G; subst
+      | G: context[utf8_dfa_decode_rec ?bytes ?acc ?state ?consumed] |- _ =>
+          let b := fresh "byte" in
+          let bs := fresh "bytes" in
+          let b_eq := fresh "bytes_eq" in
+          destruct bytes as [| b bs] eqn:b_eq; [ inversion G|];
+          simpl in G; unfold next_state, byte_range_dec in G;
+          lia_simplify_hyp G; solve [inversion G] || destruct_bytes
+  end in
+  let rec reconstruct_prefix :=
+    match goal with
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?byte2 :: ?byte3 :: ?byte4 :: ?bytes = _) =>
+        exists [byte1; byte2; byte3; byte4]; exists bytes
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?byte2 :: ?byte3 :: ?bytes = _) =>
+        exists [byte1; byte2; byte3]; exists bytes
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?byte2 :: ?bytes = _) =>
+        exists [byte1; byte2]; exists bytes
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?bytes = _) =>
+        exists [byte1]; exists bytes
+    end in
+  destruct_bytes; reconstruct_prefix.
+  all: let rec codepoint_is_valid :=
+    unfold extract_3_bits, extract_4_bits, extract_5_bits, extract_7_bits, push_bottom_bits;
+    lazymatch goal with
+    | |- (valid_codepoint ?codepoint) =>
+        unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in *;
+        repeat split; add_bounds codepoint; try lia
+    end 
+  in
+  let rec valid_bytes :=
+    match goal with
+    | |- valid_codepoint_representation [?byte] => apply OneByte; lia
+    | |- valid_codepoint_representation [?byte1; ?byte2] => apply TwoByte; lia
+    | |- valid_codepoint_representation [?byte1; ?byte2; ?byte3] =>
+        (apply ThreeByte1; lia) || (apply ThreeByte2; lia) || (apply ThreeByte3; lia) || idtac
+    | |- valid_codepoint_representation [?byte1; ?byte2; ?byte3; ?byte4] =>
+        (apply FourBytes1; lia) || (apply FourBytes2; lia) || (apply FourBytes3; lia) || idtac
+    end
+  in
+  let rec decode_prefix := unfold utf8_dfa_decode; simpl; unfold next_state, byte_range_dec; lia_simplify; reflexivity in
+  split; [codepoint_is_valid | split; [ valid_bytes| split; [ decode_prefix | split; [ unfold utf8_dfa_decode; assumption | reflexivity]] ]].
+Qed.
+  
+Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
+Proof.
+  intros bytes suffix codes decode_bytes.
+  generalize dependent bytes.
+  induction codes as [| code codes].
+  - split. constructor.
+    exists []. repeat split. constructor.
+    apply utf8_dfa_decode_invalid in decode_bytes.
+    subst. reflexivity.
+  - intros bytes decode_bytes.
+    apply utf8_dfa_decode_prefix in decode_bytes as G.
+    destruct G as [prefix [rest [valid_code [valid_prefix [decode_prefix [decode_rest bytes_eq]]]]]].
+    apply IHcodes in decode_rest as G.
+    destruct G as [valid_codes [prefix2 [decode_prefix2 [valid_prefix2 G]]]].
+    subst. split.
+    + apply Forall_cons. all: assumption.
+    + exists (prefix ++ prefix2). repeat split.
+      * rewrite utf8_dfa_projects. rewrite decode_prefix, decode_prefix2. reflexivity. assumption.
+      * constructor. all: assumption.
+      * rewrite app_assoc. reflexivity.
+Qed.
+
+      
+Lemma utf8_dfa_input : decoder_input_correct_iff utf8_dfa_decode.
+Proof.
+  split.
+  - intros bytes_valid.
+    destruct bytes_valid; unfold utf8_dfa_decode; simpl; unfold next_state, byte_range_dec; lia_simplify; eexists; reflexivity.
+  - intros [code decode_bytes].
+    apply utf8_dfa_decode_prefix in decode_bytes as G.
+    destruct G as [prefix [rest [code_valid [prefix_valid [decode_prefix [decode_rest bytes_eq]]]]]].
+    subst.
+    apply utf8_dfa_decode_invalid in decode_rest. subst. rewrite app_nil_r in *.
+    assumption.
+Qed.
+
+Lemma one_byte_bounds : forall byte code,
+    valid_codepoint_representation [byte] ->
+    utf8_dfa_decode [byte] = ([code], []) ->
+    0 <= code <= 0x7f.
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0. lia_simplify_hyp H0; inversion H0.
+  unfold extract_7_bits in *. add_bounds (byte mod 128). lia.
+Qed.
+
+Lemma two_byte_bounds : forall byte1 byte2 code,
+    valid_codepoint_representation [byte1; byte2] ->
+    utf8_dfa_decode [byte1; byte2] = ([code], []) ->
+    0x80 <= code <= 0x7ff.
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0.
+  lia_simplify_hyp H0; inversion H0;
+    unfold push_bottom_bits, extract_5_bits in *;
+    match goal with
+    | |- ?a <= ?code <= ?b =>
+        add_bounds code; lia
+    end.
+Qed.
+
+Lemma three_byte_bounds : forall byte1 byte2 byte3 code,
+    valid_codepoint_representation [byte1; byte2; byte3] ->
+    utf8_dfa_decode [byte1; byte2; byte3] = ([code], []) ->
+    0x800 <= code <= 0xffff.
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0.
+  lia_simplify_hyp H0; inversion H0;
+    unfold push_bottom_bits, extract_4_bits in *;
+    match goal with
+    | |- ?a <= ?code <= ?b =>
+        add_bounds code; lia
+    end.
+Qed.
+
+Lemma four_byte_bounds : forall byte1 byte2 byte3 byte4 code,
+    valid_codepoint_representation [byte1; byte2; byte3; byte4] ->
+    utf8_dfa_decode [byte1; byte2; byte3; byte4] = ([code], []) ->
+    0x1000 <= code <= 0x10ffff.
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0.
+  lia_simplify_hyp H0; inversion H0;
+    unfold push_bottom_bits, extract_3_bits in *;
+    match goal with
+    | |- ?a <= ?code <= ?b =>
+        add_bounds code; try lia
+    end.
+Qed.
+
+Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
+Proof.
+  intros bytes1 bytes2 code1 code2 decode_bytes1 decode_bytes2.
+  apply utf8_dfa_decode_prefix in decode_bytes1 as G1, decode_bytes2 as G2.
+  destruct G1 as [prefix1 [rest1 [code_valid1 [prefix_valid1 [decode_prefix1 [decode_rest1 bytes_eq1]]]]]].
+  destruct G2 as [prefix2 [rest2 [code_valid2 [prefix_valid2 [decode_prefix2 [decode_rest2 bytes_eq2]]]]]].
+  subst.
+  apply utf8_dfa_decode_invalid in decode_rest1, decode_rest2. subst. repeat rewrite app_nil_r in *.
+  clear decode_bytes1. clear decode_bytes2.
+  let rec break bytes bytes_valid decode :=
+    let b := fresh "bounds" in
+    (destruct bytes;
+     [ inversion bytes_valid
+     | destruct bytes;
+       [apply one_byte_bounds in decode as b|
+         destruct bytes;
+         [apply two_byte_bounds in decode as b|
+           destruct bytes;
+           [apply three_byte_bounds in decode as b|
+             destruct bytes;
+             [apply four_byte_bounds in decode as b| inversion bytes_valid]]]]])
+  in (break prefix1 prefix_valid1 decode_prefix1); (break prefix2 prefix_valid2 decode_prefix2); try assumption.
+  all: simpl. match goal
+  
 Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.
 Proof.
   split.

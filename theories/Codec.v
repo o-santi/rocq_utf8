@@ -107,7 +107,7 @@ Definition byte_range_dec (b: byte) : option byte_range :=
     Some Byte_E0
   else if b <=? 0xec then
     Some Range_E1_EC
-  else if b  =? 0xe then
+  else if b  =? 0xed then
     Some Byte_ED
   else if b <=? 0xef then
     Some Range_EE_EF
@@ -166,7 +166,7 @@ Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsi
           let (vals, rest) := utf8_dfa_decode_rec rest 0x00 Initial nil in
           (cons codep vals, rest)
       | Some (More state codep) =>
-          utf8_dfa_decode_rec rest codep state (b :: consumed)
+          utf8_dfa_decode_rec rest codep state (consumed ++ [b])
       | None => (nil, app consumed bytes)
       end
   end.
