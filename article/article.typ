@@ -1214,6 +1214,60 @@ Definition utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
 
 Note que, pelas restrições de ser um _parser_ parcial, é necessário guardar os bytes consumidos equivalentes ao codepoint atual, de modo a não jogar fora bytes se apenas um da sequência for inválido.
 
-== Corretude da implementação
+== Provando a corretude da implementação
+
+Como reforçado anteriormente, a corretude da implementação está inteiramente baseada em provar que ambos codificador e decodificador seguem a especificação desenvolvida até agora. Tendo visto todo o desenvolvimento até agora, fica extremamente claro o significado de "provar que segue a especificação": construir um elemento cujo tipo é `utf8_spec utf8_encode utf8_dfa_decode`.
+
+Para fazer isso, basta construir dois elementos, um de tipo `utf8_encode_spec utf8_encode`, e outro de tipo `utf8_decode_spec utf8_dfa_decode`.
+
+Começando com o codificador, a primeira prova é trivial:
+```coq
+Lemma utf8_encode_nil : encoder_nil utf8_encode.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma utf8_encode_correct : encoder_input_correct_iff utf8_encode.
+
+Lemma utf8_encode_output : encoder_output_correct utf8_encode.
+
+Lemma utf8_encode_increasing: encoder_strictly_increasing utf8_encode.
+
+Theorem utf8_encode_spec_compliant : utf8_encoder_spec utf8_encode.
+Proof.
+  split.
+  - apply utf8_encode_nil.
+  - apply utf8_encode_increasing.
+  - apply utf8_encode_correct.
+  - apply utf8_encode_output.
+  - apply utf8_encode_projects.
+Qed.
+```
+
+```coq
+Lemma utf8_dfa_nil : decoder_nil utf8_dfa_decode.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
+
+Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
+
+Lemma utf8_dfa_input : decoder_input_correct_iff utf8_dfa_decode.
+
+Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
+
+Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.
+Proof.
+  split.
+  - apply utf8_dfa_nil.
+  - apply utf8_dfa_input.
+  - apply utf8_dfa_output.
+  - apply utf8_dfa_increasing.
+  - apply utf8_dfa_projects.
+Qed.
+```
+
 
 #bibliography("references.bib", style: "associacao-brasileira-de-normas-tecnicas")

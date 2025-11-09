@@ -263,7 +263,7 @@ Proof.
   - apply utf8_encode_output.
   - apply utf8_encode_projects.
 Qed.
-  
+
 Lemma utf8_dfa_nil : decoder_nil utf8_dfa_decode.
 Proof.
   reflexivity.
