@@ -217,7 +217,7 @@ Os intervalos `80..BF` representam os intervalos comuns de continuação -- isto
 
 No caso em que o _code point_ está no intervalo ASCII, ele é representado sem restrições. Quando é necessário dois bytes, o primeiro não pode começar com `C0` ou `C1` pois faria o _code point_ resultante caber no intervalo anterior. No caso de 3 bytes, há a possibilidade de o _code point_ equivalente estar no intervalo `D800..DFFF`, e por isso é separado em 4 intervalos distintos. O primeiro intervalo se preocupa em impedir que ocorra _overlong encoding_, restringindo o segundo byte; o segundo intervalo contém apenas bytes estritamente menores do que `U+D000`; o terceiro intervalo restringe o segundo byte para garantir que seja menor do que `U+D7FF`; o último intervalo representa aqueles estritamente maiores do que `U+DFFF`. Da mesma forma, o caso de 4 bytes é separado em três. O primeiro caso se preocupa em impedir _overlong encoding_, enquanto o último caso garante que o _code point_ seja estritamente menor do que `U+10FFFF` (o maior _code point_ válido).
 
-O problema com essa especificação é a falta de clareza entre a tabela descritiva e as propriedades intrínsecas ao UTF-8. Não é óbvio que há uma correspondência única entre sequências de bytes e _code points_ válidos, nem que todo _code point_ representado por esse formato é necessariamente válido. Além disso, as operações de extração e concatenação de bits oferecidos pela @UTF8_bits não são triviais, e são sucetíveis a erros. Com uma especificação comlicada demais, é possível que erros sejam cometidos até mesmo na concepção das regras. Quanto menor o conjunto de regras, mais fácil é de conferir manualmente que elas estão corretas.
+O problema com essa especificação é a falta de clareza entre a tabela descritiva e as propriedades intrínsecas ao UTF-8. Não é óbvio que há uma correspondência única entre sequências de bytes e _code points_ válidos, nem que todo _code point_ representado por esse formato é necessariamente válido. Além disso, as operações de extração e concatenação de bits oferecidos pela @UTF8_bits não são triviais, e são sucetíveis a erros. Com uma especificação complicada demais, é possível que erros sejam cometidos até mesmo na concepção das regras. Quanto menor o conjunto de regras, mais fácil é de conferir manualmente que elas estão corretas.
 
 == Trabalhos relacionados
 
@@ -235,27 +235,104 @@ Faz-se necessário, portanto, estudar como codificadores e decodificadores são 
 
 Para a simplicidade de implementação, a formalização dada neste trabalho não utilizará nenhuma biblioteca, visto que essas introduzem complexidades especificas de cada DSL. Assim, quase tudo será feito do zero.
 
-= Formalização em Rocq
+= Formalização da especificação
 
-Visto que a especificação fornecida pelo Consórcio Unicode não era forte o suficiente, tornou-se necessário estabelecer precisamente quais as propriedades que o codificador e decodificador devem satisfazer pra que sejam considerados corretos. Para ter certeza de que de fato implementam o formato UTF-8, é interessante conseguir provar que quaisquer codificador e decodificador que respeitam a especificação devem necessariamente ser inversos um do outro.
+Visto que a especificação fornecida pelo Consórcio Unicode não é forte o suficiente, tornou-se necessário estabelecer precisamente quais as propriedades que o codificador e decodificador devem satisfazer pra que sejam considerados corretos. Como visto nos outros trabalhos, é interessante conseguir provar que quaisquer codificador e decodificador que respeitam a especificação devem necessariamente ser inversos um do outro, entretanto isso não é suficiente, visto que é possível que a especificação contenha algum erro, e que não represente exatamente o mapeamento correto, mas ainda sim faça com que as funções sejam inversas.
 
-Teoricamente, as tabelas @UTF8_bits e @UTF8_bytes dão informação suficiente para garantir a unicidade, mas a complexidade das operações de extração de bits tornariam a especificação grande demais, e não seria óbvio afirmar que foi escrita corretamente.
+Conceitualmente, há duas preocupações em formalizar um codificador e decodificador para garantir a corretude da especificação. A primeira é como identificar unicamente o mapa entre codepoints e sequências de bytes, e a segunda é como representar sequências de codepoints e sequências de bytes, de forma que seja possível aplicar o mapa anterior repetidamente, acumulando seu resultado.
 
-Especificamente, é simples explicitar as propriedades que ditam o que é uma sequência de bytes UTF-8 válidas e o que é um _code point_ válido, de forma que o codificador mapeie _code points_ válidos em bytes UTF-8 válidos, e o decodificador mapeie bytes UTF-8 válidos em _code points_ válidos. Entretanto, existem inúmeras maneiras de fazer esse mapeamento de modo que o codificador e decodificador sejam inversos, e apenas um desses de fato é o UTF-8.
+Para representar tanto _code points_ quanto _bytes_ será utilizado o tipo `Z`, que representa o conjunto dos inteiros em Coq, pois ele possui uma grande gama de provas e propriedades já feitas anteriormente, de modo que muitas relações matemáticas possam ser reutilizadas. Quanto a segunda preocupação, em linguagens funcionais, é tradicional representar strings como listas encadeadas, de forma que tanto as sequências de bytes quanto sequências de codepoints sejam representados como listas encadeadas de números:
 
-Para especificar *como* _code points_ são mapeados em bytes, será utilizada uma propriedade denotada no RFC 3629, que inicialmente propôs o sistema UTF-8:
+```coq
+Definition codepoint : Type := Z.
+Definition byte : Type := Z.
+
+Definition unicode_str : Type := list codepoint.
+Definition byte_str : Type := list byte.
+```
+
+Assim, faz sentido considerar que ambos o codificador e o decodificador sejam funções que mapeiam uma lista de números em uma nova lista de números, mas isso não leva em consideração que ambas podem receber argumentos inválidos. De fato, é necessária uma maneira de sinalizar que a lista retornada não era uma sequência UTF-8 válida.
+
+Para formalizar codificadores e decodificadores, será utilizada a noção de _parser_. De modo geral, _parsers_ processam elementos de tipo `A` e retornam algum valor de tipo `B`, quando a transformação pode não funcionar em todos os casos. Assim, é tradicional utilizar alguma estrutura que envolve o resultado `B` em múltiplos casos para representar a falibilidade.
+
+O exemplo mais comum dessa estrutura é `option B`, que pode ser tanto `Some` com um valor de tipo `B`, ou `None`, representando que o `parser` falhou em extrair informação da entrada.
+```coq
+Inductive option (B :Type) : Type :=
+  | Some : B -> option B
+  | None : option B.
+```
+
+Entretanto, o problema de utilizar o tipo `option` é que é possível que uma sequência de bytes seja quase inteiramente UTF-8 válida, mas tenha algum erro por corrupção na hora da transmissão. Nesse caso, o `parser` retornaria `None`, e toda informação seria descartada. Ao invés disso, é útil exigir que o `parser` tente sempre ler o maior número de bytes o possível do prefixo da entrada, e ao encontrar bytes inválidos, substitua-os pelo caractere '#str.from-unicode(65533)' (`U+FFFD`). Essa prática é tão difundida que o capítulo 3.9.6 do padrão Unicode dá guias gerais sobre como essa substituição deve ser feita.
+
+Este trabalho é restringido à leitura de prefixo válido na entrada, pois especificar o algoritmo de substituição pode ser feito em um trabalho futuro, como um _parser_ que roda o decodificador UTF-8 e substitui as partes inválidas de acordo com o que especificado no capítulo 3.9.6.
+
+Assim, um _parser_ parcial é definido como uma função que recebe uma lista de elementos de tipo `input` e retorna um par de `output` e lista de `input`. A semântica de um _parser_ parcial é que a lista de `output` representa o resultado de "consumir" o prefixo válido da lista de entrada, enquanto a lista de `input` no resultado representa o sufixo não consumido. Essa semântica é enforçada como propriedades na especificação, vistas mais a frente.
+
+```coq
+Definition partial_parser (input output: Type) := list input -> (output * list input).
+
+Definition encoder_type := partial_parser codepoint (list byte).
+Definition decoder_type := partial_parser byte (list codepoint).
+```
+
+Para especificar unicamente o mapeamento entre sequências de bytes e codepoints, devem ser utilizadas as tabelas @UTF8_bits e @UTF8_bytes. Uma possível maneira de traduzir isso em código Rocq seria com uma propriedade entre duas listas de inteiros, que faz a tradução mais ingênua possível:
+```coq
+Inductive naive_utf8_map : byte_str -> codepoint -> Prop :=
+| OneByte (b1: byte) :
+  0x00 <= b1 < 0x80 ->
+  naive_utf8_map [b1] b1
+| TwoBytes (b1 b2: byte) :
+  0xc2 <= b1 <= 0xdf ->
+  0x80 <= b2 <= 0xbf ->
+  naive_utf8_map [b1; b2] ((b1 mod 64) * 64 + (b2 mod 64))
+| ThreeBytes1 (b1 b2 b3: Z):
+  b1 = 0xe0 ->
+  0xa0 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3] (((b1 - 224) * 4096) + (b2 mod 64) * 64 + (b3 mod 64))
+| ThreeBytes2 (b1 b2 b3: Z):
+  0xe1 <= b1 <= 0xec \/ 0xee <= b1 <= 0xef ->
+  0x80 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3] (((b1 - 224) * 4096) + (b2 mod 64) * 64 + (b3 mod 64))
+| ThreeBytes3 (b1 b2 b3: Z):
+  b1 = 0xed ->
+  0x80 <= b2 <= 0x9f ->
+  0x80 <= b3 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3] (((b1 - 224) * 4096) + (b2 mod 64) * 64 + (b3 mod 64))
+| FourBytes1 (b1 b2 b3 b4: Z):
+  b1 = 0xf0 ->
+  0x90 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3; b4] ((b1 - 240) * 262144 + (b2 mod 64) * 4096 + (b3 mod 64) * 64 + (b4 mod 64))
+| FourBytes2 (b1 b2 b3 b4: Z):
+  0xf1 <= b1 <= 0xf3 ->
+  0x80 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3; b4] ((b1 - 240) * 262144 + (b2 mod 64) * 4096 + (b3 mod 64) * 64 + (b4 mod 64))
+| FourBytes3 (b1 b2 b3 b4: Z):
+  b1 = 0xf4 ->
+  0x80 <= b2 <= 0x8f ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3; b4] ((b1 - 240) * 262144 + (b2 mod 64) * 4096 + (b3 mod 64) * 64 + (b4 mod 64)).
+```
+
+Isto é, um elemento de tipo `naive_utf8_map bytes codepoint` é uma prova de que a sequência de bytes `bytes` mapeia para o codepoint `codepoint` segundo as tabelas @UTF8_bits e @UTF8_bytes. Especificamente, cada construtor de `naive_utf8_map` representa uma das linhas da @UTF8_bytes, e as operações nos bytes de multiplicação e `mod` representam como extrair os bits relevantes dos bytes que contém cabeçalhos.
+
+Entretanto, o problema dessa especificação é que não há como afirmar com certeza que essas operações representam exatamente o que é dado na @UTF8_bits, visto que há muitas operações envolvidas. Parte crucial de verificação de software é que a especificação seja simples de entender, para que essa seja trivialmente verificável, e infelizmente essa tabela não é facilmente compreendida.
+
+Assim, esse tipo não será utilizado. Ao invés de especificar exatamente qual o mapeamento dado entre bytes e codepoints, é mais interessante considerar propriedades que esse deve satisfazer. Especificamente, é simples explicitar as propriedades que ditam o que é uma sequência de bytes UTF-8 válidas (@UTF8_bytes) e o que é um _code point_ válido, exigindo que o codificador mapeie _code points_ válidos em bytes UTF-8 válidos, e o decodificador mapeie bytes UTF-8 válidos em _code points_ válidos. Entretanto, existem inúmeras maneiras de fazer esse mapeamento de modo que o codificador e decodificador sejam inversos, e apenas um desses de fato é o UTF-8.
+
+Para especificar *como* _code points_ são mapeados em bytes, a seguinte propriedade denotada no RFC 3629 é extremamente útil:
 // https://datatracker.ietf.org/doc/html/rfc3629
-#quote(block: true, [ 
+#quote(block: true, [
     "A ordenação lexicográfica por valor dos bytes de strings UTF-8 é a mesma que se fosse ordenada pelos números dos caracteres. É claro, isso é de interesse limitado, dado que uma ordenação baseada no número dos caracteres quase nunca é culturalmente válida." (@rfc3629)
 ])
 
-Apesar do que foi dito pelo autor do RFC, essa propriedade é de extremo interesse para a formalização por sua simplicidade. Para garantir que _code points_ sejam mapeados nas respectivas representações de bytes, basta exigir que tanto o codificador quanto o decodificador respeitem a ordenação lexicográfica entre _code points_ e bytes.
-
-A formalização da implementação na linguagem Rocq é dada em duas fases. Primeiro, será feita a formalização da especificação, com o objetivo explícito de mostrar que ela é forte o suficiente pra exigir que quaisquer par de codificador e decodificador que implementem-a devem ser inversos um do outro. Depois, será dada a implementação de um codificador e decodificador, com o objetivo de mostrar que esses seguem as regras da especificação.
-
-== Formalizando a especificação
-
-Para representar tanto _code points_ quanto _bytes_ será utilizado o tipo `Z`, que representa o conjunto dos inteiros em Coq, pois ele possui uma grande gama de provas e propriedades já feitas anteriormente, de modo que muitas relações matemáticas possam ser reutilizadas.
+Apesar do que foi dito pelo autor do RFC, essa propriedade é de extremo interesse para a formalização por sua simplicidade. Para garantir que _code points_ sejam mapeados nas respectivas representações de bytes, basta exigir que tanto o codificador quanto o decodificador respeitem a ordenação lexicográfica entre _code points_ e bytes. 
 
 Assim, são definidos as seguintes notações:
 ```coq
@@ -278,32 +355,6 @@ Inductive comparison : Set :=
 
 A função `list_compare` transforma uma comparação entre elementos de um tipo `T` em uma comparação entre elementos de tipo `list T`, utilizando a semântica de comparação lexicográfica.
 
-Para formalizar codificadores e decodificadores, é utilizada a noção de _parser_. De modo geral, _parsers_ processam listas de elementos e retornam algum valor de tipo `A`, e são utilizados quando a transformação pode não funcionar em todos os casos. Assim, é tradicional utilizar alguma estrutura que envolve o resultado `A` em múltiplos casos para representar a falibilidade.
-
-O exemplo mais comum dessa estrutura é `option A`, que pode ser tanto `Some` com um valor de tipo `A`, ou `None`, representando que o `parser` falhou em extrair informação da entrada.
-```coq
-Inductive option (A:Type) : Type :=
-  | Some : A -> option A
-  | None : option A.
-```
-
-Entretanto, o problema dessa definição é que é possível que uma sequência de bytes seja quase inteiramente UTF-8 válida, mas tenha algum erro por corrupção na hora da transmissão. Nesse caso, o `parser` retornaria `None`, e toda informação seria descartada. Ao invés disso, é tradicional que o `parser` tente sempre ler o maior número de bytes o possível do prefixo da entrada, e ao encontrar bytes inválidos, substitua-os pelo caractere '#str.from-unicode(65533)' (`U+FFFD`). Essa prática é tão difundida que o capítulo 3.9.6 do padrão Unicode dá guias gerais sobre como essa substituição deve ser feita.
-
-Este trabalho é restringido à leitura de prefixo válido na entrada, pois especificar a substituição tornaria-o complicado demais. Entretanto, é possível utilizar um _parser_ que lê o prefixo válido como parte de um parser que substitui as partes inválidas, em um trabalho futuro.
-
-Assim, são um _parser_  parcial será um elemento um _parser_ parcial, isto é, recebe uma lista de `input`, e retornam um par de `output` e lista de `input`. A semântica de um _parser_ parcial é de que a lista de `output` representa o resultado de "consumir" o prefixo válido da lista de entrada, enquanto a lista de `input` no resultado representa o sufixo não consumido. Essa semântica é enforçada como propriedades na especificação, vistas mais a frente.
-
-```coq
-Definition partial_parser (input output: Type) := list input -> (output * list input).
-
-Definition encoder_type := partial_parser codepoint (list byte).
-Definition decoder_type := partial_parser byte (list codepoint).
-```
-
-#quote(block: true, [
-    *Definição*: É dito que um _parser_ parcial *aceita* a entrada quando todos elementos da lista de entrada são consumidos, ou seja, a parte não consumida do resultado é vazia.
-])
-
 Em seguida, são definidas as propriedades necessárias para afirmar que um `codepoint` arbitrário, isto é, um inteiro qualquer, é um _codepoint_ UTF-8 válido. Como visto anteriormente, basta saber que esse está entre `0` e `10FFFF`, e não está no intervalo `D800..DFFF` . Isso pode ser representado como as seguintes três propriedades:
 ```coq
 Definition codepoint_less_than_10ffff (code: codepoint) : Prop :=
@@ -318,11 +369,9 @@ Definition codepoint_not_negative (code: codepoint): Prop :=
 Definition valid_codepoint (code: codepoint) := codepoint_less_than_10ffff code /\ codepoint_is_not_surrogate code /\ codepoint_not_negative code.
 ```
 
-Isto é, provar que `valid_codepoint code` para algum `code` significa provar as três propriedades ao mesmo tempo.
+Isto é, provar que `valid_codepoint code` para algum `code` significa mostrar que as três propriedades valem ao mesmo tempo.
 
-Construir o mesmo para bytes UTF-8 é mais complicado, visto que é preciso codificar a informação contida em @UTF8_bytes em um tipo. Além disso, enquanto _code points_ válidos tem sempre o mesmo tamanho (1 elemento), bytes válidos podem ter de 1 a 4 elementos, fazendo com que tenham de ser concatenados no resultado.
-
-O tipo `valid_codepoint_representation` só pode ser construido quando os elementos da lista de entrada estão nos intervalos de alguma das linhas da tabela, e representa afirmar que uma certa lista de bytes é a representação em UTF-8 de algum _codepoint_:
+Para definir o tipo `valid_codepoint_representation`, será utilizada a mesma ideia do `naive_utf8_map`. Isto é, esse só pode ser construido quando os elementos da lista de entrada estão nos intervalos de alguma das linhas da tabela, e representa afirmar que uma certa lista de bytes é a representação em UTF-8 de algum _codepoint_:
 
 ```coq
 Inductive valid_codepoint_representation : list Z -> Prop :=
@@ -368,7 +417,7 @@ Inductive valid_codepoint_representation : list Z -> Prop :=
   valid_codepoint_representation [b1; b2; b3; b4].
 ```
 
-Cada construtor desse tipo representa uma das linhas tabela, com argumentos que requerem provas de que os elementos estão nos intervalos corretos. Com isso, existem duas maneiras de construir uma lista de bytes válidos UTF-8: ou a lista é vazia, ou ela é a concatenação de uma lista de bytes UTF-8 válidos e a representação em bytes de um `codepoint`. O tipo que representa que essa relação é:
+Com isso, existem duas maneiras de construir uma lista de bytes válidos UTF-8: ou a lista é vazia, ou ela é a concatenação de uma representação em bytes de um `codepoint` e uma lista de bytes UTF-8 válidos. O tipo que representa que essa relação é:
 ```coq
 Inductive valid_utf8_bytes: list Z ->  Prop :=
 | Utf8Nil : valid_utf8_bytes []
@@ -399,7 +448,7 @@ Definition encoder_output_correct (encoder: encoder_type) := forall code,
     | (bytes, rest) => bytes = [] /\ rest = [code]
     end.
 ```
-A terceira propriedade descorre sobre a validade do resultado de um `encoder`. Apenas dois resultados ao chamar um `encoder` com uma lista de um elemento só são possíveis: ou a entrada é aceita, e os `bytes` à esquerda são uma representação de codepoints válida, ou não é aceita, o que implica que os `bytes` devem ser vazios, e o lado não consumido deve conter o `codepoint` da entrada. 
+A terceira propriedade descorre sobre a validade do resultado de um `encoder`. Apenas dois resultados ao chamar um `encoder` com uma lista de um elemento são possíveis: ou a entrada é aceita, e os `bytes` à esquerda são uma representação de codepoints válida, ou não é aceita, o que implica que os `bytes` devem ser vazios, e o lado não consumido deve conter o `codepoint` da entrada. 
 
 ```coq
 Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 codes2 bytes1 bytes2,
@@ -408,7 +457,7 @@ Definition encoder_strictly_increasing (encoder: encoder_type) := forall codes1 
     codepoints_compare codes1 codes2 = bytes_compare bytes1 bytes2.
 ```
 
-A quarta propriedade representa afirmar que o `encoder` é crescente, ou seja, respeita a ordenação lexicográfica entre bytes e _code points_, explicada anteriormente. Essa propriedade é suficiente para afirmar que o `encoder` mapeia o _code point_ certo na sua respectiva representação em bytes.
+A quarta propriedade afirma que o `encoder` respeita a ordenação lexicográfica entre bytes e _code points_, explicada anteriormente. Essa propriedade é suficiente para afirmar que o `encoder` mapeia o _code point_ na sua respectiva representação em bytes, de acordo com o mapeamento UTF-8.
 
 ```coq
 Definition encoder_projects (encoder: encoder_type) := forall xs ys,
@@ -433,40 +482,45 @@ Record utf8_encoder_spec encoder := {
   }.
 ```
 
-Apenas essas 5 propriedades são o suficiente para qualificar um `encoder` como um codificador de UTF-8, segundo a especificação. Importantemente, não é necessário ter um decodificador para provar que o codificador está correto. Assim, para provar que um `encoder` está certo, basta construir um elemento de tipo `utf8_encoder_spec encoder`.
+Apenas essas 5 propriedades são o suficiente para qualificar um `encoder` como um codificador de UTF-8 válido, segundo a especificação. Importantemente, não é necessário ter um decodificador para provar que o codificador está correto. Para provar que um `encoder` está certo, basta construir um elemento de tipo `utf8_encoder_spec encoder`.
 
 As propriedades que o decodificador deve satisfazer são análogas às do codificador.
 ```coq
-Definition decoder_output_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-  decoder bytes = (codes, bytes_suffix) ->
-  valid_codepoints codes.
+Definition decoder_nil (decoder: decoder_type) := decoder nil = (nil, nil).
 
-Definition decoder_input_correct (decoder: decoder_type) := forall bytes codes bytes_suffix,
-  decoder bytes = (codes, bytes_suffix) ->
-  exists bytes_prefix,
-    (bytes = bytes_prefix ++ bytes_suffix)
-    /\ (valid_utf8_bytes bytes_prefix)
-    /\ ((bytes_suffix = []) \/ ~ (valid_utf8_bytes bytes_suffix)).
+Definition decoder_output_correct (decoder: decoder_type) := forall bytes suffix codes,
+    decoder bytes = (codes, suffix) ->
+    valid_codepoints codes /\
+      (exists prefix,
+          decoder prefix = (codes, [])
+          /\ valid_utf8_bytes prefix
+          /\ bytes = prefix ++ suffix).
 
-Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes0 bytes1 code0 code1,
-    decoder bytes0 = ([code0], nil) ->
+Definition decoder_input_correct_iff (decoder: decoder_type) := forall bytes,
+    valid_codepoint_representation bytes <->
+    exists code, decoder bytes = ([code], []).
+
+Definition decoder_strictly_increasing (decoder: decoder_type) := forall bytes1 bytes2 code1 code2,
     decoder bytes1 = ([code1], nil) ->
-    codepoints_compare code0 code1 = bytes_compare bytes0 bytes1.
+    decoder bytes2 = ([code2], nil) ->
+    Z.compare code1 code2 = bytes_compare bytes1 bytes2.
 
-Definition decoder_projects (decoder: decoder_type) := forall xs ys codes,
-    decoder xs = (codes, []) ->
+Definition decoder_projects (decoder: decoder_type) := forall xs ys,
+    valid_codepoint_representation xs ->
     decoder (xs ++ ys) =
+      let (codes, _) := decoder xs in
       let (codes2, rest) := decoder ys in
       (codes ++ codes2, rest).
 
 Record utf8_decoder_spec decoder := {
-    dec_input: decoder_input_correct decoder;
+    dec_nil : decoder_nil decoder;
+    dec_input : decoder_input_correct_iff decoder;
     dec_output : decoder_output_correct decoder;
     dec_increasing : decoder_strictly_increasing decoder;
     dec_projects : decoder_projects decoder;
   }.
 ```
-A primeira propriedade afirma que todo _code point_ emitido pelo `decoder` deve ser válido. A segunda fala que todo input válido deve ser aceito. A terceira propriedade afirma sobre a ordenação entre bytes e _code points_, assim como no `decoder`. A quarta e última propriedade é uma propriedade de projeção para desconstruir listas em listas menores.
+A primeira propriedade afirma que todo `decoder` aceita a lista vazia. A segunda afirma que do _code point_ emitido pelo `decoder` deve ser válido. A terceira fala que todo input válido deve ser aceito. A quarta propriedade afirma sobre a ordenação entre bytes e _code points_, assim como no `decoder`. A quinta propriedade é uma propriedade de projeção para desconstruir listas em listas menores.
 
 Com essas duas definições, a especificação UTF-8 completa para um par codificador e decodificador é o par que contém a especificação para o codificador e decodificador separadamente. Por serem separados, é possível mostrar que quaisquer `encoder` e `decoder` são corretos, contanto que mostre que as regras valem para eles separadamente.
 ```coq
@@ -478,59 +532,35 @@ Record utf8_spec encoder decoder := {
 
 == Corretude da especificação
 
-Para ter certeza de que a especificação está correta, é necessário provar teoremas sobre ela. Duas propriedades principais formarão o cerne da corretude da especificação:
+Para ter certeza de que a especificação está correta, é necessário provar teoremas sobre ela. Como visto anteriormente, a propriedades principal que formará o cerne da corretude da especificação é de que todo par `(encoder, decoder)` que implemente `utf8_spec encoder decoder` deve necessariamente ser inverso um do outro. Por ambos o codificador e decodificador serem um _parser_ parcial, é preciso considerar que nem toda entrada irá ser aceita, e isso é levado em conta da seguinte forma: toda entrada deve necessariamente ter um prefixo UTF-8 válido -- que pode ser a lista vazia --  de forma que o prefixo válido deve ser a entrada para o processador dual.
 
-1. Todo `encoder`/`decoder` que implementa sua respectiva implementação deve ser igual qualquer entrada. 
-2. Todo par `(encoder, decoder)` que implemente `utf8_spec encoder decoder` deve necessariamente ser inverso um do outro.
-
-Ambas as propriedades são suficientes para mostrar que a especificação é forte (unicidade) e que está correta (possui inversa). Cada uma dessas duas propriedades são representadas com 2 teoremas:
 ```coq
 Theorem utf8_spec_encoder_decoder_inverse : forall encoder decoder,
-    utf8_encoder_spec encoder ->
-    utf8_decoder_spec decoder ->
+    utf8_spec encoder decoder ->
     forall codes bytes codes_suffix,
       encoder codes = (bytes, codes_suffix) ->
       exists codes_prefix, decoder bytes = (codes_prefix, nil) /\ codes = (codes_prefix ++ codes_suffix)%list.
 
 Theorem utf8_spec_decoder_encoder_inverse_strong : forall encoder decoder,
-    utf8_encoder_spec encoder ->
-    utf8_decoder_spec decoder ->
+    utf8_spec encoder decoder ->
     forall codes bytes bytes_suffix,
       decoder bytes = (codes, bytes_suffix) ->
       exists bytes_prefix, encoder codes = (bytes_prefix, nil) /\ bytes = (bytes_prefix ++ bytes_suffix)%list.
 Proof.
 ```
-Os dois primeiros teoremas descorrem sobre o fato de serem inversos. Por ser um _parser_ parcial, é preciso considerar que nem toda entrada irá ser aceita, e isso é levado em conta da seguinte forma: toda entrada deve necessariamente ter um prefixo UTF-8 válido -- que pode ser a lista vazia --  de forma que o prefixo válido deve ser a entrada para o processador dual. Isto é, se `encoder codes = (bytes, codes_suffix)`, então necessariamente deve existir um prefixo de `codes` tal que `decoder bytes = (codes_prefix, [])`, e a propriedade dual é válida para o `decoder`. 
-```coq
-Theorem utf8_spec_encoder_unique : forall encoder1 decoder codes bytes rest,
-    utf8_encoder_spec encoder1 ->
-    utf8_decoder_spec decoder ->
-    encoder1 codes = (bytes, rest) ->
-    forall encoder2,
-      utf8_encoder_spec encoder2 ->
-      encoder2 codes = (bytes, rest).
-
-Theorem utf8_spec_decoder_unique : forall decoder1 encoder codes bytes rest,
-    utf8_decoder_spec decoder1 ->
-    utf8_encoder_spec encoder ->
-    decoder1 bytes = (codes, rest) ->
-    forall decoder2,
-      utf8_decoder_spec decoder ->
-      decoder2 bytes = (codes, rest).
-```
-A prova da unicidade utiliza o fato de que ambos são inversos internamente, e portanto necessita que sejam fornecidos tanto o `encoder` quanto o `decoder`.
+Isto é, se `encoder codes = (bytes, codes_suffix)`, então necessariamente deve existir um prefixo `codes_prefix` tal que `decoder bytes = (codes_prefix, [])` e `codes = codes_prefix ++ codes_suffix`.
 
 Para provar essas propriedades, muito trabalho é necessário. Intuitivamente, a prova é inteiramente baseada no fato de que ordenação implica em existir apenas uma função que respeite o mapeamento entre bytes e _code points_, entretanto isso não é nem um pouco óbvio. Assim, é necessário mostrar esse fato para que possa ser utilizado nas provas seguintes.
 
-=== Ordenações em conjuntos finitos
+== Ordenações em conjuntos finitos
 
-Tanto `valid_codepoint` quanto `valid_codepoint_representation` são propriedades que formam conjuntos finitos de exato mesmo tamanho (`10FFFF - 0x800` elementos, o número de _code points_). Por serem conjuntos finitos, é possível assinalar um inteiro para cada elemento, de forma a mostrar que esse conjunto é finito. Assim, provar que são equivalentes é reduzido a provar que a necessidade de respeitar ordenação implica que existe apenas um mapeamento entre conjuntos finitos de mesmo tamanho.
+Tanto `valid_codepoint` quanto `valid_codepoint_representation` são propriedades que formam conjuntos finitos de exato mesmo tamanho (`10FFFF - 0x800` elementos, o número de _code points_). Por serem conjuntos finitos, é possível assinalar um inteiro para cada elemento. Assim, provar que são equivalentes significa provar que a necessidade de respeitar ordenação implica que existe apenas um mapeamento entre conjuntos finitos de mesmo tamanho.
 
-Isto é, é possível mapear cada _code point_ e cada sequência de _bytes_ em um único inteiro unicamente, utilizando a ordenação natural dos inteiros, construindo funções de `nth_valid_codepoint` e `nth_valid_codepoint_representation`, que retornam os índices do enésimo elemento válido de cada um dos conjuntos. Além disso, ao provar que essas funções tem inversa (isto é, fornecer uma função que recebe um inteiro e retorna o _code point_/sequência de bytes equivalente), fica claro que ambas essas funções formam isomorfismos nesse conjunto de inteiros, ambas respeitando a ordenação.
+Isto é, é possível mapear cada _code point_ e cada sequência de _bytes_ em um único inteiro unicamente, utilizando a ordenação natural dos inteiros, construindo funções de `nth_valid_codepoint` -- que retorna o enésimo codepoint -- e `nth_valid_codepoint_representation` -- que retorna a sequência de bytes do enésimo codepoint. Além disso, ao provar que essas funções tem inversa (isto é, fornecer uma função que recebe um inteiro e retorna o _code point_/sequência de bytes equivalente), fica claro que ambas essas funções formam isomorfismos nesse conjunto de inteiros, ambas respeitando a ordenação.
 
-Entretanto, é um fato da matemática todo isomorfismo entre os mesmos dois conjuntos totalmente ordenados é único, e portanto deveria ser possível mostrar que a composição de dois desses isomorfismos é única. Desse fato é derivável que há um isomorfismo único entre `valid_codepoint` e `valid_codepoint_representation`, na ida compondo `inverse_nth_valid_codepoint` com `nth_valid_codepoint_representation`, e na volta compondo `nth_valid_codepoint` com `inverse_nth_valid_codepoint_representation`. Entretanto, a composição de codificador e decodificador também formam isomorfismos entre os mesmos conjuntos, e pela unicidade devem necessariamente serem iguais à fazer a tradução utilizando os índices.
+É um fato da matemática todo isomorfismo entre os mesmos dois conjuntos totalmente ordenados é único, e portanto deveria ser possível mostrar que a composição de dois desses isomorfismos é única. Desse fato é derivável que há um isomorfismo único entre `valid_codepoint` e `valid_codepoint_representation`, na ida compondo `inverse_nth_valid_codepoint` com `nth_valid_codepoint_representation`, e na volta compondo `nth_valid_codepoint` com `inverse_nth_valid_codepoint_representation`. Entretanto, a composição de codificador e decodificador também formam isomorfismos entre os mesmos conjuntos, e pela unicidade devem necessariamente serem iguais à fazer a tradução utilizando os índices.
 
-Para formalizar essa noção, são definidos morfismos parciais.
+Para formalizar essa noção, são definidos morfismos parciais:
 ```coq
 Definition interval (count n : Z) : Prop :=
   (0 <= n /\ n < count)%Z.
@@ -555,7 +585,7 @@ Definition pointwise_equal {X Y}
 
 Como motivação, é fácil ver que o codificador com `valid_codepoint` forma um morfismo parcial (de `Z` em `valid_codepoint`), bem como o decodificador com `valid_codepoint_representation`. A definição `pointwise_equal f g` é utilizada no lugar da igualdade `f = g`, pois provar igualdade de funções em Coq a partir da igualdade de elementos não é possível; isto é, não é possível provar que `f = g` com a hipótese de que `pointwise_equal f g` sem adicionar axiomas externos (extensionalidade funcional).
 
-Além disso, é definido a noção de conjunto ordenado:
+Além disso, é definida a noção de conjunto ordenado:
 ```coq
 Record Ordered {T} (compare: T -> T -> comparison) := {
     eq : forall t1 t2, compare t1 t2 = Eq <-> t1 = t2;
@@ -563,7 +593,7 @@ Record Ordered {T} (compare: T -> T -> comparison) := {
     trans : forall t1 t2 t3 res, compare t1 t2 = res -> compare t2 t3 = res -> compare t1 t3 = res;
   }.
 ```
-Para prova provar que um conjunto `T` é ordenado, basta mostrar que existe uma relação de comparação reflexiva, antisimétrica e transitiva. Além disso, é caracterizada a noção de ser "crescente" da seguinte forma:
+Para prova provar que um tipo `T` é ordenado, basta mostrar que existe uma relação de comparação reflexiva, antisimétrica e transitiva. Além disso, é caracterizada a noção de ser "crescente" da seguinte forma:
 ```coq
 Definition increasing {T1 T2}
   (domain: T1 -> Prop)
@@ -575,7 +605,7 @@ Definition increasing {T1 T2}
       | _ => False
       end.
 ```
-Informalmente, uma função `f` é `increasing` se `compare1 a b = compare2 (f a) (f b)`, ou seja, se respeita a comparação. Com isso, finalmente pode-se definir o que é um isomorfismo ordenado:
+Informalmente, uma função `f` é `increasing` se `compare1 a b = compare2 (f a) (f b)`, ou seja, se respeita a comparação entre quaisquer dois elementos. Com isso, finalmente pode-se definir o que é um isomorfismo ordenado:
 ```coq
 Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop) (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison) (to: T1 -> option T2) (from: T2 -> option T1)
    := {
@@ -591,7 +621,7 @@ Record OrderedPartialIsomorphism {T1 T2} (domain: T1 -> Prop) (range: T2 -> Prop
 
 Um isomorfismo ordenado é um par de funções `from` e `to` que mapeiam entre conjuntos ordenados `T1` e `T2`, de forma que a composição deles dá a identidade. Além disso, é necessário mostrar que ambos formam morfismos entre seu respectivo domínio e imagem, e que pelo menos um deles é `increasing` -- por simplicidade, o `from`.
 
-É possível mostrar que as funções `nth_valid_codepoint` e `nth_valid_codepoint_representation` juntos de suas respectivas inversas formam isomorfismos ordenados com o conjunto dos inteiros de `0` a `10FFFF - 0x800`. Para utilizar esse fato na prova, é necessário provar o teorema principal de ordenação:
+Assim, o teorema principal de ordenação pode ser enunciado:
 ```coq
 Theorem partial_isomorphism_countable_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 from2 to0 to1 to2,
@@ -605,10 +635,585 @@ Theorem partial_isomorphism_countable_unique {T0 T1} (count: Z) (range0: T0 -> P
   /\ (pointwise_equal range1 from2 (and_then from1 to0)).
 ```
 
-Esse teorema permite provar que compor qualquer morfismo parcial entre `valid_codepoint` e `valid_codepoint_representation` que respeite a ordenação deve necessariamente ser igual (no sentido de `pointwise_equal`) a compor as operações de índice (`nth_valid_codepoint` e `nth_valid_codepoint_representation`). Com isso, torna-se possível derivar que todo encoder e decoder que respeita ordenação deve concordar em todos os valores.
+Esse teorema permite afirmar que compor qualquer morfismo parcial entre `valid_codepoint` e `valid_codepoint_representation` que respeite a ordenação deve necessariamente ser igual (no sentido de `pointwise_equal`) a compor as operações de índice (`nth_valid_codepoint` e `nth_valid_codepoint_representation`). Com isso, torna-se possível derivar que todo encoder e decoder que respeita ordenação deve concordar em todos os valores.
 
+Assim, para usar esse teorema é necessário definir `nth_valid_codepoint_representation` e `nth_valid_codepoint` e mostrar que ambos formam isomorfismos parciais com o conjunto de inteiros entre `0` e `0x10FFFF - 0x800`.
 
+== Índices de codepoints e de sequências de bytes
 
-#show bibliography: set heading(numbering: "1.")
+Para definir as funções supracitadas, é necessário lembrar que o conjunto de índices exclui codepoints no intervalo `0xD800..0xDFFF`, ou seja, o índice deve "pular" esse intervalo. Assim, a única preocupação da função `nth_valid_codepoint` é somar `0x800` quando isso acontece:
+
+```coq
+Definition nth_valid_codepoint (n: Z) : option codepoint :=
+  if n <? 0 then
+    None
+  else if n <? 0xd800 then
+    Some n
+  else if n <=? 0x10ffff - 0x0800 then
+    Some (n + 0x0800)
+  else
+    None.
+```
+
+Para mostrar que essa função forma um isomorfismo parcial, as seguintes propriedades são provadas:
+```coq
+Lemma nth_valid_codepoint_is_some_iff_valid : forall code,
+    (exists n, nth_valid_codepoint n = Some code) <->
+      valid_codepoint code.
+
+Lemma nth_valid_codepoint_none : forall n,
+    nth_valid_codepoint n = None ->
+    n < 0 \/ n > (0x10ffff - 0x800).
+
+Lemma nth_valid_codepoint_increasing : forall n1 code1 n2 code2,
+    nth_valid_codepoint n1 = Some code1 ->
+    nth_valid_codepoint n2 = Some code2 ->
+    Z.compare n1 n2 = Z.compare code1 code2.
+```
+
+A prova desses teoremas é omitida por brevidade, mas todas envolvem observar as comparações feitas em `nth_valid_codepoint` e utilizar a tática `lia` para casos específicos, que resolve relações na aritmética de Presburgo. Em especial, a prova de que respeita a comparação é feita considerando todas as possíveis maneiras que os `if`s podem se desdobrar, e mostrar que em todas elas as comparações são iguais.
+
+Além disso, é necessário oferecer a função inversa dessa, que vai do índice do codepoint para o codepoint:
+```coq
+Definition inverse_nth_valid_codepoint (code: codepoint) : option Z :=
+  if (code <? 0) then
+    None 
+  else if (code <? 0xd800) then
+    Some code
+  else if (code <=? 0x10ffff)%Z then
+    Some (code - 0x0800)%Z
+  else
+    None.
+```
+
+Bem como provar que ambas são inversas:
+```coq
+Lemma nth_valid_codepoint_invertible : forall code n,
+    nth_valid_codepoint n = Some code <->
+      inverse_nth_valid_codepoint code = Some n /\ valid_codepoint code.
+```
+
+Assim, é possível provar que essa função forma um isomorfismo parcial ordenado, construindo um elemento do seguinte tipo:
+```coq
+Definition codepoint_nth_isomorphism : OrderedPartialIsomorphism (interval (0x10ffff - 0x7ff)) valid_codepoint Z.compare codepoint_compare nth_valid_codepoint inverse_nth_valid_codepoint.
+```
+Recapitulando, `codepoint_nth_isomorphism` é a prova de que o par (`nth_valid_codepoint`, `inverse_nth_valid_codepoint`) formam um isomorfimo com o conjunto de índices, e esse isomorfismo respeita a ordenação de codepoints e a ordenação de índices. A construção dessa prova utiliza todos os lemmas supracitados, bem como a prova de que o conjunto dos inteiros é um conjunto ordenado:
+```coq
+Definition ZOrder : @Ordered Z Z.compare.
+  split. apply Z.compare_eq_iff. intros. apply Z.compare_antisym.
+  intros. destruct res.
+  - apply Z.compare_eq_iff in H, H0. subst. apply Z.compare_refl.
+  - apply Zcompare.Zcompare_Lt_trans with (m := t2); assumption.
+  - apply Zcompare.Zcompare_Gt_trans with (m := t2); assumption.
+Qed.
+```
+
+Após isso, é necessário definir o mesmo para `nth_valid_code_representation`.
+```coq
+Definition nth_valid_codepoint_representation (n: Z) : option byte_str :=
+  let n := if Z.ltb n 0xd800 then n else n + 0x800 in
+  if (n <? 0) then
+    None
+  else if (n <=? 127) then
+    Some [ n ]
+  else if (n <=? 0x7ff) then
+    let b1 := n / 64 in
+    let b2 := n mod 64 in
+    Some [ 192 + b1; 128 + b2]
+  else if (n <=? 0xffff) then
+    let r := n / 64 in
+    let b1 := r / 64 in
+    let b2 := r mod 64 in
+    let b3 := n mod 64 in
+    Some [ 224 + b1; 128 + b2; 128 + b3]
+  else if (n <=? 0x10ffff) then
+    let r1 := n / 64 in
+    let r2 := r1 / 64 in
+    let b1 := r2 / 64 in
+    let b2 := r2 mod 64 in
+    let b3 := r1 mod 64 in
+    let b4 := n mod 64 in
+    Some [ 240 + b1; 128 + b2; 128 + b3; 128 + b4]
+  else
+    None.
+```
+
+E provar os mesmos lemmas:
+```coq
+Lemma nth_valid_codepoint_representation_spec: forall bytes,
+    (exists n, nth_valid_codepoint_representation n = Some bytes) <->
+      valid_codepoint_representation bytes.
+
+Lemma nth_valid_codepoint_representation_none : forall n : Z,
+    nth_valid_codepoint_representation n = None -> 
+    n < 0 \/ n > (1114111 - 2048).
+
+Lemma nth_valid_codepoint_representation_compare_compat: forall n1 n2 bytes1 bytes2,
+    nth_valid_codepoint_representation n1 = Some bytes1 -> 
+    nth_valid_codepoint_representation n2 = Some bytes2 -> 
+    Z.compare n1 n2 = bytes_compare bytes1 bytes2.
+```
+
+A prova desses é significativamente mais complexa, pois a função que mapeia o índice na sequência de bytes equivalente é muito mais complexa. Para facilitar a análise, táticas especiais foram criadas para automatizar a resolução de casos parecidos utilizando a tática `lia`.
+
+Também é necessário desenvolver a função que calcula o índice do codepoint a partir da sequência de bytes.
+
+```coq
+Definition inverse_nth_valid_codepoint_representation (bytes: byte_str) : option Z :=
+  let between b lo hi := andb (lo <=? b) (b <=? hi) in 
+  match bytes with
+  | [b] => if between b 0 127 then Some b else None
+  | [b1; b2] =>
+      if andb (between b1 0xc2 0xdf) (between b2 0x80 0xbf) then
+        Some ((b1 mod 64) * 64 + (b2 mod 64))
+      else None
+  | [b1; b2; b3] =>
+      let fst := andb (andb (b1 =? 0xe0) (between b2 0xa0 0xbf)) (between b3 0x80 0xbf) in
+      let snd := andb (andb (between b1 0xe1 0xec) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      let trd := andb (andb (b1 =? 0xed) (between b2 0x80 0x9f)) (between b3 0x80 0xbf) in
+      let frth := andb (andb (between b1 0xee 0xef) (between b2 0x80 0xbf)) (between b3 0x80 0xbf) in
+      let n := ((b1 - 224) * 64 * 64) + (b2 mod 64) * 64 + (b3 mod 64) in
+      if orb (orb fst snd) trd then
+        Some n
+      else if frth then
+        Some (n - 2048)
+      else 
+        None
+  | [b1; b2; b3; b4] =>
+      let fst := andb (andb (andb (b1 =? 0xf0) (between b2 0x90 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      let snd := andb (andb (andb (between b1 0xf1 0xf3) (between b2 0x80 0xbf)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      let trd := andb (andb (andb (b1 =? 0xf4) (between b2 0x80 0x8f)) (between b3 0x80 0xbf)) (between b4 0x80 0xbf) in
+      if orb (orb fst snd) trd then
+        Some ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64) - 0x800)
+      else None
+  | _ => None
+  end.
+```
+
+Vale notar que as operações que essa executa são exatamente as mesmas operações dadas em `naive_utf8_map`, mas dessa vez, a corretude dessas operações é checada no fato de que essa é a inversa da `nth_valid_codepoint_representation`:
+
+```coq
+Lemma nth_valid_codepoint_representation_invertible : forall n bytes,
+    nth_valid_codepoint_representation n = Some bytes ->
+      inverse_nth_valid_codepoint_representation bytes = Some n.
+
+Lemma inverse_nth_valid_codepoint_representation_invertible : forall bytes n,
+    valid_codepoint_representation bytes ->
+    inverse_nth_valid_codepoint_representation bytes = Some n ->
+    nth_valid_codepoint_representation n = Some bytes.
+```
+
+Por fim, também é necessário provar que o conjunto de sequências de bytes é ordenado, de acordo com a comparação lexicográfica.
+
+```coq
+Definition BytesOrder : Ordered bytes_compare.
+Proof.
+  unfold bytes_compare.
+  split.
+  - apply list_compare_refl. apply Z.compare_eq_iff.
+  - intros.
+    apply list_compare_antisym. apply Z.compare_eq_iff. apply Z.compare_antisym.
+  - intros.
+    apply list_compare_trans with (ys:=t2); try assumption.
+    + apply Z.compare_eq_iff.
+    + intros. destruct c.
+      -- apply Z.compare_eq_iff in H1, H2. subst. apply Z.compare_refl.
+      -- apply Zcompare.Zcompare_Lt_trans with (m := y); assumption.
+      -- apply Zcompare.Zcompare_Gt_trans with (m := y); assumption.
+    + apply Z.compare_antisym.
+Qed.
+```
+
+Assim, é possível provar que o par (`nth_valid_codepoint_representation`, `inverse_nth_valid_codepoint_representation`) forma um isomorfismo com o conjunto dos inteiros de `0x10ffff - 0x7ff`, e que esse isomorfismo respeita a ordenação:
+```coq
+Theorem valid_codepoint_representation_isomorphism :
+    OrderedPartialIsomorphism (interval (0x10ffff - 0x7ff)) valid_codepoint_representation Z.compare bytes_compare nth_valid_codepoint_representation inverse_nth_valid_codepoint_representation.
+```
+
+== Especificação implica mapeamento UTF-8 correto
+
+O objetivo de mostrar essas propriedades de ordenação e de índice é utilizar `partial_isomorphism_countable_unique` para provar os seguintes teoremas:
+```coq
+Theorem utf8_spec_implies_encoder_maps_nth_to_nth : forall encoder decoder,
+    utf8_spec encoder decoder ->
+    forall code bytes,
+      encoder [code] = (bytes, []) -> 
+      exists n, nth_valid_codepoint n = Some code /\ nth_valid_codepoint_representation n = Some bytes.
+
+Lemma utf8_spec_implies_decoder_maps_nth_to_nth : forall encoder decoder,
+    utf8_spec encoder decoder ->
+    forall code bytes,
+      decoder bytes = ([code], []) -> 
+      exists n, nth_valid_codepoint n = Some code /\ nth_valid_codepoint_representation n = Some bytes.
+```
+
+Isto é, quando um codificador aceita um codepoint, então o resultado é a sequência de bytes com o índice equivalente. Da mesma forma, quando o decodificador aceita uma sequência de bytes, então o resultado é o codepoint com o índice equivalente.
+
+Para utilizar `partial_isomorphism_countable_unique` nessa prova, é necessário construir morfismos parciais (que retornam `option` ao invés de listas) a partir de codificadores e decodificadores:
+```coq
+Definition encoder_to_option (encoder: encoder_type) code :=
+  match encoder [code] with
+  | (bytes, []) => Some bytes
+  | _ => None
+  end.
+
+Definition decoder_to_option (decoder: decoder_type) bytes :=
+  match decoder bytes with
+  | ([code], []) => Some code
+  | _ => None
+  end.
+```
+
+Assim, os seguintes lemmas sobre `encoder` e `decoder` são provados, para que possam ser utilizados nas provas:
+```coq
+Lemma encoder_partial_morphism : forall encoder,
+    utf8_encoder_spec encoder -> 
+    partial_morphism valid_codepoint valid_codepoint_representation (encoder_to_option encoder).
+
+Lemma decoder_partial_morphism : forall decoder,
+    utf8_decoder_spec decoder ->
+    partial_morphism valid_codepoint_representation valid_codepoint (decoder_to_option decoder).
+
+Lemma encoder_to_option_increasing : forall encoder,
+    utf8_encoder_spec encoder ->
+    increasing valid_codepoint Z.compare bytes_compare (encoder_to_option encoder).
+
+Lemma decoder_to_option_increasing: forall decoder,
+    utf8_decoder_spec decoder ->
+    increasing valid_codepoint_representation bytes_compare Z.compare (decoder_to_option decoder).
+```
+
+Com os lemmas de mapeamento de `n` pra `n` em mãos, é trivial mostrar que tanto o `encoder` quanto o `decoder` devem ser inversos no caso de apenas um codepoint:
+
+```coq
+Theorem utf8_spec_decoder_encoder_inverse_single: forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall code bytes,
+      decoder bytes = ([code], []) ->
+      encoder [code] = (bytes, []).
+Proof.
+  intros encoder decoder encoder_spec decoder_spec.
+  intros code bytes decode_bytes.
+  eapply utf8_spec_implies_decoder_maps_nth_to_nth in decode_bytes as G; [ | apply encoder_spec | assumption].
+  destruct G as [n [nth_code nth_byte]].
+  apply dec_output in decode_bytes as [valid_code _]; [|assumption].
+  eapply encoder_encode_valid_codepoints in valid_code; [| apply encoder_spec].
+  destruct valid_code as [bytes2 [encoder_code _]].
+  eapply utf8_spec_implies_encoder_maps_nth_to_nth in encoder_code as G; [ | apply encoder_spec | apply decoder_spec].
+  destruct G as [n2 [nth2_code nth2_byte]].
+  apply nth_valid_codepoint_invertible in nth_code as [inverse_n _], nth2_code as [inverse_n2 _].
+  rewrite inverse_n in inverse_n2. apply some_injective in inverse_n2.
+  subst. rewrite nth2_byte in nth_byte. apply some_injective in nth_byte.
+  subst. assumption.
+Qed.
+
+Theorem utf8_spec_encoder_decoder_inverse : forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall codes bytes codes_suffix,
+      encoder codes = (bytes, codes_suffix) ->
+      exists codes_prefix, decoder bytes = (codes_prefix, nil) /\ codes = (codes_prefix ++ codes_suffix)%list.
+Proof.
+  intros encoder decoder encoder_spec decoder_spec.
+  induction codes as [| code tail]; intros bytes codes_suffix encode_codes.
+  - exists []. pose proof (enc_nil encoder encoder_spec). rewrite H in encode_codes. inversion encode_codes.
+    split. apply dec_nil. assumption. reflexivity.
+  - replace (code :: tail) with ([code] ++ tail) in encode_codes by reflexivity.
+    rewrite enc_projects in encode_codes; [| assumption].
+    destruct (encoder [code]) as [bytes2 rest] eqn:encoder_code.
+    destruct rest.
+    2: {
+      inversion encode_codes. subst.
+      specialize (enc_output encoder encoder_spec code) as bytes_invalid.
+      rewrite encoder_code in bytes_invalid. destruct bytes_invalid as [bytes_eq rest_eq].
+      inversion rest_eq. subst.
+      exists nil. split. apply dec_nil. assumption. reflexivity.
+    }
+    destruct (encoder tail) as [bytes3 rest] eqn:encoder_tail.
+    specialize (IHtail bytes3 rest ltac:(reflexivity)).
+    destruct IHtail as [codes_tail [decode_bytes3 tail_eq]].
+    inversion encode_codes.
+    eapply utf8_spec_encoder_decoder_inverse_single in encoder_code; [ | assumption | apply decoder_spec].
+    rewrite dec_projects.
+    + rewrite encoder_code.
+      rewrite decode_bytes3.
+      exists ([code] ++ codes_tail). split. reflexivity. inversion tail_eq. subst. reflexivity.
+    + apply decoder_spec.
+    + apply (decoder_spec.(dec_input decoder)).
+      exists code. assumption.
+Qed.
+```
+
+Por fim, é possível provar os teoremas de corretude:
+```coq
+Theorem utf8_spec_encoder_decoder_inverse : forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall codes bytes codes_suffix,
+      encoder codes = (bytes, codes_suffix) ->
+      exists codes_prefix, decoder bytes = (codes_prefix, nil) /\ codes = (codes_prefix ++ codes_suffix)%list.
+Proof.
+  intros encoder decoder encoder_spec decoder_spec.
+  induction codes as [| code tail]; intros bytes codes_suffix encode_codes.
+  - exists []. pose proof (enc_nil encoder encoder_spec). rewrite H in encode_codes. inversion encode_codes.
+    split. apply dec_nil. assumption. reflexivity.
+  - replace (code :: tail) with ([code] ++ tail) in encode_codes by reflexivity.
+    rewrite enc_projects in encode_codes; [| assumption].
+    destruct (encoder [code]) as [bytes2 rest] eqn:encoder_code.
+    destruct rest.
+    2: {
+      inversion encode_codes. subst.
+      specialize (enc_output encoder encoder_spec code) as bytes_invalid.
+      rewrite encoder_code in bytes_invalid. destruct bytes_invalid as [bytes_eq rest_eq].
+      inversion rest_eq. subst.
+      exists nil. split. apply dec_nil. assumption. reflexivity.
+    }
+    destruct (encoder tail) as [bytes3 rest] eqn:encoder_tail.
+    specialize (IHtail bytes3 rest ltac:(reflexivity)).
+    destruct IHtail as [codes_tail [decode_bytes3 tail_eq]].
+    inversion encode_codes.
+    eapply utf8_spec_encoder_decoder_inverse_single in encoder_code; [ | assumption | apply decoder_spec].
+    rewrite dec_projects.
+    + rewrite encoder_code.
+      rewrite decode_bytes3.
+      exists ([code] ++ codes_tail). split. reflexivity. inversion tail_eq. subst. reflexivity.
+    + apply decoder_spec.
+    + apply (decoder_spec.(dec_input decoder)).
+      exists code. assumption.
+Qed.
+
+Theorem utf8_spec_decoder_encoder_inverse_strong : forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall (codes_big codes: unicode_str) bytes bytes_suffix,
+      ((length codes) <= (length codes_big))%nat ->
+      decoder bytes = (codes, bytes_suffix) ->
+      exists bytes_prefix, encoder codes = (bytes_prefix, nil) /\ bytes = (bytes_prefix ++ bytes_suffix)%list.
+Proof.
+  intros encoder decoder encoder_spec decoder_spec.
+  induction codes as [| code codes]; intros bytes bytes_suffix length decoder_bytes.
+  - exists []. split. apply enc_nil. assumption.
+    apply dec_output in decoder_bytes as G; [|assumption].
+    destruct G as [_ [prefix [decode_prefix [prefix_valid bytes_eq]]]].
+    apply utf8_spec_decoder_nil_unique in decode_prefix; [|assumption].
+    subst. reflexivity.
+  - replace (code :: codes) with ([code] ++ codes) in decoder_bytes |- * by reflexivity.
+    eapply utf8_spec_decoder_project_dual in decoder_bytes; [| apply encoder_spec | assumption ].
+    destruct decoder_bytes as [bytes1 [bytes2 [decoder_bytes1 [decoder_bytes2 bytes_eq]]]].
+    eapply utf8_spec_decoder_encoder_inverse_single in decoder_bytes1; [| apply encoder_spec | assumption].
+    apply IHcodes in decoder_bytes2; [|  simpl in length; lia].
+    destruct decoder_bytes2 as [bytes_prefix [encoder_codes bytes2_eq]].
+    rewrite enc_projects; [| assumption].
+    rewrite decoder_bytes1. rewrite encoder_codes.
+    exists (bytes1 ++ bytes_prefix).
+    split. reflexivity. inversion bytes2_eq. inversion bytes_eq. subst.
+    rewrite app_assoc. rewrite app_nil_r. reflexivity.
+Qed.
+
+Theorem utf8_spec_decoder_encoder_inverse: forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall codes bytes bytes_suffix,
+      decoder bytes = (codes, bytes_suffix) ->
+      exists bytes_prefix, encoder codes = (bytes_prefix, nil) /\ bytes = (bytes_prefix ++ bytes_suffix)%list.
+Proof.
+  intros encoder decoder encoder_spec decoder_spec codes bytes bytes_suffix.
+  apply utf8_spec_decoder_encoder_inverse_strong with (codes_big := codes); [assumption | assumption | lia].
+Qed.
+```
+
+Vale ressaltar que para provar o caso do decodificador, é utilizada indução forte, visto que o passo indutivo não necessariamente é feita com apenas um byte por vez.
+
+= Implementação
+
+Com a especificação feita, a implementação de um codificador e decodificador práticos é relativamente simples. Para implementar o codificador, primeiro é definida uma função que mapeia um codepoint numa sequência de bytes:
+```coq
+Definition utf8_encode_codepoint (n: codepoint) : @option (list byte) :=
+  if (n <? 0) then
+    None
+  else if (n <=? 127) then
+    Some [ n ]
+  else if (n <=? 0x7ff) then
+    let b1 := n / 64 in
+    let b2 := n mod 64 in
+    Some [ 192 + b1; 128 + b2]
+  else if (andb (n <=? 0xffff) (orb (n <? 0xd800) (n >? 0xdfff))) then
+    let r := n / 64 in
+    let b1 := r / 64 in
+    let b2 := r mod 64 in
+    let b3 := n mod 64 in
+    Some [ 224 + b1; 128 + b2; 128 + b3]
+  else if (andb (n <=? 0x10ffff) (n >? 0xffff)) then
+    let r1 := n / 64 in
+    let r2 := r1 / 64 in
+    let b1 := r2 / 64 in
+    let b2 := r2 mod 64 in
+    let b3 := r1 mod 64 in
+    let b4 := n mod 64 in
+    Some [ 240 + b1; 128 + b2; 128 + b3; 128 + b4]
+  else
+    None.
+```
+Assim, o codificador é definido como uma função que recursivamente mapeia o mapeamento acima, parando quando a lista acaba ou quando o mapeamento retorna `None`.
+```coq
+Fixpoint utf8_encode (unicode: unicode_str) : (list byte) * (list codepoint) :=
+  match unicode with
+  | [] => ([], [])
+  | code :: unicode_rest =>
+      match utf8_encode_codepoint code with
+      | None => ([], code :: unicode_rest)
+      | Some bytes => 
+          let (bytes_rest, unicode_rest) := utf8_encode unicode_rest in
+          (bytes ++ bytes_rest, unicode_rest)
+      end
+  end.
+```
+
+// https://bjoern.hoehrmann.de/utf-8/decoder/dfa/
+Para implementar o decodificador, é utilizado um autômato de estado finito. Um DFA pode ser derivado observando cada linha da @UTF8_bytes, e considerando quais caracteres podem ser lidos em cada parte.
+
+#image("dfa-bytes.png")
+
+A partir desse grafo, define-se o conjunto de possíveis estados, e uma enumeração de todos os possíveis estados úteis que aparecem no grafo:
+```coq
+Inductive parsing_state :=
+  Initial
+| Expecting_1_80_BF
+| Expecting_2_80_BF
+| Expecting_3_80_BF
+| Expecting_2_80_9F
+| Expecting_2_A0_BF
+| Expecting_3_90_BF
+| Expecting_3_80_8F.
+
+Inductive byte_range :=
+| Range_00_7F 
+| Range_80_8F
+| Range_90_9F
+| Range_A0_BF
+| Range_C2_DF
+| Byte_E0      
+| Range_E1_EC
+| Byte_ED
+| Range_EE_EF
+| Byte_F0
+| Range_F1_F3
+| Byte_F4
+.
+
+Definition byte_range_dec (b: byte) : option byte_range :=
+  if b <? 0 then
+    None
+  else if b <=? 0x7f then
+    Some Range_00_7F
+  else if b <=? 0x8f then
+    Some Range_80_8F
+  else if b <=? 0x9f then
+    Some Range_90_9F
+  else if b <=? 0xbf then
+    Some Range_A0_BF
+  else if b <=? 0xc1 then
+    None
+  else if b <=? 0xdf then
+    Some Range_C2_DF
+  else if b  =? 0xe0 then
+    Some Byte_E0
+  else if b <=? 0xec then
+    Some Range_E1_EC
+  else if b  =? 0xed then
+    Some Byte_ED
+  else if b <=? 0xef then
+    Some Range_EE_EF
+  else if b  =? 0xf0 then
+    Some Byte_F0
+  else if b <=? 0xf3 then
+    Some Range_F1_F3
+  else if b  =? 0xf4 then
+    Some Byte_F4
+  else
+    None.
+```
+
+Também são definidas funções auxiliares para representar as operações de extração de bits relevantes.
+```coq
+Definition push_bottom_bits (carry: codepoint) (b: byte): codepoint :=
+  carry * 64 + (b mod 64).
+
+Definition extract_7_bits (b: byte) : codepoint :=
+  b mod 128.
+
+Definition extract_5_bits (b: byte) : codepoint :=
+  b mod 32.
+
+Definition extract_4_bits (b: byte) : codepoint :=
+  b mod 16.
+
+Definition extract_3_bits (b: byte) : codepoint :=
+  b mod 8.
+```
+Por fim, é definida a função `next_state`, que calcula o próximo estado do DFA a partir do estado atual e do byte visto. Para representar o fim de um codepoint, é criado o tipo `parsing_result`:
+```coq
+Inductive parsing_result :=
+  Finished (codep: codepoint)
+| More (state: parsing_state) (acc: codepoint).
+
+Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @option parsing_result :=
+  match (state, byte_range_dec b) with
+  | (Initial, Some Range_00_7F) => Some (Finished (extract_7_bits b))
+  | (Initial, Some Range_C2_DF) => Some (More Expecting_1_80_BF (extract_5_bits b))
+  | (Initial, Some Byte_E0)     => Some (More Expecting_2_A0_BF (extract_4_bits b))
+  | (Initial, Some Range_E1_EC)
+  | (Initial, Some Range_EE_EF) => Some (More Expecting_2_80_BF (extract_4_bits b))
+  | (Initial, Some Byte_ED)     => Some (More Expecting_2_80_9F (extract_4_bits b))
+  | (Initial, Some Byte_F0)     => Some (More Expecting_3_90_BF (extract_3_bits b))
+  | (Initial, Some Range_F1_F3) => Some (More Expecting_3_80_BF (extract_3_bits b))
+  | (Initial, Some Byte_F4)     => Some (More Expecting_3_80_8F (extract_3_bits b))
+  | (Initial, _) => None
+  | (Expecting_1_80_BF, Some Range_A0_BF)
+  | (Expecting_1_80_BF, Some Range_90_9F)
+  | (Expecting_1_80_BF, Some Range_80_8F) => Some (Finished (push_bottom_bits carry b))
+  | (Expecting_2_80_BF, Some Range_80_8F)
+  | (Expecting_2_80_BF, Some Range_90_9F)
+  | (Expecting_2_80_9F, Some Range_80_8F)
+  | (Expecting_2_80_9F, Some Range_90_9F)
+  | (Expecting_2_80_BF, Some Range_A0_BF) => Some (More Expecting_1_80_BF (push_bottom_bits carry b))
+  | (Expecting_3_80_BF, Some Range_80_8F)
+  | (Expecting_3_80_BF, Some Range_90_9F)
+  | (Expecting_3_80_BF, Some Range_A0_BF)
+  | (Expecting_3_90_BF, Some Range_90_9F)
+  | (Expecting_3_90_BF, Some Range_A0_BF)
+  | (Expecting_3_80_8F, Some Range_80_8F) => Some (More Expecting_2_80_BF (push_bottom_bits carry b))
+  | (Expecting_2_A0_BF, Some Range_A0_BF) => Some (More Expecting_1_80_BF (push_bottom_bits carry b))
+  | (Expecting_3_80_8F, Some Range_90_9F)
+  | (Expecting_3_80_8F, Some Range_A0_BF) => None
+  | _ => None
+  end.
+```
+
+A função do decodificador, então, é uma função que recursivamente calcula o próximo estado utilizando `next_state`. Quando o resultado é um codepoint finalizado, a função volta para o estado inicial e começa a ler um novo codepoint.
+```coq
+Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state) (consumed: list byte)
+  : unicode_str * (list byte) :=
+  match bytes with
+  | nil => ([], consumed)
+  | cons b rest =>
+      match next_state state carry b with
+      | Some (Finished codep) =>
+          let (vals, rest) := utf8_dfa_decode_rec rest 0x00 Initial [] in
+          (codep :: vals, rest)
+      | Some (More state codep) =>
+          utf8_dfa_decode_rec rest codep state (consumed ++ [b])
+      | None => ([], consumed ++ bytes)
+      end
+  end.
+
+Definition utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
+  utf8_dfa_decode_rec bytes 0x00 Initial [].
+```
+
+Note que, pelas restrições de ser um _parser_ parcial, é necessário guardar os bytes consumidos equivalentes ao codepoint atual, de modo a não jogar fora bytes se apenas um da sequência for inválido.
+
+== Corretude da implementação
+
 #bibliography("references.bib", style: "associacao-brasileira-de-normas-tecnicas")
-p

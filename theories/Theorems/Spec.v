@@ -448,6 +448,16 @@ Proof.
     rewrite app_assoc. rewrite app_nil_r. reflexivity.
 Qed.
 
+Theorem utf8_spec_decoder_encoder_inverse: forall encoder decoder,
+    utf8_encoder_spec encoder ->
+    utf8_decoder_spec decoder ->
+    forall codes bytes bytes_suffix,
+      decoder bytes = (codes, bytes_suffix) ->
+      exists bytes_prefix, encoder codes = (bytes_prefix, nil) /\ bytes = (bytes_prefix ++ bytes_suffix)%list.
+Proof.
+  intros encoder decoder encoder_spec decoder_spec codes bytes bytes_suffix.
+  apply utf8_spec_decoder_encoder_inverse_strong with (codes_big := codes); [assumption | assumption | lia].
+Qed.
 
 Theorem utf8_spec_encoder_unique_single : forall encoder1 decoder code bytes,
     utf8_encoder_spec encoder1 ->

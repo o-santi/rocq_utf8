@@ -11,6 +11,49 @@ Definition codepoint : Type := Z.
 Definition unicode_str : Type := list codepoint.
 Definition byte_str : Type := list byte.
 
+Inductive naive_utf8_map : byte_str -> codepoint -> Prop :=
+| OneByte (b1: byte) :
+  0x00 <= b1 < 0x80 ->
+  naive_utf8_map [b1] b1
+| TwoBytes (b1 b2: byte) :
+  0xc2 <= b1 <= 0xdf ->
+  0x80 <= b2 <= 0xbf ->
+  naive_utf8_map [b1; b2] ((b1 mod 64) * 64 + (b2 mod 64))
+| ThreeBytes1 (b1 b2 b3: Z):
+  b1 = 0xe0 ->
+  0xa0 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3] (((b1 - 224) * 64 * 64) + (b2 mod 64) * 64 + (b3 mod 64))
+| ThreeBytes2 (b1 b2 b3: Z):
+  0xe1 <= b1 <= 0xec \/ 0xee <= b1 <= 0xef ->
+  0x80 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3] (((b1 - 224) * 64 * 64) + (b2 mod 64) * 64 + (b3 mod 64))
+| ThreeBytes3 (b1 b2 b3: Z):
+  b1 = 0xed ->
+  0x80 <= b2 <= 0x9f ->
+  0x80 <= b3 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3] (((b1 - 224) * 64 * 64) + (b2 mod 64) * 64 + (b3 mod 64))
+| FourBytes1 (b1 b2 b3 b4: Z):
+  b1 = 0xf0 ->
+  0x90 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3; b4] ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64))
+| FourBytes2 (b1 b2 b3 b4: Z):
+  0xf1 <= b1 <= 0xf3 ->
+  0x80 <= b2 <= 0xbf ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3; b4] ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64))
+| FourBytes3 (b1 b2 b3 b4: Z):
+  b1 = 0xf4 ->
+  0x80 <= b2 <= 0x8f ->
+  0x80 <= b3 <= 0xbf ->
+  0x80 <= b4 <= 0xbf ->
+  naive_utf8_map [b1; b2; b3; b4] ((b1 - 240) * 64 * 64 * 64 + (b2 mod 64) * 64 * 64 + (b3 mod 64) * 64 + (b4 mod 64)).
+  
+
 Definition codepoints_compare := List.list_compare Z.compare.
 Definition bytes_compare := List.list_compare Z.compare.
 

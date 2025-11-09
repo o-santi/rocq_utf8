@@ -159,17 +159,17 @@ Definition next_state (state: parsing_state) (carry: codepoint) (b: byte) : @opt
 Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsing_state) (consumed: list byte)
   : unicode_str * (list byte) :=
   match bytes with
-  | nil => (nil, consumed)
+  | nil => ([], consumed)
   | cons b rest =>
       match next_state state carry b with
       | Some (Finished codep) =>
-          let (vals, rest) := utf8_dfa_decode_rec rest 0x00 Initial nil in
-          (cons codep vals, rest)
+          let (vals, rest) := utf8_dfa_decode_rec rest 0x00 Initial [] in
+          (codep :: vals, rest)
       | Some (More state codep) =>
           utf8_dfa_decode_rec rest codep state (consumed ++ [b])
-      | None => (nil, app consumed bytes)
+      | None => ([], consumed ++ bytes)
       end
   end.
 
-Definition utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
-  utf8_dfa_decode_rec bytes 0x00 Initial nil.
+Fixpoint utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
+  utf8_dfa_decode_rec bytes 0x00 Initial [].
