@@ -822,6 +822,12 @@ Ltac crush_comparisons :=
     | [G: context[if (?a <? ?b)%N then _ else _] |- _] => 
         let l := fresh "less_than" in
         destruct (a <? b)%N eqn:l; [apply Z.ltb_lt in l| apply Z.ltb_nlt in l]
+    | [G: context[if (?a >? ?b)%N then _ else _] |- _] => 
+        rewrite Z.gtb_ltb in G
+    | [G: context[if (andb ?a ?b) then _ else _] |- _] =>
+        rewrite Bool.andb_if in G
+    | [G: context[if (orb ?a ?b) then _ else _] |- _] =>
+        rewrite Bool.orb_lazy_alt in G
     end.
 
 Lemma list_equals_1 {T}: forall (a b: T), [a] = [b] -> a = b. 

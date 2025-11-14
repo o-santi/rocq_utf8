@@ -26,7 +26,7 @@ Especificação é o principal tópico de estudo das práticas de modelagem de s
 
 Assegurar que dada implementação segue as regras de negócio geradas na fase de especificação é tópico de estudo da área de verificação. Dela, inúmeras práticas comuns na área de programação são derivadas, como desenvolvimento de testes, garantias de qualidade e checagens de tipo. Apesar das inúmeras práticas, preencher a lacuna entre a semântica dos modelos teóricos e as implementações em código é extremamente difícil, dada a natureza das práticas tradicionais baseadas em testes unitários. Testes oferecem visões circunstanciais do comportamento do programa a partir de certas condições iniciais, tornando impossível assegurar com totalidade a corretude do programa, visto que programas complexos teriam de ter um número impraticável de testes  -- muitas vezes infinito -- para checar todas as combinações de condições iniciais.
 
-É cotidiano que erros passem desapercebidos por baterias gigantescas de testes e apareçam somente em produção -- quando erros são inaceitáveis -- em especial quando ocorrem em combinações muito específicas de entrada. Muitas linguagens então tomam uma abordagem dinâmica, isto é, tornar erros mais fáceis de serem detectados adicionando inúmeras checagens enquanto o programa executa, e tornando-o programa ainda mais fácil de quebrar. Para atingir _software_ correto, é imprescindível a análise estática dos programas, mas técnicas comuns de análise estática não são potentes o suficiente para conferir segurança e corretude, e são significativamente mais complexas do que abordagens dinâmicas.
+É cotidiano que erros passem desapercebidos por baterias gigantescas de testes e apareçam somente em produção -- quando erros são inaceitáveis -- em especial quando ocorrem em combinações muito específicas de entrada. Muitas linguagens então tomam uma abordagem dinâmica, isto é, tornar erros mais fáceis de serem detectados adicionando inúmeras checagens enquanto o programa executa, e tornando-o programa ainda mais fácil de quebrar. Para atingir _software_ correto, é imprescindível a análise estática dos programas, mas técnicas comuns de análise estática não são potentes o suficiente para conferir segurança e corretude, e são mais complexas do que abordagens dinâmicas.
 
 Verificação formal de software denomina a área da verificação que oferece diretrizes para raciocinar formalmente sobre um programa, descrevendo axiomas, regras e práticas que permitem construir provas sobre o comportamento desse. Ao estruturar o programa para permitir o raciocínio matemático, torna-se possível atribuir uma semântica a um software, conferindo fortes garantias de corretude, e assegurando-se que esse está conforme as especificações da semântica. Para auxiliar nesse processo, várias ferramentas foram desenvolvidas, como _model checkers_, que tentam gerar provas automaticamente a partir de modelos fornecidos, e provadores de teorema interativos, que permitem o desenvolvedor de elaborar provas sobre programas utilizando linguagens específicas para construí-las.
 
@@ -42,19 +42,23 @@ As vulnerabilidades CVE-2000-0884 (Microsoft IIS) e CVE-2008-2938 (APACHE Tomcat
 
 Este trabalho é estruturado nas seguintes seções:
 1. Na seção 2, a história por trás do sistema Unicode será revista, com o objetivo de motivar a estruturação atual dos sistemas de codificação UTF-8, UTF-16 e UTF-32, bem como algumas de suas propriedades e  limitações. 
-2. Na seção 3, será inspecionada a literatura existente, tanto especificações existentes do Unicode quanto sobre abordagens e metodologias tradicionais de provar formalmente a corretude de codificadores e decodificadores de linguagens.
+2. Na seção 3, será inspecionada a literatura existente, tanto especificações existentes do Unicode quanto sobre abordagens e metodologias tradicionais de provar formalmente a corretude de codificadores e decodificadores de linguagens. Além disso, implementações comuns utilizadas em diferentes linguagens serão revisadas.
 3. Na seção 4, será elaborado um conjunto de regras formais que um codificador e decodificador, denominado de *especificação*, e serão provados teoremas que fundamentam a corretude desse.
 4. Na seção 5, serão desenvolvidos implementações práticas de um codificador e decodificador UTF-8, levando em consideração fatores como simplicidade, utilidade e eficiência, de maneira similar a como são implementados em linguagens "imperativas".
 5. Na seção 6, serão dadas as considerações finais, bem como aplicações naturais desse trabalho para cenários práticos.
 
-#text(fill:red, [(Deveria citar que a seção 4 é "inovadora"? no sentido de que não existem trabalhos que fazem isso hoje em dia.)])
+Neste trabalho estão contidas as seguintes contribuições:
+
+1. A primeira prova formal de que há um mapeamento único entre o formato oficial de bytes UTF-8 e codepoints válidos, isto é, que a especificação do Unicode está correta.
+2. Um conjunto de regras formais para decidir automaticamente se dado codificador ou decodificador respeita o formato UTF-8, junto de provas de corretude sobre esse conjunto de regras, de forma a motivar sua relevância. Em especial, é utilizada uma abordagem inovadora utilizando funções crescentes para completamente descrever a codificação UTF-8.
+3. Uma implementação formalmente correta, no sentido das regras supracitadas, de tanto um codificador quanto decodificador.
 
 = Unicode
 
 // https://tonsky.me/blog/unicode/
 // https://www.joelonsoftware.com/2003/10/08/the-absolute-minimum-every-software-developer-absolutely-positively-must-know-about-unicode-and-character-sets-no-excuses
 
-Sistemas de codificação são padrões criados para transformar caracteres em números, como `A`=$65$, `Ã`=$195$ e `語`=$35486$, e posteriormente serializá-los em mensagens para enviá-los a outras pessoas. O padrão Unicode é o sistema de representação de caracteres mais utilizado mundialmente hoje em dia, por objetivar incluir todas as linguagens existentes de maneira integrado. O padrão define 3 esquemas de codificação distintos para transformar caracteres Unicode em sequências de bits: UTF-8, UTF-16 e UTF-32. Para entender o design e funcionamento desses, faz-se necessário entender como funcionavam os antecessores.
+Sistemas de codificação são padrões criados para transformar caracteres em números, como `A`=$65$, `Ã`=$195$ e `語`=$35486$, e posteriormente serializá-los em mensagens para enviá-los a outras pessoas. O padrão Unicode é o sistema de representação de caracteres mais utilizado mundialmente hoje em dia, por objetivar incluir todas as linguagens existentes de maneira integrada. O padrão define 3 esquemas de codificação distintos para transformar caracteres Unicode em sequências de bits: UTF-8, UTF-16 e UTF-32. Para entender o design e funcionamento desses, faz-se necessário entender como funcionavam os antecessores.
 
 #quote(block: true, [Definição: _*code point*_ (ou *valor escalar*) é o nome dado à representação numérica de um caractere. No formato Unicode, é comum representá-los no formato `U+ABCDEF`, onde `ABCDEF` armazena o número do _code point_ em hexadecimal. ])
 
@@ -62,7 +66,7 @@ Sistemas de codificação são padrões criados para transformar caracteres em n
 
 Sem dúvidas o sistema de codificação mais influente da história é o ASCII. Criado para servir as necessidades da indústria americana de _teleprinters_, o ASCII define apenas 127 caracteres, focando principalmente em compactar a quantidade de bits necessários para enviar uma mensagem, de forma que todo caracter pode ser expresso utilizando apenas 7 bits.
 
-Com a evolução dos computadores, e a consolidação de um byte como 8 bits, muitos sistemas de codificação surgiram mantendo os primeiros 127 caracteres iguais a ASCII, e adicionando 128 caracteres no final, utilizando o oitavo bit previamente ignorado. Esses foram criandos primariamente para adicionar suporte à caracteres especificos de cada linguagem, como `Ã`, `ç`, e `€`, de modo a manter compatibilidade com o ASCII, e ficaram conhecidos como codificações de ASCII estendido.
+Com a evolução dos computadores, e a consolidação de um byte como 8 bits, muitos sistemas de codificação surgiram mantendo os primeiros 127 caracteres iguais a ASCII, e adicionando 128 caracteres no final, utilizando o oitavo bit previamente ignorado. Esses foram criados primariamente para adicionar suporte à caracteres especificos de cada linguagem, como `Ã`, `ç`, e `€`, de modo a manter compatibilidade com o ASCII, e ficaram conhecidos como codificações de ASCII estendido.
 
 Tanto o ASCII quanto suas extensões utilizam um mapeamento um pra um entre o número dos caracteres e os bits das suas representações, tanto por simplicidade de codificação quanto por eficiência de armazenamento de memória. Programas que decodificam bytes em caracteres nesses sistemas são extremamente simples, e podem ser resumidos a tabelas de conversão direta, conhecidas como _code pages_.
 
@@ -147,9 +151,9 @@ Considerando que um _code point_ precisa de 21 bits para ser armazenado, podemos
 
 É importante notar que os primeiros 127 _code points_ são representados exatamente igual caracteres ASCII (#text(fill:red, "e sistemas extendidos")), algo extremamente desejável não apenas para compatibilidade com sistemas antigos, mas para recuperar parte da eficiência de espaço perdida no UTF-16. Diferentemente do UTF-16, o UTF-8 também não possui ambiguidade de _endianness_, e portanto não precisa utilizar o BOM para distinguir; há apenas uma maneira de ordenar os bytes.
 
-O UTF-8 ainda precisa manter as limitações do UTF-16. Como _surrogate pairs_ não são mais utilizados para representar _code points_ estendidos, é necessário garantir que bytes do intervalo `D800..DFFF` não apareçam, já que não possuem significado.
+O UTF-8 ainda precisa manter as limitações do UTF-16, visto que ambos codificam o mesmo conjunto de _code points_. Como _surrogate pairs_ não são mais utilizados para representar _code points_ estendidos, é necessário garantir que bytes do intervalo `D800..DFFF` não apareçam, já que não possuem significado.
 
-Além disso, apesar de conseguir codificar 21 bits no caso com maior capacidade (`U+0000..U+10FFFF`), nem todos desses representam _code points_ válidos, visto que o padrão Unicode define-os baseando nos limites do UTF-16. Isso significa que o codificador deve assegurar de que todos _code points_ decodificados não sejam maior do que `U+10FFFF`.
+Além disso, apesar de conseguir codificar 21 bits no caso com maior capacidade (`U+0000..U+10FFFF`), nem todos desses representam _code points_ válidos, dado que o padrão Unicode define-os baseando nos limites do UTF-16. Isso significa que o codificador deve assegurar de que todos _code points_ decodificados não sejam maior do que `U+10FFFF`.
 
 As primeiras versões da especificação do UTF-8 não faziam distinção de qual o tamanho deveria ser utilizado para codificar um _code point_. Por exemplo, o caractere `A` é representado por `U+0041 = `#r(`1000001`). Isso significa que ele podia ser representado em UTF-8 como qualquer uma das seguintes sequências:
 
@@ -217,7 +221,7 @@ Os intervalos `80..BF` representam os intervalos comuns de continuação -- isto
 
 No caso em que o _code point_ está no intervalo ASCII, ele é representado sem restrições. Quando é necessário dois bytes, o primeiro não pode começar com `C0` ou `C1` pois faria o _code point_ resultante caber no intervalo anterior. No caso de 3 bytes, há a possibilidade de o _code point_ equivalente estar no intervalo `D800..DFFF`, e por isso é separado em 4 intervalos distintos. O primeiro intervalo se preocupa em impedir que ocorra _overlong encoding_, restringindo o segundo byte; o segundo intervalo contém apenas bytes estritamente menores do que `U+D000`; o terceiro intervalo restringe o segundo byte para garantir que seja menor do que `U+D7FF`; o último intervalo representa aqueles estritamente maiores do que `U+DFFF`. Da mesma forma, o caso de 4 bytes é separado em três. O primeiro caso se preocupa em impedir _overlong encoding_, enquanto o último caso garante que o _code point_ seja estritamente menor do que `U+10FFFF` (o maior _code point_ válido).
 
-O problema com essa especificação é a falta de clareza entre a tabela descritiva e as propriedades intrínsecas ao UTF-8. Não é óbvio que há uma correspondência única entre sequências de bytes e _code points_ válidos, nem que todo _code point_ representado por esse formato é necessariamente válido. Além disso, as operações de extração e concatenação de bits oferecidos pela @UTF8_bits não são triviais, e são sucetíveis a erros. Com uma especificação complicada demais, é possível que erros sejam cometidos até mesmo na concepção das regras. Quanto menor o conjunto de regras, mais fácil é de conferir manualmente que elas estão corretas.
+O problema com essa especificação é a falta de clareza entre a tabela descritiva e as propriedades intrínsecas ao UTF-8. Não é óbvio que há uma correspondência única entre sequências de bytes e _code points_ válidos, nem que todo _code point_ representado por esse formato é necessariamente válido. Além disso, as operações de extração e concatenação de bits, que são oferecidas implicitamente pela @UTF8_bits, não são triviais, e são sucetíveis a erros. Com uma especificação complicada demais, é possível que erros sejam cometidos até mesmo na concepção das regras. Quanto menor o conjunto de regras, mais fácil é de conferir manualmente que elas estão corretas.
 
 == Trabalhos relacionados
 
@@ -235,13 +239,29 @@ Faz-se necessário, portanto, estudar como codificadores e decodificadores são 
 
 Para a simplicidade de implementação, a formalização dada neste trabalho não utilizará nenhuma biblioteca, visto que essas introduzem complexidades especificas de cada DSL. Assim, quase tudo será feito do zero.
 
+== Implementações existentes
+
+https://github.com/JuliaStrings/utf8proc/tree/master
+
+https://discourse.julialang.org/t/bug-in-isvalid-with-an-overlong-utf-8-encoded-vector-or-string/15290 & https://github.com/JuliaLang/julia/issues/11141
+
+https://github.com/python/cpython/blob/da7f4e4b22020cfc6c5b5918756e454ef281848d/Parser/tokenizer/helpers.c#L447
+
+https://unicodebook.readthedocs.io/issues.html#non-strict-utf-8-decoder-overlong-byte-sequences-and-surrogates
+
+https://www.cve.org/CVERecord?id=CVE-2007-6284
+
+https://github.com/bminor/glibc/blob/91fb9914d867320d65a2abe284fb623d91ae5efb/iconvdata/tst-table-from.c#L110 função na glibc que aceita utf8 de até 6 caracteres + overlongs.
+
+https://unicodebook.readthedocs.io/programming_languages.html#c-language
+
 = Formalização da especificação
 
-Visto que a especificação fornecida pelo Consórcio Unicode não é forte o suficiente, tornou-se necessário estabelecer precisamente quais as propriedades que o codificador e decodificador devem satisfazer pra que sejam considerados corretos. Como visto nos outros trabalhos, é interessante conseguir provar que quaisquer codificador e decodificador que respeitam a especificação devem necessariamente ser inversos um do outro, entretanto isso não é suficiente, visto que é possível que a especificação contenha algum erro, e que não represente exatamente o mapeamento correto, mas ainda sim faça com que as funções sejam inversas.
+Visto que a especificação fornecida pelo Consórcio Unicode não é forte o suficiente, tornou-se necessário estabelecer precisamente quais as propriedades que o codificador e decodificador devem satisfazer pra que sejam considerados corretos. Como visto nos outros trabalhos, é interessante conseguir provar que quaisquer codificador e decodificador que respeitam a especificação devem necessariamente ser inversos um do outro, entretanto isso não é suficiente, pois é possível que a especificação contenha algum erro, e que não represente exatamente o mapeamento correto, mas ainda sim faça com que as funções sejam inversas.
 
 Conceitualmente, há duas preocupações em formalizar um codificador e decodificador para garantir a corretude da especificação. A primeira é como identificar unicamente o mapa entre codepoints e sequências de bytes, e a segunda é como representar sequências de codepoints e sequências de bytes, de forma que seja possível aplicar o mapa anterior repetidamente, acumulando seu resultado.
 
-Para representar tanto _code points_ quanto _bytes_ será utilizado o tipo `Z`, que representa o conjunto dos inteiros em Coq, pois ele possui uma grande gama de provas e propriedades já feitas anteriormente, de modo que muitas relações matemáticas possam ser reutilizadas. Quanto a segunda preocupação, em linguagens funcionais, é tradicional representar strings como listas encadeadas, de forma que tanto as sequências de bytes quanto sequências de codepoints sejam representados como listas encadeadas de números:
+Para representar tanto _code points_ quanto _bytes_ será utilizado o tipo `Z`, que representa o conjunto dos inteiros em Coq, pois ele possui uma grande gama de propriedades úteis já provadas previamente, de modo que muitas relações matemáticas possam ser reutilizadas. Quanto a segunda preocupação, em linguagens funcionais, é tradicional representar strings como listas encadeadas, de forma que tanto as sequências de bytes quanto sequências de codepoints sejam representados como listas encadeadas de números:
 
 ```coq
 Definition codepoint : Type := Z.
@@ -275,7 +295,7 @@ Definition encoder_type := partial_parser codepoint (list byte).
 Definition decoder_type := partial_parser byte (list codepoint).
 ```
 
-Para especificar unicamente o mapeamento entre sequências de bytes e codepoints, devem ser utilizadas as tabelas @UTF8_bits e @UTF8_bytes. Uma possível maneira de traduzir isso em código Rocq seria com uma propriedade entre duas listas de inteiros, que faz a tradução mais ingênua possível:
+Para especificar unicamente o mapeamento entre sequências de bytes e codepoints, devem ser utilizadas as tabelas @UTF8_bits e @UTF8_bytes. Uma possível maneira de traduzir isso em código Rocq seria com uma propriedade entre uma lista de inteiros e um inteiro, que faz a tradução mais ingênua possível:
 ```coq
 Inductive naive_utf8_map : byte_str -> codepoint -> Prop :=
 | OneByte (b1: byte) :
@@ -322,7 +342,7 @@ Inductive naive_utf8_map : byte_str -> codepoint -> Prop :=
 
 Isto é, um elemento de tipo `naive_utf8_map bytes codepoint` é uma prova de que a sequência de bytes `bytes` mapeia para o codepoint `codepoint` segundo as tabelas @UTF8_bits e @UTF8_bytes. Especificamente, cada construtor de `naive_utf8_map` representa uma das linhas da @UTF8_bytes, e as operações nos bytes de multiplicação e `mod` representam como extrair os bits relevantes dos bytes que contém cabeçalhos.
 
-Entretanto, o problema dessa especificação é que não há como afirmar com certeza que essas operações representam exatamente o que é dado na @UTF8_bits, visto que há muitas operações envolvidas. Parte crucial de verificação de software é que a especificação seja simples de entender, para que essa seja trivialmente verificável, e infelizmente essa tabela não é facilmente compreendida.
+Entretanto, o problema dessa especificação é que não há como afirmar com certeza que essas operações representam exatamente o que é dado na @UTF8_bits, visto que há muitas operações envolvidas. Parte crucial de verificação de software é que a especificação seja simples de entender, para que seja possível de checar manualmente por um ser humano, e infelizmente essa tabela não é facilmente compreendida. 
 
 Assim, esse tipo não será utilizado. Ao invés de especificar exatamente qual o mapeamento dado entre bytes e codepoints, é mais interessante considerar propriedades que esse deve satisfazer. Especificamente, é simples explicitar as propriedades que ditam o que é uma sequência de bytes UTF-8 válidas (@UTF8_bytes) e o que é um _code point_ válido, exigindo que o codificador mapeie _code points_ válidos em bytes UTF-8 válidos, e o decodificador mapeie bytes UTF-8 válidos em _code points_ válidos. Entretanto, existem inúmeras maneiras de fazer esse mapeamento de modo que o codificador e decodificador sejam inversos, e apenas um desses de fato é o UTF-8.
 
@@ -754,7 +774,7 @@ Lemma nth_valid_codepoint_representation_compare_compat: forall n1 n2 bytes1 byt
     Z.compare n1 n2 = bytes_compare bytes1 bytes2.
 ```
 
-A prova desses é significativamente mais complexa, pois a função que mapeia o índice na sequência de bytes equivalente é muito mais complexa. Para facilitar a análise, táticas especiais foram criadas para automatizar a resolução de casos parecidos utilizando a tática `lia`.
+A prova desses é mais complexa, pois a função que mapeia o índice na sequência de bytes equivalente é muito mais complexa. Para facilitar a análise, táticas especiais foram criadas para automatizar a resolução de casos parecidos utilizando a tática `lia`.
 
 Também é necessário desenvolver a função que calcula o índice do codepoint a partir da sequência de bytes.
 
@@ -1212,27 +1232,175 @@ Definition utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
   utf8_dfa_decode_rec bytes 0x00 Initial [].
 ```
 
-Note que, pelas restrições de ser um _parser_ parcial, é necessário guardar os bytes consumidos equivalentes ao codepoint atual, de modo a não jogar fora bytes se apenas um da sequência for inválido.
+Note que, pelas restrições de ser um _parser_ parcial, é necessário guardar os bytes consumidos equivalentes ao codepoint atual, de modo a não jogar fora bytes se apenas um da sequência for inválido. Isso é necessário para provar que essa função siga a especificação dada anteriromente.
 
 == Provando a corretude da implementação
 
-Como reforçado anteriormente, a corretude da implementação está inteiramente baseada em provar que ambos codificador e decodificador seguem a especificação desenvolvida até agora. Tendo visto todo o desenvolvimento até agora, fica extremamente claro o significado de "provar que segue a especificação": construir um elemento cujo tipo é `utf8_spec utf8_encode utf8_dfa_decode`.
+Como reforçado anteriormente, a corretude da implementação está inteiramente baseada em provar que ambos codificador e decodificador seguem a especificação desenvolvida até agora. Dado todo o desenvolvimento até agora, fica extremamente claro o significado de "provar que segue a especificação": construir um elemento cujo tipo é `utf8_spec utf8_encode utf8_dfa_decode`.
 
-Para fazer isso, basta construir dois elementos, um de tipo `utf8_encode_spec utf8_encode`, e outro de tipo `utf8_decode_spec utf8_dfa_decode`.
+Para fazer isso, basta construir dois elementos, um de tipo `utf8_encode_spec utf8_encode`, e outro de tipo `utf8_decode_spec utf8_dfa_decode`. Como visto anteriormente, isso significa provar os cinco lemmas para `utf8_encode` e `utf8_decode`.
 
-Começando com o codificador, a primeira prova é trivial:
+== Provando a corretude do codificador
+
+A prova de que `utf8_encode [] = ([], [])` se reduz a computar o lado esquerdo e provar a igualdade:
 ```coq
 Lemma utf8_encode_nil : encoder_nil utf8_encode.
 Proof.
   reflexivity.
 Qed.
+```
+Para provar `encoder_input_correct_iff`, é útil mostrar primeiro que a função que transforma um codepoint em bytes (`utf8_encode_codepoint`) está correta:
 
+```coq
+Lemma utf8_encode_codepoint_input : forall code,
+    valid_codepoint code <->
+    exists bytes, utf8_encode_codepoint code = Some bytes.
+Proof.
+  intro code; split. 
+  - intro valid_code.
+    destruct (utf8_encode_codepoint code) as [bytes |] eqn:encode_code.
+    + exists bytes. reflexivity.
+    + unfold utf8_encode_codepoint in encode_code.
+      destruct valid_code as [c1 [c2 c3]].
+      unfold codepoint_less_than_10ffff in c1.
+      unfold codepoint_is_not_surrogate in c2.
+      unfold codepoint_not_negative in c3.
+      crush_comparisons; try discriminate; lia.
+  - intros [bytes encode_code].
+    unfold utf8_encode_codepoint in encode_code.
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
+    crush_comparisons; try discriminate; lia.
+Qed.
+```
+Vale ressaltar que essa prova mostra uma das forças principais do Coq: táticas de automação customizadas. A tática `crush_comparisons` fora criada especificamente para reescrever hipóteses que contém `if _ then _ else` e destruí-las em dois _goals_, um onde se prova o caso em que a condição é verdadeira, e outro onde a condição é falsa. 
+```coq
+Ltac crush_comparisons :=
+  repeat match goal with
+    | [G: context[if (?a <=? ?b)%N then _ else _] |- _] => 
+        let l := fresh "less_than_eq" in
+        destruct (a <=? b)%N eqn:l; [apply Z.leb_le in l| apply Z.leb_nle in l]
+    | [G: context[if (?a <? ?b)%N then _ else _] |- _] => 
+        let l := fresh "less_than" in
+        destruct (a <? b)%N eqn:l; [apply Z.ltb_lt in l| apply Z.ltb_nlt in l]
+    | [G: context[if (?a >? ?b)%N then _ else _] |- _] => 
+        rewrite Z.gtb_ltb in G
+    | [G: context[if (andb ?a ?b) then _ else _] |- _] =>
+        rewrite Bool.andb_if in G
+    | [G: context[if (orb ?a ?b) then _ else _] |- _] =>
+        rewrite Bool.orb_lazy_alt in G
+    end.
+```
+
+Assim, não é necessário manualmente provar cada um dos casos utilizando as provas matemáticas específicas, o que é muito mais trabalhoso. Com esse lemma, a prova de que todo codepoint unitário é levado em uma sequência de bytes, e toda sequência de bytes tem um codepoint equivalente, é simples:
+```coq
 Lemma utf8_encode_correct : encoder_input_correct_iff utf8_encode.
+Proof.
+  intros code. split.
+  - intro valid_code.
+    destruct (utf8_encode [code]) as [bytes rest] eqn: enc.
+    exists bytes. apply pair_equal_spec. repeat split.
+    simpl in enc.
+    apply utf8_encode_codepoint_input in valid_code.
+    destruct valid_code as [bytes2 enc_code]. rewrite enc_code in enc.
+    inversion enc. reflexivity.
+  - intros [bytes enc_code].
+    simpl in enc_code.
+    destruct (utf8_encode_codepoint code) as [bytes2 |] eqn:enc_single; [| discriminate].
+    inversion enc_code. subst.
+    apply utf8_encode_codepoint_input.
+    exists bytes2. assumption.
+Qed.
+```
 
+A prova de `utf8_encode_output`, que afirma que toda sequência de bytes deve ser `valid_codepoint_representation`, também é similarmente simples: basta descontruir a função em todos os possíveis casos em que um codepoint pode ser mapeado, e depois provar que todos eles estão certos utilizando `lia`. Para isso, outra tática customizada é utilizada, `add_bounds`, que adiciona provas sobre desigualdades envolvendo divisão e `mod` ao contexto, para que a tática `lia` possa provar certos teoremas.
+```coq
 Lemma utf8_encode_output : encoder_output_correct utf8_encode.
+Proof.
+  intros code.
+  destruct (utf8_encode [code]) as [bytes rest] eqn:encode_single.
+  simpl in encode_single.
+  destruct (utf8_encode_codepoint code) as [bytes2 |] eqn:encode_code; [| inversion encode_single; split; reflexivity].
+  assert (exists bytes, utf8_encode_codepoint code = Some bytes) as code_valid. exists bytes2. assumption.
+  apply utf8_encode_codepoint_input in code_valid.
+  unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in code_valid.
+  destruct code_valid as [c1 [c2 c3]].
+  inversion encode_single. rewrite app_nil_r in *. subst.
+  unfold utf8_encode_codepoint in encode_code.
+  crush_comparisons; try discriminate; try lia; rewrite <- some_injective in encode_code; subst.
+  + apply OneByte. lia.
+  + add_bounds (code mod 64). apply TwoByte; lia.
+  + add_bounds (code mod 64).
+    add_bounds ((code / 64) mod 64).
+    destruct c2.
+    * destruct (code / 64 / 64 =? 0) eqn:is_e0.
+      -- apply ThreeByte1; lia.
+      -- destruct (code <? 0xd000) eqn:code_less_d000.
+         --- apply ThreeByte2. left. all: lia.
+         --- apply ThreeByte3; lia.
+    * apply ThreeByte2. right. all: lia.
+  + add_bounds (code mod 64). add_bounds (code / 64 mod 64). apply ThreeByte2; try lia.
+  + add_bounds (code mod 64).
+    add_bounds (code / 64 mod 64).
+    add_bounds ((code / 64 / 64) mod 64).
+    destruct (code / 64 / 64 / 64 =? 0) eqn:is_f0.
+    * apply FourBytes1; try lia.
+    * destruct (code / 64 / 64 / 64 =? 4) eqn:is_f4.
+      -- apply FourBytes3; try lia.
+      -- apply FourBytes2; try lia.
+Qed.
+```
 
+É interessante notar que os 5 _goals_ resultantes estão diretamente relacionados com as 5 maneiras que um `codepoint` pode ser considerado correto: uma maneira para cada intervalo de 1, 2 e 4 bytes, e 2 maneiras no intervalo de 3 bytes -- pode tanto ser menor que `0xDB00` quanto maior que `0xDFFF`.
+
+A prova de que o encoder pode ser projetado corretamente sobre listas menores é trivial, e se resume a afirmar que concatenação de listas é comutativa:
+```coq
+Lemma utf8_encode_projects : encoder_projects utf8_encode.
+Proof.
+  intro xs. induction xs as [|x xs]; intros ys.
+  - rewrite utf8_encode_nil. rewrite app_nil_l.
+    destruct (utf8_encode ys). reflexivity.
+  - rewrite <- app_comm_cons.
+    unfold utf8_encode. fold utf8_encode.
+    destruct (utf8_encode_codepoint x) as [bytes |]eqn:encode_x.
+    + rewrite IHxs.
+      destruct (utf8_encode xs). destruct (utf8_encode ys).
+      destruct l0. rewrite app_assoc. reflexivity. reflexivity.
+    + rewrite app_comm_cons. reflexivity.
+Qed.
+```
+
+Por fim, o teorema de que `utf8_encode` é crescente é facilmente resolvido utilizando a combinação de `crush_comparisons` e `lia` também. 
+
+```coq
 Lemma utf8_encode_increasing: encoder_strictly_increasing utf8_encode.
+Proof.
+  intros code1 code2 bytes1 bytes2 encode_code1 encode_code2.
+  simpl in encode_code1, encode_code2.
+  destruct (utf8_encode_codepoint code1) as [bytes1'|] eqn:enc_code1; [|inversion encode_code1].
+  destruct (utf8_encode_codepoint code2) as [bytes2'|] eqn:enc_code2; [|inversion encode_code2]. rewrite app_nil_r in *.
+  inversion encode_code1. inversion encode_code2. subst.
+  clear encode_code1. clear encode_code2.
+  unfold utf8_encode_codepoint in enc_code1, enc_code2.
+  crush_comparisons; try discriminate; try lia; rewrite <- some_injective in enc_code1; rewrite <- some_injective in enc_code2; subst; unfold bytes_compare, list_compare.
+  1: destruct (code1 ?= code2); reflexivity.
+  all: (repeat match goal with
+          | |- context[match ?a ?= ?b with | _ => _ end] =>
+              let comp := fresh "compare" in
+              add_bounds a; add_bounds b;
+              destruct (Z.compare_spec a b) as [comp | comp | comp]
+          end);
+    match goal with
+    | [|- (?n1 ?= ?n2 = Eq)] => apply Z.compare_eq_iff
+    | [|- (?n1 ?= ?n2 = Lt)] => fold (Z.lt n1 n2)
+    | [|- (?n1 ?= ?n2 = Gt)] => fold (Z.gt n1 n2)
+    end; subst; try discriminate; lia.
+Qed.
+```
+Na prova deste teorema há duas hipóteses contendo `utf8_encode` distintos no contexto, o que significa que `crush_comparisons` desconstrói em 289 casos distintos, a maioria deles com hipóteses inválidas, como `None = Some _`, ou `code1 < coe2` e `code2 < code1`, e `try discriminate; try lia` resolvem essas imediatamente. Como resultado, sobram exatamente 25 = $5 * 5$ goals, o produto cartesiano de todas as possíveis maneiras que dois codepoints podem ser válidos.
 
+Por fim, é enunciada a prova de que essa função de fato segue a especificação dada anteriormente:
+
+```coq
 Theorem utf8_encode_spec_compliant : utf8_encoder_spec utf8_encode.
 Proof.
   split.
@@ -1244,20 +1412,298 @@ Proof.
 Qed.
 ```
 
+== Provando a corretude do decodificador
+
+Assim como no caso do codificador, provar que `utf8_dfa_decode [] = ([], [])` é trivialmente resolvido por `reflexivity`.
+
 ```coq
 Lemma utf8_dfa_nil : decoder_nil utf8_dfa_decode.
 Proof.
   reflexivity.
 Qed.
+```
+
+Para provar que `utf8_dfa_decode` projeta sobre entradas válidas pode ser provado utilizando uma tática auxiliar `lia_simplify`, que tenta simplificar comparações quando `lia` consegue provar que essas devem ser verdadeiras ou falsas. Duas versões são dadas, `lia_simplify` que atua diretamente no _goal_, e `lia_simplify_hyp`, que atua em uma hipótese.
+```coq
+Ltac lia_simplify :=
+  repeat match goal with
+    | |- context[match (if ?cond then ?a else ?b) with | _ => _ end] =>
+        ((replace cond with false by lia) || (replace cond with true by lia) || (destruct cond))
+    end.
+
+Ltac lia_simplify_hyp H :=
+  repeat match type of H with
+    | context[match (if ?cond then ?a else ?b) with | _ => _ end] =>
+        (replace cond with false in H by lia)
+            || (replace cond with true in H by lia)
+            || let C := fresh "cond" in destruct cond eqn:C
+    end.
 
 Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
+Proof.
+  intros xs ys valid_xs.
+  unfold utf8_dfa_decode.
+  destruct valid_xs; simpl; unfold next_state, byte_range_dec; lia_simplify; 
+    destruct (utf8_dfa_decode_rec ys 0 Initial []); reflexivity.
+Qed.
+```
 
+Para os outros 3 teoremas, dois lemmas centrais sobre `utf8_dfa_decode` serão utilizados. O primeiro afirma que quando a o prefixo UTF-8 válido é `[]`, então a parte inválida deve ser igual à entrada dada a função:
+```coq
+Lemma utf8_dfa_decode_invalid: forall bytes suffix,
+    utf8_dfa_decode bytes = ([], suffix) ->
+    bytes = suffix.
+Proof.
+  intros bytes suffix decode_bytes.
+  unfold utf8_dfa_decode in decode_bytes.
+  destruct bytes as [| byte1 bytes].
+  - simpl in decode_bytes. inversion decode_bytes. reflexivity.
+  - repeat lazymatch goal with
+           | [NextState: context[next_state ?state ?carry ?byte] |- _] =>
+               unfold next_state in NextState;
+               let range := fresh "range" in
+               destruct (byte_range_dec byte) as [range|];
+               [| inversion NextState; reflexivity];
+               destruct range;
+               try (inversion NextState; reflexivity)
+           | [Decode: context[utf8_dfa_decode_rec (?byte :: ?rest) ?code ?state ?consumed] |- _] =>
+               simpl in Decode
+           | [Decode: context[utf8_dfa_decode_rec ?bytes 0 Initial ?consumed] |- _] =>
+               destruct (utf8_dfa_decode_rec bytes 0 Initial); inversion Decode
+           | [Decode: context[utf8_dfa_decode_rec ?bytes ?code ?state ?consumed] |- _] =>
+               let byte := fresh "byte" in
+               let rest := fresh "bytes" in
+               destruct bytes as [| byte rest]; simpl in Decode; [inversion Decode; reflexivity|]
+           end.
+Qed.
+```
+
+Novamente, a estratégia dessa prova se resume em destruir todas as possíveis maneiras que uma sequência de bytes pode ser rejeitada.
+
+O segundo teorema afirma que, quando o resultado contém ao menos um _code point_ `code`, então esse deve ser válido, e deve haver um prefixo `prefix` UTF-8 válido tal que `utf8_decode prefix = ([code], [])`.
+```coq
+Lemma utf8_dfa_decode_prefix: forall bytes code codes suffix,
+    utf8_dfa_decode bytes = (code :: codes, suffix) ->
+    exists prefix rest,
+      valid_codepoint code /\
+        valid_codepoint_representation prefix /\ 
+        utf8_dfa_decode prefix = ([code], []) /\
+        utf8_dfa_decode rest = (codes, suffix) /\
+        bytes = prefix ++ rest.
+Proof.
+  intros bytes code codes suffix decode_bytes.
+  destruct bytes as [| byte1 bytes1] eqn:bytes_eq; [ inversion decode_bytes|].
+  unfold utf8_dfa_decode in decode_bytes. simpl in decode_bytes.
+  unfold next_state, byte_range_dec in decode_bytes.
+  lia_simplify_hyp decode_bytes; try (inversion decode_bytes);
+  let rec destruct_bytes :=
+      match goal with
+      | G: context[utf8_dfa_decode_rec ?bytes 0 Initial []] |- _ =>
+          let codes := fresh "codes" in
+          let suffix := fresh "suffix" in
+          let dec := fresh "decode_bytes" in
+          destruct (utf8_dfa_decode_rec bytes 0 Initial []) as [codes suffix] eqn:dec;
+          inversion G; subst
+      | G: context[utf8_dfa_decode_rec ?bytes ?acc ?state ?consumed] |- _ =>
+          let b := fresh "byte" in
+          let bs := fresh "bytes" in
+          let b_eq := fresh "bytes_eq" in
+          destruct bytes as [| b bs] eqn:b_eq; [ inversion G|];
+          simpl in G; unfold next_state, byte_range_dec in G;
+          lia_simplify_hyp G; solve [inversion G] || destruct_bytes
+  end in
+  let rec reconstruct_prefix :=
+    match goal with
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?byte2 :: ?byte3 :: ?byte4 :: ?bytes = _) =>
+        exists [byte1; byte2; byte3; byte4]; exists bytes
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?byte2 :: ?byte3 :: ?bytes = _) =>
+        exists [byte1; byte2; byte3]; exists bytes
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?byte2 :: ?bytes = _) =>
+        exists [byte1; byte2]; exists bytes
+    | |- exists prefix rest, _ /\ _ /\ _ /\ _ /\ (?byte1 :: ?bytes = _) =>
+        exists [byte1]; exists bytes
+    end in
+  destruct_bytes; reconstruct_prefix.
+  all: let rec codepoint_is_valid :=
+    unfold extract_3_bits, extract_4_bits, extract_5_bits, extract_7_bits, push_bottom_bits;
+    lazymatch goal with
+    | |- (valid_codepoint ?codepoint) =>
+        unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in *;
+        repeat split; add_bounds codepoint; try lia
+    end 
+  in
+  let rec valid_bytes :=
+    match goal with
+    | |- valid_codepoint_representation [?byte] => apply OneByte; lia
+    | |- valid_codepoint_representation [?byte1; ?byte2] => apply TwoByte; lia
+    | |- valid_codepoint_representation [?byte1; ?byte2; ?byte3] =>
+        (apply ThreeByte1; lia) || (apply ThreeByte2; lia) || (apply ThreeByte3; lia) || idtac
+    | |- valid_codepoint_representation [?byte1; ?byte2; ?byte3; ?byte4] =>
+        (apply FourBytes1; lia) || (apply FourBytes2; lia) || (apply FourBytes3; lia) || idtac
+    end
+  in
+  let rec decode_prefix := unfold utf8_dfa_decode; simpl; unfold next_state, byte_range_dec; lia_simplify; reflexivity in
+  split; [codepoint_is_valid | split; [ valid_bytes| split; [ decode_prefix | split; [ unfold utf8_dfa_decode; assumption | reflexivity]] ]].
+Qed.
+```
+
+A prova desse lemma é significativamente mais complicada, dado que o objetivo é provar uma conjunção de 5 proposições. Ela pode ser entendida em duas fases: primeiro, todos as possíveis maneiras de que um `byte` pode ser considerado válido são separadas em diferentes _goals_, gerados utilizando as táticas `destruct_bytes`, tendo `reconstruct_prefix` para instanciar exatamente qual o prefixo que mapeia para `code`; depois, as proposições são provadas utilizando táticas específicas -- duas delas com táticas "simples", `assumption` e `reflexivity`, e as outras três com táticas customizadas.
+
+A combinação de `utf8_dfa_decode_invalid` e `utf8_dfa_decode_prefix` é tudo que é preciso para provar provas sobre `utf8_dfa_decode` utilizando indução. Como bytes que representam codepoints podem ter de 1 a 4 elementos de tamanho, provas de indução na lista de entrada são fracas demais para serem úteis, e é muito mais natural fazer a indução na lista de saída de _code points_. Assim, esses dois lemmas contém todas as propriedades cruciais que serão necessárias para provar os próximos teoremas.
+
+A prova de que toda lista de saída de `utf8_dfa_decode` é `valid_utf8` é resolvida com uma simples indução na lista de _code points_ do resultado:
+```coq
 Lemma utf8_dfa_output : decoder_output_correct utf8_dfa_decode.
+Proof.
+  intros bytes suffix codes decode_bytes.
+  generalize dependent bytes.
+  induction codes as [| code codes].
+  - split. constructor.
+    exists []. repeat split. constructor.
+    apply utf8_dfa_decode_invalid in decode_bytes.
+    subst. reflexivity.
+  - intros bytes decode_bytes.
+    apply utf8_dfa_decode_prefix in decode_bytes as G.
+    destruct G as [prefix [rest [valid_code [valid_prefix [decode_prefix [decode_rest bytes_eq]]]]]].
+    apply IHcodes in decode_rest as G.
+    destruct G as [valid_codes [prefix2 [decode_prefix2 [valid_prefix2 G]]]].
+    subst. split.
+    + apply Forall_cons. all: assumption.
+    + exists (prefix ++ prefix2). repeat split.
+      * rewrite utf8_dfa_projects. rewrite decode_prefix, decode_prefix2. reflexivity. assumption.
+      * constructor. all: assumption.
+      * rewrite app_assoc. reflexivity.
+Qed.
+```
 
+Da mesma forma, provar que toda sequência de bytes é aceita pelo decodificador não é complicado, e se reduz a aplicar os lemmas descritos anteriormente.
+```coq
 Lemma utf8_dfa_input : decoder_input_correct_iff utf8_dfa_decode.
+Proof.
+  split.
+  - intros bytes_valid.
+    destruct bytes_valid; unfold utf8_dfa_decode; simpl; unfold next_state, byte_range_dec; lia_simplify; eexists; reflexivity.
+  - intros [code decode_bytes].
+    apply utf8_dfa_decode_prefix in decode_bytes as G.
+    destruct G as [prefix [rest [code_valid [prefix_valid [decode_prefix [decode_rest bytes_eq]]]]]].
+    subst.
+    apply utf8_dfa_decode_invalid in decode_rest. subst. rewrite app_nil_r in *.
+    assumption.
+Qed.
+```
 
+Infelizmente, a prova de que `utf8_dfa_decode` é crescente é complexa, visto que a abordagem força bruta de desconstruir em todos os casos é demorada demais. Especificamente, existem 85 maneiras de uma sequência de bytes que representa um _code point_ ser aceita por `utf8_dfa_decode`, e dado que essa prova contém duas hipóteses que contém `utf8_dfa_decode`, o método força bruta resulta em $85 * 85 = 7225$ _goals_ diferentes, número grande demais para ser checado em pouco tempo pelo Rocq.
+
+Por causa disso, é necessário reduzir o número de _goals_ antes de tentar prová-los. A ideia principal para realizar isso é notar que quando as listas de bytes de entrada têm tamanhos diferentes, então necessariamente um dos _code points_ de saída deve sempre ser maior que o outro, visto que os intervalos delimitados pelo formato UTF-8 são disjuntos. Para isso, são provados 4 lemmas que fornecem limites inferiores e superiores para o _code point_ de saída, bem como o valor númerico um para cada tamanho da lista de entrada.
+
+```coq
+Lemma one_byte_bounds : forall byte code,
+    valid_codepoint_representation [byte] ->
+    utf8_dfa_decode [byte] = ([code], []) ->
+    code = byte /\ 0 <= code <= 0x7f.
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0. lia_simplify_hyp H0; inversion H0.
+  unfold extract_7_bits in *. add_bounds (byte mod 128). lia.
+Qed.
+
+Lemma two_byte_bounds : forall byte1 byte2 code,
+    valid_codepoint_representation [byte1; byte2] ->
+    utf8_dfa_decode [byte1; byte2] = ([code], []) ->
+    code = byte1 mod 32 * 64 + byte2 mod 64
+    /\ (0x80 <= code <= 0x7ff).
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0.
+  lia_simplify_hyp H0; inversion H0;
+    unfold push_bottom_bits, extract_5_bits in *; split; try reflexivity;
+    match goal with
+    | |- ?a <= ?code <= ?b =>
+        add_bounds code; lia
+    end.
+Qed.
+
+Lemma three_byte_bounds : forall byte1 byte2 byte3 code,
+    valid_codepoint_representation [byte1; byte2; byte3] ->
+    utf8_dfa_decode [byte1; byte2; byte3] = ([code], []) ->
+    code = (byte1 mod 16 * 64 + byte2 mod 64) * 64 + byte3 mod 64 /\
+      (0x800 <= code <= 0xffff).
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0.
+  lia_simplify_hyp H0; inversion H0;
+    unfold push_bottom_bits, extract_4_bits in *; split; try reflexivity;
+    match goal with
+    | |- ?a <= ?code <= ?b =>
+        add_bounds code; lia
+    end.
+Qed.
+
+Lemma four_byte_bounds : forall byte1 byte2 byte3 byte4 code,
+    valid_codepoint_representation [byte1; byte2; byte3; byte4] ->
+    utf8_dfa_decode [byte1; byte2; byte3; byte4] = ([code], []) ->
+    code = ((byte1 mod 8 * 64 + byte2 mod 64) * 64 + byte3 mod 64) * 64 + byte4 mod 64 /\
+      0x1000 <= code <= 0x10ffff.
+Proof.
+  intros.
+  unfold utf8_dfa_decode in H0. simpl in H0.
+  unfold next_state, byte_range_dec in H0.
+  lia_simplify_hyp H0; inversion H0;
+    unfold push_bottom_bits, extract_3_bits in *; split; try reflexivity;
+    match goal with
+    | |- ?a <= ?code <= ?b =>
+        add_bounds code; lia
+    end; reflexivity.
+Qed.
+```
+
+Por fim, a prova é feita desconstruindo todos os possíveis tamanhos da lista de entrada, de 1 a 4 bytes, para ambas as as hipóteses, gerando 16 _goals_ distintos, e depois aplicando o lemma do limite específico para o tamanho da lista. A tática `lia` novamente é suficiente para provar todos os tamanhos 
+
+```coq
 Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
+Proof.
+  intros bytes1 bytes2 code1 code2 decode_bytes1 decode_bytes2.
+  apply utf8_dfa_decode_prefix in decode_bytes1 as G1, decode_bytes2 as G2.
+  destruct G1 as [prefix1 [rest1 [code_valid1 [prefix_valid1 [decode_prefix1 [decode_rest1 bytes_eq1]]]]]].
+  destruct G2 as [prefix2 [rest2 [code_valid2 [prefix_valid2 [decode_prefix2 [decode_rest2 bytes_eq2]]]]]].
+  subst.
+  apply utf8_dfa_decode_invalid in decode_rest1, decode_rest2. subst. repeat rewrite app_nil_r in *.
+  clear decode_bytes1. clear decode_bytes2.
+  let rec break bytes bytes_valid decode :=
+    let b1 := fresh "bounds" in
+    let b2 := fresh "bounds" in
+    (destruct bytes;
+     [ inversion bytes_valid
+     | destruct bytes;
+       [apply one_byte_bounds in decode as [b1 b2]|
+         destruct bytes;
+         [apply two_byte_bounds in decode as [b1 b2]|
+           destruct bytes;
+           [apply three_byte_bounds in decode as [b1 b2]|
+             destruct bytes;
+             [apply four_byte_bounds in decode as [b1 b2]|
+               inversion bytes_valid]]]]])
+  in
+    (break prefix1 prefix_valid1 decode_prefix1);
+    (break prefix2 prefix_valid2 decode_prefix2);
+    try assumption; simpl;
+    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in code_valid1, code_valid2;
+    destruct code_valid1 as [code1_less [code1_not_surrogate code1_not_neg]], code_valid2 as [code2_less [code2_not_surrogate code2_not_neg]];
+    destruct bounds0; destruct bounds2; inversion prefix_valid1; inversion prefix_valid2; subst;
+    repeat match goal with
+      | |- context[?a ?= ?b] =>
+          let comp := fresh "compare" in
+          add_bounds a; add_bounds b;
+          destruct (Z.compare_spec a b) as [comp | comp | comp]
+      end; try reflexivity; lia.
+```
 
+Finalmente, a prova de que `utf8_dfa_decode` segue a especificação pode ser descrita como a composição dos 5 lemmas provados anteriormente:
+
+```coq
 Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.
 Proof.
   split.
@@ -1269,5 +1715,10 @@ Proof.
 Qed.
 ```
 
+= Conclusão e trabalhos futuros
+
+
+
+#pagebreak()
 
 #bibliography("references.bib", style: "associacao-brasileira-de-normas-tecnicas")

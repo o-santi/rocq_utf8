@@ -93,37 +93,11 @@ Proof.
       unfold codepoint_less_than_10ffff in c1.
       unfold codepoint_is_not_surrogate in c2.
       unfold codepoint_not_negative in c3.
-      repeat match goal with
-             | [G: context[if (code <=? ?val) then _ else _] |- _] =>
-                 let range := fresh "range" in
-                 destruct (code <=? val) eqn:range; try discriminate; try lia
-             | [G: context[if code <? ?val then _ else _] |- _] =>
-                 let range := fresh "range" in
-                 destruct (code <? val) eqn:range; try discriminate; try lia
-             | [G: context[if andb ?a ?b then _ else _] |- _] =>
-                 let range1 := fresh "range" in
-                 let range2 := fresh "range" in
-                 destruct a eqn:range1;
-                 destruct b eqn:range2; simpl in G;
-                 try discriminate; try lia
-             end.
+      crush_comparisons; try discriminate; lia.
   - intros [bytes encode_code].
     unfold utf8_encode_codepoint in encode_code.
     unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
-    repeat match goal with
-           | [G: context[if (code <=? ?val) then _ else _] |- _] =>
-               let range := fresh "range" in
-               destruct (code <=? val) eqn:range; try discriminate; try lia
-           | [G: context[if code <? ?val then _ else _] |- _] =>
-               let range := fresh "range" in
-               destruct (code <? val) eqn:range; try discriminate; try lia
-           | [G: context[if andb ?a ?b then _ else _] |- _] =>
-               let range1 := fresh "range" in
-               let range2 := fresh "range" in
-               destruct a eqn:range1;
-               destruct b eqn:range2; simpl in G;
-               try discriminate; try lia
-           end.
+    crush_comparisons; try discriminate; lia.
 Qed.
 
 
@@ -157,25 +131,7 @@ Proof.
   destruct code_valid as [c1 [c2 c3]].
   inversion encode_single. rewrite app_nil_r in *. subst.
   unfold utf8_encode_codepoint in encode_code.
-  repeat match goal with
-         | [G: context[if (code <=? ?val) then _ else _] |- _] =>
-             let range := fresh "range" in
-             destruct (code <=? val) eqn:range; try discriminate; try lia
-         | [G: context[if code <? ?val then _ else _] |- _] =>
-             let range := fresh "range" in
-             destruct (code <? val) eqn:range; try discriminate; try lia
-         | [G: context[if andb ?b false then _ else _] |- _] =>
-             replace (andb b false) with false in G by reflexivity
-         | [G: context[if andb false ?b then _ else _] |- _] =>
-             replace (andb false b) with false in G by reflexivity
-         | [G: context[if andb true true then _ else _] |- _] =>
-             replace (andb true true) with true in G by reflexivity               
-         | [G: context[if andb ?a ?b then _ else _] |- _] =>
-             let range1 := fresh "range" in
-             let range2 := fresh "range" in
-             destruct a eqn:range1; try discriminate; try lia;
-             destruct b eqn:range2; try discriminate; try lia
-         end; rewrite <- some_injective in encode_code; subst.
+  crush_comparisons; try discriminate; try lia; rewrite <- some_injective in encode_code; subst.
   + apply OneByte. lia.
   + add_bounds (code mod 64). apply TwoByte; lia.
   + add_bounds (code mod 64).
@@ -187,6 +143,7 @@ Proof.
          --- apply ThreeByte2. left. all: lia.
          --- apply ThreeByte3; lia.
     * apply ThreeByte2. right. all: lia.
+  + add_bounds (code mod 64). add_bounds (code / 64 mod 64). apply ThreeByte2; try lia.
   + add_bounds (code mod 64).
     add_bounds (code / 64 mod 64).
     add_bounds ((code / 64 / 64) mod 64).
@@ -221,25 +178,7 @@ Proof.
   inversion encode_code1. inversion encode_code2. subst.
   clear encode_code1. clear encode_code2.
   unfold utf8_encode_codepoint in enc_code1, enc_code2.
-  repeat match goal with
-         | [G: context[if (?code <=? ?val) then _ else _] |- _] =>
-             let range := fresh "range" in
-             destruct (code <=? val) eqn:range; try discriminate; try lia
-         | [G: context[if ?code <? ?val then _ else _] |- _] =>
-             let range := fresh "range" in
-             destruct (code <? val) eqn:range; try discriminate; try lia
-         | [G: context[if andb ?b false then _ else _] |- _] =>
-             replace (andb b false) with false in G by reflexivity
-         | [G: context[if andb false ?b then _ else _] |- _] =>
-             replace (andb false b) with false in G by reflexivity
-         | [G: context[if andb true true then _ else _] |- _] =>
-             replace (andb true true) with true in G by reflexivity               
-         | [G: context[if andb ?a ?b then _ else _] |- _] =>
-             let range1 := fresh "range" in
-             let range2 := fresh "range" in
-             destruct a eqn:range1; try discriminate; try lia;
-             destruct b eqn:range2; try discriminate; try lia
-         end; rewrite <- some_injective in enc_code1; rewrite <- some_injective in enc_code2; subst; unfold bytes_compare, list_compare.
+  crush_comparisons; try discriminate; try lia; rewrite <- some_injective in enc_code1; rewrite <- some_injective in enc_code2; subst; unfold bytes_compare, list_compare.
   1: destruct (code1 ?= code2); reflexivity.
   all: (repeat match goal with
           | |- context[match ?a ?= ?b with | _ => _ end] =>
@@ -283,6 +222,15 @@ Ltac lia_simplify :=
         ((replace cond with false by lia) || (replace cond with true by lia) || (destruct cond))
     end.
 
+Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
+Proof.
+  intros xs ys valid_xs.
+  unfold utf8_dfa_decode.
+  destruct valid_xs; simpl; unfold next_state, byte_range_dec; lia_simplify; 
+    destruct (utf8_dfa_decode_rec ys 0 Initial []); reflexivity.
+Qed.
+
+
 Lemma utf8_dfa_decode_invalid: forall bytes suffix,
     utf8_dfa_decode bytes = ([], suffix) ->
     bytes = suffix.
@@ -308,14 +256,6 @@ Proof.
                let rest := fresh "bytes" in
                destruct bytes as [| byte rest]; simpl in Decode; [inversion Decode; reflexivity|]
            end.
-Qed.
-
-Lemma utf8_dfa_projects : decoder_projects utf8_dfa_decode.
-Proof.
-  intros xs ys valid_xs.
-  unfold utf8_dfa_decode.
-  Time destruct valid_xs; simpl; unfold next_state, byte_range_dec; lia_simplify;
-    destruct (utf8_dfa_decode_rec ys 0 Initial []); reflexivity.
 Qed.
 
 Lemma utf8_dfa_decode_prefix: forall bytes code codes suffix,
@@ -503,17 +443,15 @@ Proof.
              destruct bytes;
              [apply four_byte_bounds in decode as [b1 b2]| inversion bytes_valid]]]]])
   in (break prefix1 prefix_valid1 decode_prefix1); (break prefix2 prefix_valid2 decode_prefix2); try assumption; simpl;
-    unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in code_valid1, code_valid2;
-    destruct code_valid1 as [code1_less [code1_not_surrogate code1_not_neg]], code_valid2 as [code2_less [code2_not_surrogate code2_not_neg]];
-    destruct bounds0; destruct bounds2;
-  inversion prefix_valid1; inversion prefix_valid2;
-    subst;
-    repeat match goal with
-      | |- context[?a ?= ?b] =>
-          let comp := fresh "compare" in
-          add_bounds a; add_bounds b;
-          destruct (Z.compare_spec a b) as [comp | comp | comp]
-      end; try reflexivity; try lia.
+     unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative in code_valid1, code_valid2;
+     destruct code_valid1 as [code1_less [code1_not_surrogate code1_not_neg]], code_valid2 as [code2_less [code2_not_surrogate code2_not_neg]];
+     destruct bounds0; destruct bounds2; inversion prefix_valid1; inversion prefix_valid2; subst;
+     repeat match goal with
+       | |- context[?a ?= ?b] =>
+           let comp := fresh "compare" in
+           add_bounds a; add_bounds b;
+           destruct (Z.compare_spec a b) as [comp | comp | comp]
+       end; try reflexivity; lia.
 Qed.
   
 Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.

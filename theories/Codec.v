@@ -171,5 +171,5 @@ Fixpoint utf8_dfa_decode_rec (bytes: list byte) (carry: codepoint) (state: parsi
       end
   end.
 
-Fixpoint utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
+Definition utf8_dfa_decode (bytes: list byte) : unicode_str * (list byte) :=
   utf8_dfa_decode_rec bytes 0x00 Initial [].
