@@ -217,6 +217,21 @@ Lemma ordered_partial_isomorphism_symmetry  {T1 T2}
 Proof.
 Admitted.
 
+Lemma ordered_partial_isomorphism_composition {T1 T2 T3}
+  {domain: T1 -> Prop} {intermediate: T2 -> Prop} {range: T3 -> Prop}
+  {compare1: T1 -> T1 -> comparison} {compare2: T2 -> T2 -> comparison}
+  {compare3: T3 -> T3 -> comparison}
+  {to0: T1 -> option T2} {to1: T2 -> option T3}
+  {from0: T2 -> option T1} {from1: T3 -> option T2}
+  (iso0 : OrderedPartialIsomorphism domain intermediate compare1 compare2 to0 from0)
+  (iso1 : OrderedPartialIsomorphism intermediate range compare2 compare3 to1 from1):
+  OrderedPartialIsomorphism
+    domain range
+    compare1 compare3
+    (and_then to0 to1) (and_then from1 from0).
+Proof.
+Admitted.
+
 Theorem Z_covering_classification : forall n m,
   partially_covers (fun _ => True) Z.compare n m <-> m = (n + 1)%Z.
 Proof.
@@ -320,6 +335,20 @@ Theorem ordered_isomorphism_preserves_minimum {T1 T2}
 Proof.
 Admitted.
 
+Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
+  forall from0 from1 to0 to1 to2,
+  OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
+  OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 to1 from1 ->
+  partial_morphism range0 range1 to2 ->
+  increasing range0 compare0 compare1 to2 ->
+  (pointwise_equal range0 to2 (and_then from0 to1)).
+Proof.
+  intros from0 from1 to0 to1 to2 iso0 iso1 morphism increasing.
+  apply ordered_partial_isomorphism_symmetry in iso0.
+  generalize (ordered_partial_isomorphism_composition iso0 iso1); intros iso2.
+  admit.
+Admitted.
+
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 from2 to0 to1 to2,
     OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
@@ -331,28 +360,6 @@ Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop
   (pointwise_equal range0 to2 (and_then from0 to1))
   /\ (pointwise_equal range1 from2 (and_then from1 to0)).
 Proof.
-  (* intros range count. *)
-  (* remember (count - 1)%Z as predecessor. *)
-  (* assert (count = predecessor + 1)%Z by lia. *)
-  (* subst count. clear Heqpredecessor. *)
-  (* assert (predecessor < 0 \/ 0 <= predecessor)%Z as [nonnegative_count | positive_count] by lia. *)
-  (* - admit. (* vacuously true *) *)
-  (* - intros. generalize dependent range. *)
-  (*   apply Wf_Z.natlike_ind with (x := predecessor); try apply positive_count. *)
-  (*   + simpl. intros. unfold pointwise_equal. split. *)
-  (*     * admit. *)
-  (*     * intros x x_is_zero. unfold interval in x_is_zero. *)
-  (*       assert (partial_morphism range (interval 1) g0) by ( *)
-  (*         unfold ordered_enumeration in H; destruct H as [a [b c]]; apply b). *)
-  (*       assert (partial_morphism range (interval 1) g1) by ( *)
-  (*         unfold ordered_enumeration in H0; destruct H0 as [a [b c]]; apply b). *)
-  (*       apply partial_morphism_induction *)
-  (*         with (f := g0) (x := x) (domain := range) (range := (interval 1)); *)
-  (*         try assumption; intros. (* that's what I'm talking about! *) *)
-  (*       apply partial_morphism_induction *)
-  (*         with (f := g1) (x := x) (domain := range) (range := (interval 1)); *)
-  (*         try assumption; intros. *)
-  (*       unfold interval in H3, H4. assert (y = y0%Z) by lia. *)
-  (*       rewrite H5. reflexivity. *)
-  (*   + intros. admit. *)
+  intros from0 from1 from2 to0 to1 to2 iso0 iso1 morphism0 morphism1
+  increasing0 increasing1. admit.
 Admitted.
