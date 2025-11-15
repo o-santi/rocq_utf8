@@ -162,8 +162,8 @@ Proof.
 Admitted.
 
 Theorem partial_isomorphism_elimination {X Y}
-  (domain : X -> Prop) (range : Y -> Prop) (to : X -> option Y)
-  (from : Y -> option X) (x : X) :
+  {domain : X -> Prop} {range : Y -> Prop} {to : X -> option Y}
+  {from : Y -> option X} {x : X} :
   PartialIsomorphism domain range to from ->
   domain x ->
   exists y,
@@ -197,10 +197,10 @@ Proof.
   intros iso. destruct iso as [_ _ iso to_preserves_compare].
   unfold increasing. intros x0 x1 range_x0 range_x1.
   apply partial_isomorphism_symmetry in iso.
-  generalize (partial_isomorphism_elimination range domain from to x0 iso range_x0).
+  generalize (partial_isomorphism_elimination iso range_x0).
   intros [y0 [domain_y0 [x0_definition y0_definition]]].
   rewrite y0_definition.
-  generalize (partial_isomorphism_elimination range domain from to x1 iso range_x1).
+  generalize (partial_isomorphism_elimination iso range_x1).
   intros [y1 [domain_y1 [x1_definition y1_definition]]].
   rewrite y1_definition.
   generalize (to_preserves_compare y0 y1 domain_y0 domain_y1).
@@ -252,7 +252,7 @@ Proof.
       rewrite Z.compare_lt_iff in H1. lia.
 Qed.
 
-Theorem Z_inteval_minimum_zero : forall n,
+Theorem Z_interval_minimum_zero : forall n,
   partially_minimum (interval n) Z.compare 0%Z.
 Proof.
 Admitted.
@@ -308,7 +308,7 @@ Proof.
     unfold not in x0_x1_no_between.
     apply ordered_partial_isomorphism_symmetry in iso.
     generalize
-      (partial_isomorphism_elimination range domain from to y2
+      (partial_isomorphism_elimination
         (opi_isomorphism range domain compare2 compare1 from to iso)
         range_y2);
     intros [x2 [domain_x2 [y2_definition x2_definition]]].
@@ -335,6 +335,20 @@ Theorem ordered_isomorphism_preserves_minimum {T1 T2}
 Proof.
 Admitted.
 
+Theorem ordered_morphism_preserves_minimum {T1 T2}
+  (domain: T1 -> Prop) (range: T2 -> Prop)
+  (compare0: T1 -> T1 -> comparison) (compare1: T2 -> T2 -> comparison)
+  (to: T1 -> option T2)
+  (x : T1) (y : T2) :
+  partial_morphism domain range to ->
+  increasing domain compare0 compare1 to ->
+  domain x -> range y ->
+  to x = Some y ->
+  partially_minimum domain compare0 x ->
+  partially_minimum range compare1 y.
+Proof.
+Admitted.
+
 Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 to0 to1 to2,
   OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
@@ -344,9 +358,41 @@ Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> 
   (pointwise_equal range0 to2 (and_then from0 to1)).
 Proof.
   intros from0 from1 to0 to1 to2 iso0 iso1 morphism increasing.
+  (*apply ordered_partial_isomorphism_symmetry in iso0.
+     generalize (ordered_partial_isomorphism_composition iso0 iso1); intros iso2. *)
+  unfold pointwise_equal. intros x range0_x.
+  Check opi_isomorphism.
   apply ordered_partial_isomorphism_symmetry in iso0.
-  generalize (ordered_partial_isomorphism_composition iso0 iso1); intros iso2.
-  admit.
+  specialize (partial_isomorphism_elimination (opi_isomorphism range0 (interval count) compare0 Z.compare from0 to0 iso0) range0_x)
+  as [n [interval_n [x_definition n_definition]]].
+  unfold interval in interval_n.
+  destruct interval_n as [n_nonnegative n_bounded].
+  revert n n_nonnegative n_bounded x_definition n_definition.
+  apply (Wf_Z.natlike_ind (fun n =>
+    (n < count)%Z -> to0 n = Some x -> from0 x = Some n -> to2 x = and_then from0 to1 x)).
+  - intros count_positive x_definition zero_definition. unfold and_then.
+    rewrite zero_definition. Check partially_minimum_unique.
+    revert x_definition zero_definition.
+    apply (partial_morphism_induction range0 range1 to2); try assumption.
+    clear x range0_x.
+    intros x y0 range0_x range1_y y0_definition x_definition zero_definition_from0.
+    (*revert x_definition zero_definition. *)
+    assert (interval count 0) as zero_interval by (unfold interval; lia).
+    specialize (partial_isomorphism_elimination
+      (opi_isomorphism (interval count) range1 Z.compare compare1 to1 from1 iso1)
+      zero_interval)
+    as [y1 [range1_y1 [zero_definition_from1 y1_definition]]].
+    rewrite y1_definition. apply f_equal.
+    apply partially_minimum_unique with (domain:=range1) (compare:=compare1); try assumption.
+    * apply ordered_morphism_preserves_minimum with (domain:=range0)
+        (compare0:=compare0) (compare1:=compare1) (to:=to2) (x:=x); try assumption.
+      apply ordered_partial_isomorphism_symmetry in iso0.
+      apply ordered_isomorphism_preserves_minimum with (domain:=interval count)
+      (compare1:=Z.compare) (to:=to0) (from:=from0) (x:=0%Z); try assumption.
+      apply Z_interval_minimum_zero.
+    * apply ordered_isomorphism_preserves_minimum with (domain:=interval count)
+      (compare1:=Z.compare) (to:=to1) (from:=from1) (x:=0%Z); try assumption. apply Z_interval_minimum_zero.
+  - admit.
 Admitted.
 
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
@@ -361,5 +407,12 @@ Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop
   /\ (pointwise_equal range1 from2 (and_then from1 to0)).
 Proof.
   intros from0 from1 from2 to0 to1 to2 iso0 iso1 morphism0 morphism1
-  increasing0 increasing1. admit.
-Admitted.
+  increasing0 increasing1.
+  split.
+  - apply finite_partial_isomorphism_unique_aux with
+    (count:=count) (range1:=range1) (compare0:=compare0)
+    (compare1:=compare1) (from1:=from1) (to0:=to0); assumption.
+  - apply finite_partial_isomorphism_unique_aux with
+    (count:=count) (range1:=range0) (compare0:=compare1)
+    (compare1:=compare0) (from1:=from0) (to0:=to1); assumption.
+Qed.
