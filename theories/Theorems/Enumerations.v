@@ -201,7 +201,12 @@ Lemma ordered_partial_isomorphism_increasing {T1 T2}
   from y0 = Some x0 -> from y1 = Some x1 ->
   compare1 x0 x1 = compare2 y0 y1.
 Proof.
-Admitted.
+  intros domain_x0 domain_x1 range_y0 range_y1 y0_definition y1_definition x0_definition x1_definition.
+  destruct iso.
+  specialize (opi_to_preserves_compare0 x0 x1 domain_x0 domain_x1).
+  rewrite y0_definition, y1_definition in opi_to_preserves_compare0.
+  assumption.
+Qed.
 
 Lemma ordered_partial_isomorphism_from_increasing {T1 T2}
   (domain: T1 -> Prop) (range: T2 -> Prop)
@@ -398,7 +403,28 @@ Theorem ordered_isomorphism_preserves_minimum {T1 T2}
   partially_minimum domain compare1 x ->
   partially_minimum range compare2 y.
 Proof.
-Admitted.
+  intros iso domain_x range_y y_definition x_definition minimum_x.
+  intros n [range_n n_less_than_y].
+  destruct iso. unfold partially_minimum in minimum_x.
+  destruct opi_isomorphism0.
+  unfold partial_morphism.
+  specialize (to_from_id0 n range_n) as n_definition.
+  unfold and_then in n_definition.
+  destruct (from n) as [m|] eqn:m_definition; [| discriminate].
+  destruct to_morphism0 as [to_some to_none].
+  specialize (to_some n m m_definition) as domain_m.
+  specialize (opi_to_preserves_compare0 x m domain_x domain_m).
+  rewrite y_definition, n_definition in opi_to_preserves_compare0.
+  destruct opi_ordered4 as [_ comp1_antisym _].
+  rewrite comp1_antisym in opi_to_preserves_compare0.
+  rewrite n_less_than_y in opi_to_preserves_compare0.
+  destruct opi_ordered3 as [_ comp2_antisym _].
+  rewrite comp2_antisym in opi_to_preserves_compare0.
+  apply (f_equal CompOpp) in opi_to_preserves_compare0.
+  rewrite CompOpp_involutive in opi_to_preserves_compare0.
+  simpl in opi_to_preserves_compare0.
+  specialize (minimum_x m). apply minimum_x. split; assumption.
+Qed.
 
 Theorem ordered_morphism_preserves_minimum {T1 T2}
   (domain: T1 -> Prop) (range: T2 -> Prop)
