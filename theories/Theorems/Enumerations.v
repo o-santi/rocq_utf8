@@ -149,10 +149,15 @@ Theorem partial_morphism_elimination {X Y}
   {domain : X -> Prop} {range : Y -> Prop} {f : X -> option Y} :
   partial_morphism domain range f ->
   forall (x : X),
+    domain x ->
   exists y,
     ((range y) /\ (f x = Some y)).
 Proof.
-Admitted.
+  intros [f_some f_none] x domain_x.
+  destruct (f x) as [y|] eqn:f_x.
+  - exists y. repeat split. apply f_some in f_x. apply f_x.
+  - apply f_none in f_x. apply f_x in domain_x. exfalso. auto.
+Qed.
 
 Lemma some_injective : forall {X} (x0 x1 : X),
   Some x0 = Some x1 ->
