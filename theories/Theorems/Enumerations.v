@@ -298,7 +298,12 @@ Qed.
 Theorem Z_interval_succ_partially_covers : forall count n,
     partially_covers (interval count) Z.compare n (Z.succ n).
 Proof.
-Admitted.
+  intros count n.
+  split.
+  - apply Z.lt_succ_diag_r.
+  - intros n_intra [n_less_n_intra [n_intra_less_succ n_intra_interval]].
+    rewrite Z.compare_lt_iff in n_less_n_intra, n_intra_less_succ. lia.
+Qed.
 
 Theorem partially_covers_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 x2 : X) :
   Ordered compare ->
@@ -320,13 +325,27 @@ Proof.
     apply (x0_x1_no_between x2). do 2 (try split; try assumption).
 Qed.
 
-Theorem partially_minimum_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 : X) :
+Theorem partially_minimum_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (ordered: Ordered compare) (x0 x1 : X) :
   domain x0 -> domain x1 ->
   partially_minimum domain compare x0 ->
   partially_minimum domain compare x1 ->
   x0 = x1.
 Proof.
-Admitted.
+  intros domain_x0 domain_x1 minimum_x0 minimum_x1.
+  unfold partially_minimum in minimum_x0, minimum_x1.
+  destruct ordered.
+  destruct (compare x0 x1) eqn:compare_x0_x1.
+  - apply eq0. apply compare_x0_x1. 
+  - specialize (minimum_x1 x0).
+    assert (domain x0 /\ compare x0 x1 = Lt) as F.
+    split; assumption. apply minimum_x1 in F. exfalso. apply F.
+  - specialize (minimum_x0 x1).
+    rewrite antisym0 in compare_x0_x1.
+    apply (f_equal CompOpp) in compare_x0_x1.
+    rewrite CompOpp_involutive in compare_x0_x1. simpl in compare_x0_x1.
+    assert (domain x1 /\ compare x1 x0 = Lt) as F.
+    split; assumption. apply minimum_x0 in F. exfalso. apply F.
+Qed.
 
 Theorem ordered_isomorphism_preserves_cover {T1 T2}
   (domain: T1 -> Prop) (range: T2 -> Prop)
