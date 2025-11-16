@@ -431,16 +431,18 @@ Proof.
   as [n [interval_n [x_definition n_definition]]].
   unfold interval in interval_n.
   destruct interval_n as [n_nonnegative n_bounded].
+  generalize dependent x.
   generalize dependent n.
   apply (Wf_Z.natlike_ind (fun n =>
-    (n < count)%Z -> to0 n = Some x -> from0 x = Some n -> to2 x = and_then from0 to1 x)).
-  - intros count_positive x_definition zero_definition. unfold and_then.
+    (n < count)%Z ->
+    forall x : T0, range0 x ->
+    to0 n = Some x -> from0 x = Some n -> to2 x = and_then from0 to1 x)).
+  - intros count_positive x range0_x x_definition zero_definition. unfold and_then.
     rewrite zero_definition.
     revert x_definition zero_definition.
     apply (partial_morphism_induction range0 range1 to2); try assumption.
     clear x range0_x.
     intros x y0 range0_x range1_y y0_definition x_definition zero_definition_from0.
-    (*revert x_definition zero_definition. *)
     assert (interval count 0) as zero_interval by (unfold interval; lia).
     specialize (partial_isomorphism_elimination
       (opi_isomorphism (interval count) range1 Z.compare compare1 to1 from1 iso1)
@@ -456,7 +458,7 @@ Proof.
       apply Z_interval_minimum_zero.
     * apply ordered_isomorphism_preserves_minimum with (domain:=interval count)
       (compare1:=Z.compare) (to:=to1) (from:=from1) (x:=0%Z); try assumption. apply Z_interval_minimum_zero.
-  - intros n n_nonnegative IHn n_small x_definition n_succ_definition.
+  - intros n n_nonnegative IHn n_small x range0_x x_definition n_succ_definition.
     unfold and_then. rewrite n_succ_definition.
     assert (interval count n) as n_interval. unfold interval; lia.
     assert (interval count (Z.succ n)) as n_succ_interval. unfold interval; lia.
@@ -469,13 +471,13 @@ Proof.
       n_interval)
       as [y_pred [range1_y_pred [n_definition_from1 y_pred_definition]]].
     
-    rewrite y1_definition. apply f_equal.
+      rewrite y1_definition. admit. (* apply f_equal.
     assert (G := iso1).
     destruct G.
     apply partially_covers_unique with (domain:=range1) (compare:=compare1) (x0:=y_pred); try assumption.
     * apply ordered_isomorphism_preserves_cover with (domain := range0) (compare1:=compare0) (to:=to2) (x0:=x0) (from:=; try assumption.
     * apply ordered_isomorphism_preserves_cover with (domain := interval count) (compare1:=Z.compare) (to:=to1) (from:=from1) (x0:=n) (x1:=Z.succ n); try assumption.
-      apply Z_interval_succ_partially_covers.
+      apply Z_interval_succ_partially_covers. *)
 Admitted.
 
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
