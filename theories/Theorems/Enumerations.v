@@ -145,6 +145,15 @@ Proof.
     + exfalso. apply (H x_in_domain).
 Qed.
 
+Theorem partial_morphism_elimination {X Y}
+  {domain : X -> Prop} {range : Y -> Prop} {f : X -> option Y} :
+  partial_morphism domain range f ->
+  forall (x : X),
+  exists y,
+    ((range y) /\ (f x = Some y)).
+Proof.
+Admitted.
+
 Lemma some_injective : forall {X} (x0 x1 : X),
   Some x0 = Some x1 ->
   x0 = x1.
@@ -333,13 +342,14 @@ Proof.
     apply (x0_x1_no_between x2). do 2 (try split; try assumption).
 Qed.
 
-Theorem partially_minimum_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (ordered: Ordered compare) (x0 x1 : X) :
+Definition partially_minimum_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison)  (x0 x1 : X) :
+  forall (ordered: Ordered compare),
   domain x0 -> domain x1 ->
   partially_minimum domain compare x0 ->
   partially_minimum domain compare x1 ->
   x0 = x1.
 Proof.
-  intros domain_x0 domain_x1 minimum_x0 minimum_x1.
+  intros ordered domain_x0 domain_x1 minimum_x0 minimum_x1.
   unfold partially_minimum in minimum_x0, minimum_x1.
   destruct ordered.
   destruct (compare x0 x1) eqn:compare_x0_x1.
@@ -356,9 +366,9 @@ Proof.
 Qed.
 
 Theorem ordered_isomorphism_preserves_cover {T1 T2}
-  (domain: T1 -> Prop) (range: T2 -> Prop)
-  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
-  (to: T1 -> option T2) (from: T2 -> option T1)
+  {domain: T1 -> Prop} {range: T2 -> Prop}
+  {compare1: T1 -> T1 -> comparison} {compare2: T2 -> T2 -> comparison}
+  {to: T1 -> option T2} {from: T2 -> option T1}
   (x0 x1 : T1) (y0 y1 : T2) :
   OrderedPartialIsomorphism domain range compare1 compare2 to from ->
   domain x0 -> domain x1 ->
@@ -475,7 +485,9 @@ Proof.
       zero_interval)
     as [y1 [range1_y1 [zero_definition_from1 y1_definition]]].
     rewrite y1_definition. apply f_equal.
-    apply partially_minimum_unique with (domain:=range1) (compare:=compare1); try assumption.
+    Check partially_minimum_unique.
+    apply partially_minimum_unique with  (domain:=range1) (compare:=compare1); try assumption.
+    apply (opi_ordered2 (interval count) range1 Z.compare compare1 to1 from1 iso1).
     * apply ordered_morphism_preserves_minimum with (domain:=range0)
         (compare0:=compare0) (compare1:=compare1) (to:=to2) (x:=x); try assumption.
       apply ordered_partial_isomorphism_symmetry in iso0.
@@ -491,19 +503,42 @@ Proof.
     specialize (partial_isomorphism_elimination
       (opi_isomorphism (interval count) range1 Z.compare compare1 to1 from1 iso1)
       n_succ_interval)
-      as [y1 [range1_y1 [n_succ_definition_from1 y1_definition]]].
+      as [y [range1_y [n_succ_definition_from1 y_definition]]].
     specialize (partial_isomorphism_elimination
       (opi_isomorphism (interval count) range1 Z.compare compare1 to1 from1 iso1)
       n_interval)
       as [y_pred [range1_y_pred [n_definition_from1 y_pred_definition]]].
-    
-      rewrite y1_definition. admit. (* apply f_equal.
-    assert (G := iso1).
-    destruct G.
-    apply partially_covers_unique with (domain:=range1) (compare:=compare1) (x0:=y_pred); try assumption.
-    * apply ordered_isomorphism_preserves_cover with (domain := range0) (compare1:=compare0) (to:=to2) (x0:=x0) (from:=; try assumption.
-    * apply ordered_isomorphism_preserves_cover with (domain := interval count) (compare1:=Z.compare) (to:=to1) (from:=from1) (x0:=n) (x1:=Z.succ n); try assumption.
-      apply Z_interval_succ_partially_covers. *)
+    apply ordered_partial_isomorphism_symmetry in iso0.
+    specialize (partial_isomorphism_elimination
+      (opi_isomorphism (interval count) range0 Z.compare compare0 to0 from0 iso0)
+      n_interval)
+      as [x_pred [range1_x_pred [n_definition_from0 x_pred_definition]]].
+      rewrite y_definition.
+    specialize
+      (partial_morphism_elimination morphism x_pred)
+    as [y_pred' [range1_y_pred' y_pred'_definition]].
+    assert (y_pred' = y_pred).
+    * apply some_injective. rewrite <- y_pred'_definition.
+      replace (Some y_pred) with (and_then from0 to1 x_pred).
+      apply IHn; try assumption. lia.
+      unfold and_then.
+      rewrite n_definition_from0. apply y_pred_definition.
+    * subst y_pred'. clear range1_y_pred'.
+      rename y_pred'_definition into y_pred_definition_to2.
+      specialize
+        (partial_morphism_elimination morphism x)
+      as [y' [range1_y' y'_definition]].
+      rewrite y'_definition. apply f_equal.
+      Check partially_covers_unique.
+      apply partially_covers_unique with (domain:=range1) (compare:=compare1)
+      (x0:=y_pred) (x1:=y') (x2:=y); try assumption.
+      apply (opi_ordered2
+        (interval count) range1
+        Z.compare compare1
+        to1 from1 iso1).
+      + (* turns out this is not trivial lol *) admit.
+      + apply (ordered_isomorphism_preserves_cover n (Z.succ n) y_pred y iso1);
+        try assumption. apply Z_interval_succ_partially_covers.
 Admitted.
 
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
