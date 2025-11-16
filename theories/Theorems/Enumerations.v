@@ -159,7 +159,10 @@ Theorem partial_isomorphism_symmetry  {X Y}
   (iso : PartialIsomorphism domain range to from):
   PartialIsomorphism range domain from to.
 Proof.
-Admitted.
+  destruct iso.
+  split; assumption.
+Qed.
+  
 
 Theorem partial_isomorphism_elimination {X Y}
   {domain : X -> Prop} {range : Y -> Prop} {to : X -> option Y}
