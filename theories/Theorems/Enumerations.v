@@ -79,7 +79,7 @@ Definition partially_covers {X} (domain : X -> Prop) (compare : X -> X -> compar
   /\ (forall x2, not ((compare x0 x2 = Lt) /\ (compare x2 x1 = Lt) /\ (domain x2))).
 
 Definition partially_minimum {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 : X) : Prop :=
-  forall x1, ~ (domain x1 /\ compare x0 x1 = Lt).
+  forall x1, ~ (domain x1 /\ compare x1 x0 = Lt).
 
 Theorem partial_compose {X Y Z} : forall
   (first : X -> Prop) (second : Y -> Prop) (third : Z -> Prop)
@@ -230,8 +230,23 @@ Lemma ordered_partial_isomorphism_symmetry  {T1 T2}
 Proof.
   intros iso.
   destruct iso.
+  destruct opi_isomorphism0.
   split; try assumption.
-  - split.
+  - split; assumption.
+  - intros x0 y0 range_x0 range_y0.
+    destruct to_morphism0 as [from_some from_none].
+    destruct (from x0) as [x1|] eqn:from_x0;
+      [| apply from_none in from_x0; apply from_x0 in range_x0; exfalso; auto].
+    destruct (from y0) as [y1|] eqn:from_y0;
+      [| apply from_none in from_y0; apply from_y0 in range_y0; exfalso; auto].
+    apply from_some in from_x0 as x1_domain, from_y0 as y1_domain.
+    specialize (to_from_id0 x0 range_x0) as to_x1.
+    specialize (to_from_id0 y0 range_y0) as to_y1.
+    unfold and_then in to_x1, to_y1. rewrite from_x0 in to_x1. rewrite from_y0 in to_y1.
+    specialize (opi_to_preserves_compare0 x1 y1 x1_domain y1_domain).
+    rewrite to_x1, to_y1 in opi_to_preserves_compare0.
+    symmetry. apply opi_to_preserves_compare0.
+Qed.
 
 Lemma ordered_partial_isomorphism_composition {T1 T2 T3}
   {domain: T1 -> Prop} {intermediate: T2 -> Prop} {range: T3 -> Prop}
@@ -271,12 +286,20 @@ Qed.
 Theorem Z_interval_minimum_zero : forall n,
   partially_minimum (interval n) Z.compare 0%Z.
 Proof.
-Admitted.
+  intros n zero [interval_zero zero_less_than_zero].
+  unfold interval in interval_zero.
+  destruct interval_zero.
+  destruct (Z.compare_spec zero 0).
+  - subst. discriminate.
+  - lia.
+  - discriminate.
+Qed.
 
 Theorem Z_interval_succ_partially_covers : forall count n,
     partially_covers (interval count) Z.compare n (Z.succ n).
+Proof.
 Admitted.
-  
+
 Theorem partially_covers_unique {X} (domain : X -> Prop) (compare : X -> X -> comparison) (x0 x1 x2 : X) :
   Ordered compare ->
   domain x0 -> domain x1 -> domain x2 ->
