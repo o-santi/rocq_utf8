@@ -223,9 +223,9 @@ Proof.
 Qed.
 
 Lemma ordered_partial_isomorphism_from_increasing {T1 T2}
-  (domain: T1 -> Prop) (range: T2 -> Prop)
-  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
-  (to: T1 -> option T2) (from: T2 -> option T1) :
+  {domain: T1 -> Prop} {range: T2 -> Prop}
+  {compare1: T1 -> T1 -> comparison} {compare2: T2 -> T2 -> comparison}
+  {to: T1 -> option T2} {from: T2 -> option T1} :
   OrderedPartialIsomorphism domain range compare1 compare2 to from ->
   increasing range compare2 compare1 from.
 Proof.
@@ -441,26 +441,31 @@ Proof.
   specialize (minimum_x m). apply minimum_x. split; assumption.
 Qed.
 
-Theorem ordered_morphism_preserves_minimum {T1 T2}
-  (domain: T1 -> Prop) (range: T2 -> Prop)
-  (compare0: T1 -> T1 -> comparison) (compare1: T2 -> T2 -> comparison)
-  (to: T1 -> option T2)
-  (x : T1) (y : T2) :
-  partial_morphism domain range to ->
-  increasing domain compare0 compare1 to ->
-  domain x -> range y ->
-  to x = Some y ->
-  partially_minimum domain compare0 x ->
-  partially_minimum range compare1 y.
-Proof.
-Admitted.
-
 Theorem no_ordered_morphism_to_smaller_interval (n m: Z) (to : Z -> option Z):
-  (0 <= n)%Z ->
+  (0 <= m)%Z ->
   (m < n)%Z ->
-  (partial_morphism (interval n) (interval m) to /\ increasing (interval n) Z.compare Z.compare to) ->
+  partial_morphism (interval n) (interval m) to ->
+  increasing (interval n) Z.compare Z.compare to ->
   False.
 Proof.
+  generalize dependent m.
+  apply (Wf_Z.natlike_ind (fun m =>
+                             (m < n)%Z ->
+                             partial_morphism (interval n) (interval m) to ->
+                             increasing (interval n) Z.compare Z.compare to -> False)).
+  - intros m_less_n [to_some to_none] increasing_to.
+    destruct (to 0%Z) as [z'|] eqn:to_z.
+    + apply to_some in to_z as [z_nonneg z_neg].
+      lia.
+    + apply to_none in to_z.
+      apply to_z.
+      split; lia.
+  - intros m m_nonneg induction_hypothesis m_succ_less_n [to_some to_none] increasing_to.
+    apply induction_hypothesis; [lia | | assumption].
+    split. 
+    + intros x y to_x.
+      apply to_some in to_x as y_interval.
+      unfold interval in y_interval |- *.
 Admitted.
 
 Theorem interval_ordered_automorphism_is_id :
@@ -485,12 +490,14 @@ Proof.
       (partial_morphism_elimination morphism n)
       as [n' [n'_in_interval n'_definition]]. unfold interval; lia.
       rewrite n'_definition; apply f_equal.
-      assert (n' < n \/ n' = n)%Z as n'_cases by (unfold interval in *; lia). 
+      assert (n' < n \/ n' = n)%Z as n'_cases by (unfold interval in *; lia).
       destruct n'_cases as [n'_smaller | duh].
-      + assert (partial_morphism (interval (Z.succ n)) (interval (Z.succ n')) to) as stricter_morphism. admit.
-        exfalso. apply (no_ordered_morphism_to_smaller_interval (Z.succ n) (Z.succ n') to). unfold interval in *; lia.
-        unfold interval in *; lia. split; assumption.
-      + apply duh.
+    + assert (partial_morphism (interval (Z.succ n)) (interval (Z.succ n')) to) as stricter_morphism.
+      admit.
+      exfalso.
+      destruct n'_in_interval as [n'_nonneg n'_less_succ_n].
+      apply (no_ordered_morphism_to_smaller_interval (Z.succ n) (Z.succ n') to); try lia; assumption.
+    + apply duh.
     * unfold pointwise_equal. intros x x_in_interval.
       assert (x = n \/ interval n x) as [x_is_n | x_smaller_than_n] by (unfold interval in *; lia).
       + subst x; assumption.
@@ -500,6 +507,7 @@ Proof.
 Admitted.
 
 Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
+  (0 <= count)%Z ->
   forall from0 from1 to0 to1 to2,
   OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
   OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 to1 from1 ->
@@ -507,88 +515,72 @@ Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> 
   increasing range0 compare0 compare1 to2 ->
   (pointwise_equal range0 to2 (and_then from0 to1)).
 Proof.
-  intros from0 from1 to0 to1 to2 iso0 iso1 morphism increasing.
-  (*apply ordered_partial_isomorphism_symmetry in iso0.
-     generalize (ordered_partial_isomorphism_composition iso0 iso1); intros iso2. *)
-  unfold pointwise_equal. intros x range0_x.
-  apply ordered_partial_isomorphism_symmetry in iso0.
-  specialize (partial_isomorphism_elimination (opi_isomorphism range0 (interval count) compare0 Z.compare from0 to0 iso0) range0_x)
-  as [n [interval_n [x_definition n_definition]]].
-  unfold interval in interval_n.
-  destruct interval_n as [n_nonnegative n_bounded].
-  generalize dependent x.
-  generalize dependent n.
-  apply (Wf_Z.natlike_ind (fun n =>
-    (n < count)%Z ->
-    forall x : T0, range0 x ->
-    to0 n = Some x -> from0 x = Some n -> to2 x = and_then from0 to1 x)).
-  - intros count_positive x range0_x x_definition zero_definition. unfold and_then.
-    rewrite zero_definition.
-    revert x_definition zero_definition.
-    apply (partial_morphism_induction range0 range1 to2); try assumption.
-    clear x range0_x.
-    intros x y0 range0_x range1_y y0_definition x_definition zero_definition_from0.
-    assert (interval count 0) as zero_interval by (unfold interval; lia).
-    specialize (partial_isomorphism_elimination
-      (opi_isomorphism (interval count) range1 Z.compare compare1 to1 from1 iso1)
-      zero_interval)
-    as [y1 [range1_y1 [zero_definition_from1 y1_definition]]].
-    rewrite y1_definition. apply f_equal.
-    Check partially_minimum_unique.
-    apply partially_minimum_unique with  (domain:=range1) (compare:=compare1); try assumption.
-    apply (opi_ordered2 (interval count) range1 Z.compare compare1 to1 from1 iso1).
-    * apply ordered_morphism_preserves_minimum with (domain:=range0)
-        (compare0:=compare0) (compare1:=compare1) (to:=to2) (x:=x); try assumption.
-      apply ordered_partial_isomorphism_symmetry in iso0.
-      apply ordered_isomorphism_preserves_minimum with (domain:=interval count)
-      (compare1:=Z.compare) (to:=to0) (from:=from0) (x:=0%Z); try assumption.
-      apply Z_interval_minimum_zero.
-    * apply ordered_isomorphism_preserves_minimum with (domain:=interval count)
-      (compare1:=Z.compare) (to:=to1) (from:=from1) (x:=0%Z); try assumption. apply Z_interval_minimum_zero.
-  - intros n n_nonnegative IHn n_small x range0_x x_definition n_succ_definition.
-    unfold and_then. rewrite n_succ_definition.
-    assert (interval count n) as n_interval. unfold interval; lia.
-    assert (interval count (Z.succ n)) as n_succ_interval. unfold interval; lia.
-    specialize (partial_isomorphism_elimination
-      (opi_isomorphism (interval count) range1 Z.compare compare1 to1 from1 iso1)
-      n_succ_interval)
-      as [y [range1_y [n_succ_definition_from1 y_definition]]].
-    specialize (partial_isomorphism_elimination
-      (opi_isomorphism (interval count) range1 Z.compare compare1 to1 from1 iso1)
-      n_interval)
-      as [y_pred [range1_y_pred [n_definition_from1 y_pred_definition]]].
-    apply ordered_partial_isomorphism_symmetry in iso0.
-    specialize (partial_isomorphism_elimination
-      (opi_isomorphism (interval count) range0 Z.compare compare0 to0 from0 iso0)
-      n_interval)
-      as [x_pred [range1_x_pred [n_definition_from0 x_pred_definition]]].
-      rewrite y_definition.
-    specialize
-      (partial_morphism_elimination morphism x_pred)
-    as [y_pred' [range1_y_pred' y_pred'_definition]]; try assumption.
-    assert (y_pred' = y_pred).
-    * apply some_injective. rewrite <- y_pred'_definition.
-      replace (Some y_pred) with (and_then from0 to1 x_pred).
-      apply IHn; try assumption. lia.
-      unfold and_then.
-      rewrite n_definition_from0. apply y_pred_definition.
-    * subst y_pred'. clear range1_y_pred'.
-      rename y_pred'_definition into y_pred_definition_to2.
-      specialize
-        (partial_morphism_elimination morphism x)
-      as [y' [range1_y' y'_definition]]; try assumption.
-      rewrite y'_definition. apply f_equal.
-      Check partially_covers_unique.
-      apply partially_covers_unique with (domain:=range1) (compare:=compare1)
-      (x0:=y_pred) (x1:=y') (x2:=y); try assumption.
-      apply (opi_ordered2
-        (interval count) range1
-        Z.compare compare1
-        to1 from1 iso1).
-      + (* turns out this is not trivial lol *) admit.
-      + apply (ordered_isomorphism_preserves_cover n (Z.succ n) y_pred y iso1);
-        try assumption. apply Z_interval_succ_partially_covers.
-Admitted.
+  intros count_nonneg from0 from1 to0 to1 to2 iso0 iso1 [to2_some to2_none] increasing_to.
+    assert (partial_morphism (interval count) (interval count) (and_then to0 (and_then to2 from1))) as morphism. {
+    destruct iso0. destruct opi_isomorphism0 as [[to0_some to0_none] [from0_some from0_none] _ _].
+    destruct iso1. destruct opi_isomorphism0 as [[to1_some to1_none] [from1_some from1_none] _ _].
+    split.
+    + intros x0 y0 composition.
+      unfold and_then in composition.
+      destruct (to0 x0) as [y1|] eqn:y1_definition; [| discriminate].
+      destruct (to2 y1) as [y2|] eqn:y2_definition; [| discriminate].
+      apply from1_some in composition. apply composition.
+    + intros x0 composition x0_interval.
+      unfold and_then in composition.
+      destruct (to0 x0) as [y1|] eqn:y1_definition.
+      * destruct (to2 y1) as [y2|] eqn:y2_definition.
+        -- apply from1_none in composition. apply to2_some in y2_definition. apply composition. apply y2_definition.
+        -- apply to2_none in y2_definition. apply to0_some in y1_definition. apply y2_definition. apply y1_definition.
+      * apply to0_none in y1_definition. apply y1_definition. apply x0_interval.
+    }
+    assert (increasing (interval count) Z.compare Z.compare
+              (and_then to0 (and_then to2 from1))) as increasing_composition. {
+      destruct iso0. destruct opi_isomorphism0 as [[to0_some to0_none] [from0_some from0_none] to0_from0 from0_to0].
+      assert (G:= iso1).
+      destruct G. destruct opi_isomorphism0 as [[to1_some to1_none] [from1_some from1_none] to1_from1 from1_to1].
+      intros x0 y0 x0_interval y0_interval. unfold and_then.
+      destruct (to0 x0)   as [y1|] eqn:y1_definition;
+        [apply to0_some in y1_definition as y1_interval | apply to0_none   in y1_definition; tauto].
+      destruct (to2 y1)   as [y2|] eqn:y2_definition;
+        [apply to2_some in y2_definition as y2_interval | apply to2_none   in y2_definition; tauto].
+      destruct (from1 y2) as [x1|] eqn:x1_definition;
+        [apply from1_some in x1_definition as x1_interval | apply from1_none in x1_definition; tauto].
+      destruct (to0 y0) as [y3|] eqn:y3_definition;
+        [apply to0_some in y3_definition as y3_interval | apply to0_none in y3_definition; tauto].
+      destruct (to2 y3) as [y4|] eqn:y4_definition;
+        [apply to2_some in y4_definition as y4_interval | apply to2_none in y4_definition; tauto].
+      destruct (from1 y4) as [x2|] eqn:x2_definition;
+        [apply from1_some in x2_definition as x2_interval | apply from1_none in x2_definition; tauto].
+      specialize (opi_to_preserves_compare0 x0 y0 x0_interval y0_interval).
+      rewrite y1_definition, y3_definition in opi_to_preserves_compare0. rewrite opi_to_preserves_compare0.
+      specialize (increasing_to y1 y3 y1_interval y3_interval).
+      rewrite y2_definition, y4_definition in increasing_to. rewrite increasing_to.
+      specialize (ordered_partial_isomorphism_from_increasing iso1) as from1_increasing.
+      specialize (from1_increasing y2 y4 y2_interval y4_interval).
+      rewrite x1_definition, x2_definition in from1_increasing. apply from1_increasing.
+    }
+    specialize (interval_ordered_automorphism_is_id count count_nonneg (and_then to0 (and_then to2 from1)) morphism increasing_composition) as composition_equal.
+    intros x0 x0_interval.
+    destruct (to2 x0) as [y0|] eqn:y0_definition; [ | apply to2_none in y0_definition ; tauto].
+    unfold and_then.
+    destruct iso0 as [_ _ [[to0_some to0_none] [from0_some from0_none] to0_from0 from0_to0] _].
+    destruct iso1 as [_ _ [[to1_some to1_none] [from1_some from1_none] to1_from1 from1_to1] _].
+    destruct (from0 x0) as [y1|] eqn:y1_definition; [apply from0_some in y1_definition as y1_interval | apply from0_none in y1_definition; tauto].
+    destruct (to1 y1) as [y2|] eqn:y2_definition; [apply to1_some in y2_definition as y2_interval | apply to1_none in y2_definition; tauto ].
+    apply f_equal.
+    specialize (composition_equal y1 y1_interval). simpl in composition_equal.
+    unfold and_then in composition_equal.
+    destruct (to0 y1) as [y3|] eqn:y3_definition; [apply to0_some in y3_definition as y3_interval | apply to0_none in y3_definition; tauto].
+    destruct (to2 y3) as [y4|] eqn:y4_definition; [apply to2_some in y4_definition as y4_interval | apply to2_none in y4_definition; tauto].
+    specialize (from1_to1 y4 y4_interval) as to1_y4. unfold and_then in to1_y4.
+    rewrite composition_equal in to1_y4.
+    rewrite to1_y4 in y2_definition. inversion y2_definition. subst. clear y2_definition.
+    specialize (from0_to0 x0 x0_interval) as to0_x0. unfold and_then in to0_x0.
+    rewrite y1_definition in to0_x0.
+    rewrite to0_x0 in y3_definition. inversion y3_definition. subst. clear y3_definition.
+    rewrite y4_definition in y0_definition. inversion y0_definition. 
+    reflexivity.
+Qed.
 
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 from2 to0 to1 to2,
@@ -602,7 +594,7 @@ Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop
   /\ (pointwise_equal range1 from2 (and_then from1 to0)).
 Proof.
   intros from0 from1 from2 to0 to1 to2 iso0 iso1 morphism0 morphism1
-  increasing0 increasing1.
+    increasing0 increasing1.
   split.
   - apply finite_partial_isomorphism_unique_aux with
     (count:=count) (range1:=range1) (compare0:=compare0)
