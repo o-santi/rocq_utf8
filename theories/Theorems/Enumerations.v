@@ -455,6 +455,50 @@ Theorem ordered_morphism_preserves_minimum {T1 T2}
 Proof.
 Admitted.
 
+Theorem no_ordered_morphism_to_smaller_interval (n m: Z) (to : Z -> option Z):
+  (0 <= n)%Z ->
+  (m < n)%Z ->
+  (partial_morphism (interval n) (interval m) to /\ increasing (interval n) Z.compare Z.compare to) ->
+  False.
+Proof.
+Admitted.
+
+Theorem interval_ordered_automorphism_is_id :
+  forall (n: Z),
+  (0 <= n)%Z ->
+  forall (to : Z -> option Z),
+  partial_morphism (interval n) (interval n) to ->
+  increasing (interval n) Z.compare Z.compare to ->
+  (pointwise_equal (interval n) to (fun x => Some x)).
+Proof.
+  apply (Wf_Z.natlike_ind (fun n =>
+    forall to : Z -> option Z,
+    partial_morphism (interval n) (interval n) to ->
+    increasing (interval n) Z.compare Z.compare to ->
+    pointwise_equal (interval n) to (fun x : Z => Some x))).
+  - intros to morphism increasing. unfold pointwise_equal.
+    unfold interval. intros x x_in_empty_interval.
+    lia.
+  - intros n n_nonnegative induction_hypothesis to morphism increasing.
+    assert (to n = Some n) as n_works.
+    * specialize
+      (partial_morphism_elimination morphism n)
+      as [n' [n'_in_interval n'_definition]]. unfold interval; lia.
+      rewrite n'_definition; apply f_equal.
+      assert (n' < n \/ n' = n)%Z as n'_cases by (unfold interval in *; lia). 
+      destruct n'_cases as [n'_smaller | duh].
+      + assert (partial_morphism (interval (Z.succ n)) (interval (Z.succ n')) to) as stricter_morphism. admit.
+        exfalso. apply (no_ordered_morphism_to_smaller_interval (Z.succ n) (Z.succ n') to). unfold interval in *; lia.
+        unfold interval in *; lia. split; assumption.
+      + apply duh.
+    * unfold pointwise_equal. intros x x_in_interval.
+      assert (x = n \/ interval n x) as [x_is_n | x_smaller_than_n] by (unfold interval in *; lia).
+      + subst x; assumption.
+      + unfold pointwise_equal in induction_hypothesis. apply induction_hypothesis.
+        -- admit.
+        -- admit.
+Admitted.
+
 Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 to0 to1 to2,
   OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
@@ -521,7 +565,7 @@ Proof.
       rewrite y_definition.
     specialize
       (partial_morphism_elimination morphism x_pred)
-    as [y_pred' [range1_y_pred' y_pred'_definition]].
+    as [y_pred' [range1_y_pred' y_pred'_definition]]; try assumption.
     assert (y_pred' = y_pred).
     * apply some_injective. rewrite <- y_pred'_definition.
       replace (Some y_pred) with (and_then from0 to1 x_pred).
@@ -532,7 +576,7 @@ Proof.
       rename y_pred'_definition into y_pred_definition_to2.
       specialize
         (partial_morphism_elimination morphism x)
-      as [y' [range1_y' y'_definition]].
+      as [y' [range1_y' y'_definition]]; try assumption.
       rewrite y'_definition. apply f_equal.
       Check partially_covers_unique.
       apply partially_covers_unique with (domain:=range1) (compare:=compare1)
