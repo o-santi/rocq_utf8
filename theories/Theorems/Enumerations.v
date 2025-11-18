@@ -127,6 +127,16 @@ Proof.
   - apply f_domain.
 Qed.
 
+Theorem strengthen_increasing {T1 T2}
+  (strong_domain weak_domain: T1 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) :
+  (forall x, strong_domain x -> weak_domain x) ->
+  increasing weak_domain compare1 compare2 to ->
+  increasing strong_domain compare1 compare2 to.
+Proof.
+Admitted.
+
 Theorem partial_morphism_induction {X Y}
   (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
   (P : X -> option Y -> Prop) :
@@ -441,32 +451,73 @@ Proof.
   specialize (minimum_x m). apply minimum_x. split; assumption.
 Qed.
 
-Theorem no_ordered_morphism_to_smaller_interval (n m: Z) (to : Z -> option Z):
+Lemma ordered_morphism_restriction (n m n' m' : Z) (to : Z -> option Z) :
+  partial_morphism (interval n) (interval m) to ->
+  increasing (interval n) Z.compare Z.compare to ->
+  interval n n' ->
+  interval m m' ->
+  to n' = Some m' ->
+  partial_morphism (interval n') (interval m') to.
+Proof.
+Admitted.
+
+Lemma tighten_ordered_morphism (n m m' : Z) (to : Z -> option Z) :
+  partial_morphism (interval (Z.succ n)) (interval m) to ->
+  increasing (interval (Z.succ n)) Z.compare Z.compare to ->
+  interval m m' ->
+  to n = Some m' ->
+  partial_morphism (interval (Z.succ n)) (interval (Z.succ m')) to.
+Proof.
+Admitted.
+
+Theorem no_ordered_morphism_to_smaller_interval : forall (n m : Z) (to : Z -> option Z),
   (0 <= m)%Z ->
   (m < n)%Z ->
   partial_morphism (interval n) (interval m) to ->
   increasing (interval n) Z.compare Z.compare to ->
   False.
 Proof.
-  generalize dependent m.
-  apply (Wf_Z.natlike_ind (fun m =>
-                             (m < n)%Z ->
-                             partial_morphism (interval n) (interval m) to ->
-                             increasing (interval n) Z.compare Z.compare to -> False)).
-  - intros m_less_n [to_some to_none] increasing_to.
-    destruct (to 0%Z) as [z'|] eqn:to_z.
-    + apply to_some in to_z as [z_nonneg z_neg].
-      lia.
-    + apply to_none in to_z.
-      apply to_z.
-      split; lia.
-  - intros m m_nonneg induction_hypothesis m_succ_less_n [to_some to_none] increasing_to.
-    apply induction_hypothesis; [lia | | assumption].
-    split. 
-    + intros x y to_x.
-      apply to_some in to_x as y_interval.
-      unfold interval in y_interval |- *.
-Admitted.
+  assert
+  (forall (bound : Z)
+    (_ : (0 <= bound)%Z)
+    (m : Z)
+    (_ : (m <= bound)%Z)
+    (n : Z) (to : Z -> option Z),
+    (0 <= m)%Z ->
+    (m < n)%Z ->
+    partial_morphism (interval n) (interval m) to ->
+    increasing (interval n) Z.compare Z.compare to ->
+    False) as lemma.
+  - apply (Wf_Z.natlike_ind
+            (fun bound =>
+              forall m : Z,
+              (m <= bound)%Z ->
+              forall (n : Z) (to : Z -> option Z),
+              (0 <= m)%Z ->
+              (m < n)%Z ->
+              partial_morphism (interval n) (interval m) to ->
+              increasing (interval n) Z.compare Z.compare to -> False)).
+    + intros m m_zero n to m_nonnegative m_less_n [to_some to_none] increasing_to.
+      destruct (to 0%Z) as [z'|] eqn:to_z.
+      * apply to_some in to_z as [z_nonneg z_neg].
+        lia.
+      * apply to_none in to_z.
+        apply to_z.
+        split; lia.
+    + intros bound bound_nonnegative induction_hypothesis m m_bound n to m_nonneg is_less morphism increasing_to.
+      replace n with (Z.succ (Z.pred n)) in * by lia.
+      remember (Z.pred n) as n_pred eqn:n_pred_definition.
+      specialize
+        (partial_morphism_elimination morphism n_pred)
+        as [m' [m'_in_interval m'_definition]].
+      unfold interval. lia.
+      apply induction_hypothesis with (m:=m') (n:=n_pred) (to:=to); try (unfold interval in *; lia).
+      * apply ordered_morphism_restriction with (n:=(Z.succ n_pred)) (m:=m); try assumption.
+        unfold interval. lia.
+      * apply strengthen_increasing with (weak_domain:=(interval (Z.succ n_pred))); try assumption.
+        unfold interval; lia.
+  - intros n m to m_nonnegative is_less morphism. apply (lemma m) with (m := m); try assumption. lia.
+Qed.
 
 Theorem interval_ordered_automorphism_is_id :
   forall (n: Z),
@@ -493,7 +544,7 @@ Proof.
       assert (n' < n \/ n' = n)%Z as n'_cases by (unfold interval in *; lia).
       destruct n'_cases as [n'_smaller | duh].
     + assert (partial_morphism (interval (Z.succ n)) (interval (Z.succ n')) to) as stricter_morphism.
-      admit.
+      apply tighten_ordered_morphism with (m:=(Z.succ n)); try assumption.
       exfalso.
       destruct n'_in_interval as [n'_nonneg n'_less_succ_n].
       apply (no_ordered_morphism_to_smaller_interval (Z.succ n) (Z.succ n') to); try lia; assumption.
@@ -502,9 +553,10 @@ Proof.
       assert (x = n \/ interval n x) as [x_is_n | x_smaller_than_n] by (unfold interval in *; lia).
       + subst x; assumption.
       + unfold pointwise_equal in induction_hypothesis. apply induction_hypothesis.
-        -- admit.
-        -- admit.
-Admitted.
+        -- apply ordered_morphism_restriction with (n:=(Z.succ n)) (m:=(Z.succ n)); try assumption; unfold interval; lia.
+        -- apply strengthen_increasing with (weak_domain:=(interval (Z.succ n))); try assumption. unfold interval. lia.
+        -- assumption.
+Qed.
 
 Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   (0 <= count)%Z ->
@@ -584,6 +636,7 @@ Qed.
 
 Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   forall from0 from1 from2 to0 to1 to2,
+    (0 <= count)%Z ->
     OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
     OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 to1 from1 ->
     partial_morphism range0 range1 to2 ->
@@ -593,7 +646,7 @@ Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop
   (pointwise_equal range0 to2 (and_then from0 to1))
   /\ (pointwise_equal range1 from2 (and_then from1 to0)).
 Proof.
-  intros from0 from1 from2 to0 to1 to2 iso0 iso1 morphism0 morphism1
+  intros from0 from1 from2 to0 to1 to2 count_nonnegative iso0 iso1 morphism0 morphism1
     increasing0 increasing1.
   split.
   - apply finite_partial_isomorphism_unique_aux with
