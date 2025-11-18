@@ -21,7 +21,7 @@ Definition interval (count n : Z) : Prop :=
 
 Definition partial_morphism {X Y}
   (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y) : Prop :=
-  (forall (x : X) (y : Y), f x = Some y -> range y) (* f is contained in the range *)
+  (forall (x : X) (y : Y), domain x -> f x = Some y -> range y) (* f is contained in the range *)
   /\ (forall (x : X), f x = None -> (not (domain x))) (* f always returns a value in its domain *).
 
 Definition and_then {X Y Z}
@@ -91,11 +91,14 @@ Proof.
   unfold partial_morphism. intros.
   destruct H as [f_range f_domain]. destruct H0 as [g_range g_domain].
   split.
-  - unfold and_then. intros x z. destruct (f x) as [y| ] eqn:current_case; try discriminate; intros.
-    apply g_range with (x := y). assumption.
-  - unfold and_then. intros x. destruct (f x) as [y| ] eqn:current_case; intros.
-    + exfalso. apply ((g_domain y H) (f_range x y current_case)).
-    + apply f_domain. apply current_case.
+  - intros x z first_x. unfold and_then.
+    destruct (f x) as [y| ] eqn:current_case; [|discriminate].
+    intros z_definition.
+    apply f_range in current_case; [| assumption].
+    apply g_range with (x := y); assumption.
+  - unfold and_then. intros x z_definition first_x. destruct (f x) as [y| ] eqn:current_case; intros.
+    + apply g_domain in z_definition. apply f_range in current_case. tauto. assumption.
+    + apply f_domain in current_case. tauto.
 Qed.
 
 Theorem strengthen_domain {X Y} : forall
@@ -107,10 +110,13 @@ Proof.
   unfold partial_morphism.
   intros strong_domain weak_domain range f domain_assertion [f_range f_domain].
   split.
-  - apply f_range.
+  - intros x y strong_x y_definition.
+    apply domain_assertion in strong_x.
+    apply f_range with (x:=x); assumption.
   - unfold not. intros x x_undefined x_in_strong_domain.
     apply ((f_domain x x_undefined) (domain_assertion x x_in_strong_domain)).
 Qed.
+
 
 Theorem weaken_range {X Y} : forall
   (domain : X -> Prop) (strong_range : Y -> Prop) (weak_range : Y -> Prop) (f : X -> option Y),
@@ -121,44 +127,11 @@ Proof.
   unfold partial_morphism.
   intros domain strong_range weak_range f range_assertion [f_range f_domain].
   split.
-  - intros x y f_x_is_some_y. apply range_assertion.
-    apply f_range with (x := x).
+  - intros x y domain_x f_x_is_some_y. apply range_assertion.
+    apply f_range with (x := x). assumption.
     apply f_x_is_some_y.
   - apply f_domain.
 Qed.
-
-Theorem partial_morphism_induction {X Y}
-  (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
-  (P : X -> option Y -> Prop) :
-  partial_morphism domain range f ->
-  (forall x y, (domain x) -> (range y) -> (f x = Some y) -> P x (Some y)) ->
-  forall (x: X), (domain x) -> P x (f x).
-Proof.
-  unfold partial_morphism.
-  intros [f_range f_domain] induction_principle x x_in_domain.
-  destruct (f x) eqn:current_case.
-  - assert (range y) by (apply (f_range x y current_case)).
-    apply (induction_principle x y x_in_domain H).
-    apply current_case.
-  - assert (~ (domain x)).
-    + apply f_domain. apply current_case.
-    + exfalso. apply (H x_in_domain).
-Qed.
-
-Theorem partial_morphism_elimination {X Y}
-  {domain : X -> Prop} {range : Y -> Prop} {f : X -> option Y} :
-  partial_morphism domain range f ->
-  forall (x : X),
-    domain x ->
-  exists y,
-    ((range y) /\ (f x = Some y)).
-Proof.
-  intros [f_some f_none] x domain_x.
-  destruct (f x) as [y|] eqn:f_x.
-  - exists y. repeat split. apply f_some in f_x. apply f_x.
-  - apply f_none in f_x. apply f_x in domain_x. exfalso. auto.
-Qed.
-
 
 Theorem strengthen_increasing {T1 T2}
   (strong_domain weak_domain: T1 -> Prop) (range: T2 -> Prop)
@@ -179,6 +152,37 @@ Proof.
   apply increasing_to.
 Qed.
   
+Theorem partial_morphism_induction {X Y}
+  (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
+  (P : X -> option Y -> Prop) :
+  partial_morphism domain range f ->
+  (forall x y, (domain x) -> (range y) -> (f x = Some y) -> P x (Some y)) ->
+  forall (x: X), (domain x) -> P x (f x).
+Proof.
+  unfold partial_morphism.
+  intros [f_range f_domain] induction_principle x x_in_domain.
+  destruct (f x) eqn:current_case.
+  - apply (f_range x y x_in_domain) in current_case as y_range.
+    apply induction_principle; assumption.
+  - assert (~ (domain x)) as not_in_domain.
+    + apply f_domain. apply current_case.
+    + exfalso. apply (not_in_domain x_in_domain).
+Qed.
+
+Theorem partial_morphism_elimination {X Y}
+  {domain : X -> Prop} {range : Y -> Prop} {f : X -> option Y} :
+  partial_morphism domain range f ->
+  forall (x : X),
+    domain x ->
+  exists y,
+    ((range y) /\ (f x = Some y)).
+Proof.
+  intros [f_some f_none] x domain_x.
+  destruct (f x) as [y|] eqn:f_x.
+  - exists y. repeat split. apply f_some in f_x. apply f_x. assumption.
+  - apply f_none in f_x. apply f_x in domain_x. exfalso. auto.
+Qed.
+
 Lemma some_injective : forall {X} (x0 x1 : X),
   Some x0 = Some x1 ->
   x0 = x1.
@@ -213,8 +217,8 @@ Proof.
   destruct from_morphism0 as [to_some to_none].
   destruct to_morphism0 as [from_some from_none].
   destruct (to x) eqn:y_definition.
-  - exists y. repeat split. apply to_some with (x:=x). assumption.
-    apply to_some in y_definition as y_range.
+  - exists y. repeat split. apply to_some with (x:=x); assumption.
+    apply to_some in y_definition as y_range; [| assumption].
     unfold pointwise_equal in to_from_id0, from_to_id0.
     apply from_to_id0 in x_domain.
     unfold and_then in y_range, x_domain.
@@ -281,7 +285,7 @@ Proof.
       [| apply from_none in from_x0; apply from_x0 in range_x0; exfalso; auto].
     destruct (from y0) as [y1|] eqn:from_y0;
       [| apply from_none in from_y0; apply from_y0 in range_y0; exfalso; auto].
-    apply from_some in from_x0 as x1_domain, from_y0 as y1_domain.
+    apply from_some in from_x0 as x1_domain, from_y0 as y1_domain; try assumption.
     specialize (to_from_id0 x0 range_x0) as to_x1.
     specialize (to_from_id0 y0 range_y0) as to_y1.
     unfold and_then in to_x1, to_y1. rewrite from_x0 in to_x1. rewrite from_y0 in to_y1.
@@ -441,13 +445,12 @@ Proof.
   intros iso domain_x range_y y_definition x_definition minimum_x.
   intros n [range_n n_less_than_y].
   destruct iso. unfold partially_minimum in minimum_x.
-  destruct opi_isomorphism0.
+  destruct opi_isomorphism0 as [[to_some to_none] [from_some from_none] to_from from_to].
   unfold partial_morphism.
-  specialize (to_from_id0 n range_n) as n_definition.
+  specialize (from_to n range_n) as n_definition.
   unfold and_then in n_definition.
   destruct (from n) as [m|] eqn:m_definition; [| discriminate].
-  destruct to_morphism0 as [to_some to_none].
-  specialize (to_some n m m_definition) as domain_m.
+  specialize (from_some n m range_n m_definition) as domain_m.
   specialize (opi_to_preserves_compare0 x m domain_x domain_m).
   rewrite y_definition, n_definition in opi_to_preserves_compare0.
   destruct opi_ordered4 as [_ comp1_antisym _].
@@ -509,8 +512,7 @@ Proof.
               increasing (interval n) Z.compare Z.compare to -> False)).
     + intros m m_zero n to m_nonnegative m_less_n [to_some to_none] increasing_to.
       destruct (to 0%Z) as [z'|] eqn:to_z.
-      * apply to_some in to_z as [z_nonneg z_neg].
-        lia.
+      * apply to_some in to_z as [z_nonneg z_neg]. lia. split; lia.
       * apply to_none in to_z.
         apply to_z.
         split; lia.
@@ -524,7 +526,7 @@ Proof.
       apply induction_hypothesis with (m:=m') (n:=n_pred) (to:=to); try (unfold interval in *; lia).
       * apply ordered_morphism_restriction with (n:=(Z.succ n_pred)) (m:=m); try assumption.
         unfold interval. lia.
-      * apply strengthen_increasing with (weak_domain:=(interval (Z.succ n_pred))); try assumption.
+      * apply strengthen_increasing with (weak_domain:=(interval (Z.succ n_pred))) (range:= interval m); try assumption.
         unfold interval; lia.
   - intros n m to m_nonnegative is_less morphism. apply (lemma m) with (m := m); try assumption. lia.
 Qed.
@@ -564,7 +566,7 @@ Proof.
       + subst x; assumption.
       + unfold pointwise_equal in induction_hypothesis. apply induction_hypothesis.
         -- apply ordered_morphism_restriction with (n:=(Z.succ n)) (m:=(Z.succ n)); try assumption; unfold interval; lia.
-        -- apply strengthen_increasing with (weak_domain:=(interval (Z.succ n))); try assumption. unfold interval. lia.
+        -- apply strengthen_increasing with (weak_domain:=(interval (Z.succ n))) (range:=interval (Z.succ n)); try assumption. unfold interval. lia.
         -- assumption.
 Qed.
 
@@ -582,17 +584,21 @@ Proof.
     destruct iso0. destruct opi_isomorphism0 as [[to0_some to0_none] [from0_some from0_none] _ _].
     destruct iso1. destruct opi_isomorphism0 as [[to1_some to1_none] [from1_some from1_none] _ _].
     split.
-    + intros x0 y0 composition.
+    + intros x0 y0 x0_interval composition.
       unfold and_then in composition.
       destruct (to0 x0) as [y1|] eqn:y1_definition; [| discriminate].
       destruct (to2 y1) as [y2|] eqn:y2_definition; [| discriminate].
       apply from1_some in composition. apply composition.
+      apply to2_some in y2_definition. apply y2_definition.
+      apply to0_some in y1_definition. apply y1_definition. assumption.
     + intros x0 composition x0_interval.
       unfold and_then in composition.
       destruct (to0 x0) as [y1|] eqn:y1_definition.
       * destruct (to2 y1) as [y2|] eqn:y2_definition.
-        -- apply from1_none in composition. apply to2_some in y2_definition. apply composition. apply y2_definition.
-        -- apply to2_none in y2_definition. apply to0_some in y1_definition. apply y2_definition. apply y1_definition.
+        -- apply from1_none in composition. apply to2_some in y2_definition. tauto.
+           apply to0_some in y1_definition; assumption.
+        -- apply to2_none in y2_definition. apply to0_some in y1_definition. tauto.
+           assumption.
       * apply to0_none in y1_definition. apply y1_definition. apply x0_interval.
     }
     assert (increasing (interval count) Z.compare Z.compare
@@ -602,17 +608,17 @@ Proof.
       destruct G. destruct opi_isomorphism0 as [[to1_some to1_none] [from1_some from1_none] to1_from1 from1_to1].
       intros x0 y0 x0_interval y0_interval. unfold and_then.
       destruct (to0 x0)   as [y1|] eqn:y1_definition;
-        [apply to0_some in y1_definition as y1_interval | apply to0_none   in y1_definition; tauto].
+        [apply to0_some in y1_definition as y1_interval; [|tauto] | apply to0_none   in y1_definition; tauto].
       destruct (to2 y1)   as [y2|] eqn:y2_definition;
-        [apply to2_some in y2_definition as y2_interval | apply to2_none   in y2_definition; tauto].
+        [apply to2_some in y2_definition as y2_interval; [|tauto] | apply to2_none   in y2_definition; tauto].
       destruct (from1 y2) as [x1|] eqn:x1_definition;
-        [apply from1_some in x1_definition as x1_interval | apply from1_none in x1_definition; tauto].
+        [apply from1_some in x1_definition as x1_interval; [|tauto] | apply from1_none in x1_definition; tauto].
       destruct (to0 y0) as [y3|] eqn:y3_definition;
-        [apply to0_some in y3_definition as y3_interval | apply to0_none in y3_definition; tauto].
+        [apply to0_some in y3_definition as y3_interval; [|tauto] | apply to0_none in y3_definition; tauto].
       destruct (to2 y3) as [y4|] eqn:y4_definition;
-        [apply to2_some in y4_definition as y4_interval | apply to2_none in y4_definition; tauto].
+        [apply to2_some in y4_definition as y4_interval; [|tauto] | apply to2_none in y4_definition; tauto].
       destruct (from1 y4) as [x2|] eqn:x2_definition;
-        [apply from1_some in x2_definition as x2_interval | apply from1_none in x2_definition; tauto].
+        [apply from1_some in x2_definition as x2_interval; [|tauto] | apply from1_none in x2_definition; tauto].
       specialize (opi_to_preserves_compare0 x0 y0 x0_interval y0_interval).
       rewrite y1_definition, y3_definition in opi_to_preserves_compare0. rewrite opi_to_preserves_compare0.
       specialize (increasing_to y1 y3 y1_interval y3_interval).
@@ -627,13 +633,13 @@ Proof.
     unfold and_then.
     destruct iso0 as [_ _ [[to0_some to0_none] [from0_some from0_none] to0_from0 from0_to0] _].
     destruct iso1 as [_ _ [[to1_some to1_none] [from1_some from1_none] to1_from1 from1_to1] _].
-    destruct (from0 x0) as [y1|] eqn:y1_definition; [apply from0_some in y1_definition as y1_interval | apply from0_none in y1_definition; tauto].
-    destruct (to1 y1) as [y2|] eqn:y2_definition; [apply to1_some in y2_definition as y2_interval | apply to1_none in y2_definition; tauto ].
+    destruct (from0 x0) as [y1|] eqn:y1_definition; [apply from0_some in y1_definition as y1_interval; [|tauto] | apply from0_none in y1_definition; tauto].
+    destruct (to1 y1) as [y2|] eqn:y2_definition; [apply to1_some in y2_definition as y2_interval; [|tauto] | apply to1_none in y2_definition; tauto ].
     apply f_equal.
     specialize (composition_equal y1 y1_interval). simpl in composition_equal.
     unfold and_then in composition_equal.
-    destruct (to0 y1) as [y3|] eqn:y3_definition; [apply to0_some in y3_definition as y3_interval | apply to0_none in y3_definition; tauto].
-    destruct (to2 y3) as [y4|] eqn:y4_definition; [apply to2_some in y4_definition as y4_interval | apply to2_none in y4_definition; tauto].
+    destruct (to0 y1) as [y3|] eqn:y3_definition; [apply to0_some in y3_definition as y3_interval; [|tauto] | apply to0_none in y3_definition; tauto].
+    destruct (to2 y3) as [y4|] eqn:y4_definition; [apply to2_some in y4_definition as y4_interval; [|tauto] | apply to2_none in y4_definition; tauto].
     specialize (from1_to1 y4 y4_interval) as to1_y4. unfold and_then in to1_y4.
     rewrite composition_equal in to1_y4.
     rewrite to1_y4 in y2_definition. inversion y2_definition. subst. clear y2_definition.
