@@ -93,13 +93,12 @@ Proof.
   intros encoder encoder_spec.
   unfold encoder_to_option.
   split.
-  - intros code bytes' encode_some.
+  - intros code bytes' encode_some encoder_eq.
     destruct (encoder [code]) as [bytes rest] eqn:encoder_code.
-    destruct rest; [| discriminate].
+    destruct rest; [| discriminate]. 
     specialize (enc_output encoder encoder_spec code) as bytes_valid.
     rewrite encoder_code in bytes_valid.
-    inversion encode_some. subst.
-    apply bytes_valid.
+    inversion encoder_eq. subst. assumption.
   - intros code encode_none code_valid.
     destruct (encoder [code]) as [bytes rest] eqn: encoder_code.
     destruct rest; [ discriminate|].
@@ -117,14 +116,13 @@ Proof.
   unfold decoder_to_option.
   assert (G := decoder_spec). destruct G.
   split.
-  - intros bytes code bytes_some.
+  - intros bytes code bytes_valid bytes_some.
     destruct (decoder bytes) as [codes rest] eqn:decode_bytes.
     destruct codes as [| code2 tail]; [discriminate |].
     destruct tail; [|discriminate].
     destruct rest; [|discriminate].
     inversion bytes_some. subst.
-    assert (exists code, decoder bytes = ([code], [])). exists code. assumption.
-    apply dec_input in H as bytes_valid.
+    assert (exists code, decoder bytes = ([code], [])) as exists_code. exists code. assumption.
     specialize (dec_output bytes [] [code] decode_bytes).
     destruct dec_output as [valid_code _].
     inversion valid_code.
@@ -183,10 +181,10 @@ Lemma utf8_spec_implies_encoder_maps_nth_to_nth : forall encoder decoder,
       exists n, nth_valid_codepoint n = Some code /\ nth_valid_codepoint_representation n = Some bytes.
 Proof.
   intros encoder decoder encoder_spec decoder_spec code bytes encoder_code.
-  specialize (partial_isomorphism_countable_unique (0x10ffff - 0x7ff) valid_codepoint valid_codepoint_representation Z.compare bytes_compare) as iso.
+  specialize (finite_partial_isomorphism_unique (0x10ffff - 0x7ff) valid_codepoint valid_codepoint_representation Z.compare bytes_compare) as iso.
   specialize (iso inverse_nth_valid_codepoint inverse_nth_valid_codepoint_representation (decoder_to_option decoder)).
   specialize (iso nth_valid_codepoint         nth_valid_codepoint_representation         (encoder_to_option encoder)).
-  specialize (iso codepoint_nth_isomorphism valid_codepoint_representation_isomorphism).
+  specialize (iso ltac:(lia) codepoint_nth_isomorphism valid_codepoint_representation_isomorphism).
   specialize (iso (encoder_partial_morphism encoder encoder_spec)).
   specialize (iso (decoder_partial_morphism decoder decoder_spec)).
   specialize (iso (encoder_to_option_increasing encoder encoder_spec)).
@@ -214,10 +212,10 @@ Lemma utf8_spec_implies_decoder_maps_nth_to_nth : forall encoder decoder,
       exists n, nth_valid_codepoint n = Some code /\ nth_valid_codepoint_representation n = Some bytes.
 Proof.
   intros encoder decoder encoder_spec decoder_spec code bytes decode_bytes.
-  specialize (partial_isomorphism_countable_unique (0x10ffff - 0x7ff) valid_codepoint valid_codepoint_representation Z.compare bytes_compare) as iso.
+  specialize (finite_partial_isomorphism_unique (0x10ffff - 0x7ff) valid_codepoint valid_codepoint_representation Z.compare bytes_compare) as iso.
   specialize (iso inverse_nth_valid_codepoint inverse_nth_valid_codepoint_representation (decoder_to_option decoder)).
   specialize (iso nth_valid_codepoint         nth_valid_codepoint_representation         (encoder_to_option encoder)).
-  specialize (iso codepoint_nth_isomorphism valid_codepoint_representation_isomorphism).
+  specialize (iso ltac:(lia) codepoint_nth_isomorphism valid_codepoint_representation_isomorphism).
   specialize (iso (encoder_partial_morphism encoder encoder_spec)).
   specialize (iso (decoder_partial_morphism decoder decoder_spec)).
   specialize (iso (encoder_to_option_increasing encoder encoder_spec)).
@@ -528,5 +526,3 @@ Proof.
     reflexivity.
     all: assumption.
 Qed.
-
-

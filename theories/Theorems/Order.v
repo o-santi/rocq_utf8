@@ -196,35 +196,36 @@ Qed.
 Definition codepoint_nth_isomorphism : OrderedPartialIsomorphism (interval (0x10ffff - 0x7ff)) valid_codepoint Z.compare Z.compare nth_valid_codepoint inverse_nth_valid_codepoint.
   split. apply ZOrder. apply ZOrder.
   - split.
-    + intros n code is_some.
-      apply nth_valid_codepoint_is_some_implies_valid. exists n. apply is_some.
-    + intros n is_none. apply nth_valid_codepoint_none in is_none. unfold interval. lia.
-  - split.
-    + intros n code is_some. unfold inverse_nth_valid_codepoint in is_some.
-      unfold interval.
-      destruct (n <? 0) eqn:n_lt_0; [discriminate|].
-      destruct (n <? 55296) eqn:n_lt_d800.
-      -- inversion is_some. lia.
-      -- destruct (n <=? 0x10ffff) eqn:n_lt_10ffff; [|discriminate]. inversion is_some. lia.
-    + intros n is_none. unfold inverse_nth_valid_codepoint in is_none.
-      unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
-      destruct (n <? 0) eqn:n_lt_0. lia.
-      destruct (n <? 55296) eqn:n_lt_d800. discriminate.
-      destruct (n <=? 0x10ffff) eqn:n_lt_10ffff. discriminate.
-      lia.
-  - unfold pointwise_equal, and_then.
-    intros n in_range.
-    destruct (nth_valid_codepoint n) eqn:nth_valid.
-    apply nth_valid_codepoint_invertible. apply nth_valid.
-    apply nth_valid_codepoint_none in nth_valid. unfold interval in in_range. lia.
-  - unfold pointwise_equal, and_then.
-    intros code valid_code.
-    destruct (inverse_nth_valid_codepoint code) eqn:inverse_code.
-    apply nth_valid_codepoint_invertible. split; assumption.
-    apply nth_valid_codepoint_is_some_implies_valid in valid_code.
-    destruct valid_code as [n nth_valid_is_some].
-    apply nth_valid_codepoint_invertible in nth_valid_is_some as [invertible_some _].
-    rewrite inverse_code in invertible_some. discriminate.
+    + split.
+      * intros n code code_valid is_some.
+        apply nth_valid_codepoint_is_some_implies_valid. exists n. apply is_some.
+      * intros n is_none. apply nth_valid_codepoint_none in is_none. unfold interval. lia.
+    + split.
+      * intros n code code_valid is_some. unfold inverse_nth_valid_codepoint in is_some.
+        unfold interval.
+        destruct (n <? 0) eqn:n_lt_0; [discriminate|].
+        destruct (n <? 55296) eqn:n_lt_d800.
+        -- inversion is_some. lia.
+        -- destruct (n <=? 0x10ffff) eqn:n_lt_10ffff; [|discriminate]. inversion is_some. lia.
+      * intros n is_none. unfold inverse_nth_valid_codepoint in is_none.
+        unfold valid_codepoint, codepoint_less_than_10ffff, codepoint_is_not_surrogate, codepoint_not_negative.
+        destruct (n <? 0) eqn:n_lt_0. lia.
+        destruct (n <? 55296) eqn:n_lt_d800. discriminate.
+        destruct (n <=? 0x10ffff) eqn:n_lt_10ffff. discriminate.
+        lia.
+    + unfold pointwise_equal, and_then.
+      intros n in_range.
+      destruct (nth_valid_codepoint n) eqn:nth_valid.
+      apply nth_valid_codepoint_invertible. apply nth_valid.
+      apply nth_valid_codepoint_none in nth_valid. unfold interval in in_range. lia.
+    +  unfold pointwise_equal, and_then.
+       intros code valid_code.
+       destruct (inverse_nth_valid_codepoint code) eqn:inverse_code.
+       apply nth_valid_codepoint_invertible. split; assumption.
+       apply nth_valid_codepoint_is_some_implies_valid in valid_code.
+       destruct valid_code as [n nth_valid_is_some].
+       apply nth_valid_codepoint_invertible in nth_valid_is_some as [invertible_some _].
+       rewrite inverse_code in invertible_some. discriminate.
   - intros n1 n2 range1 range2.
     unfold interval in range1, range2.
     destruct (nth_valid_codepoint n1) as [code1|]eqn:is_valid1; [ | apply nth_valid_codepoint_none in is_valid1; lia ].
@@ -1425,8 +1426,8 @@ Proof.
           end; rewrite <- some_injective; apply list_equals_4;
           rewrite <- invertible; repeat split; simplify_mod_div.
 Qed.
-                        
-      
+
+
 Definition BytesOrder : Ordered bytes_compare.
 Proof.
   unfold bytes_compare.
@@ -1449,27 +1450,30 @@ Lemma valid_codepoint_representation_isomorphism : OrderedPartialIsomorphism (in
   - apply ZOrder.
   - apply BytesOrder.
   - split.
-    + intros n bytes bytes_valid. apply nth_valid_codepoint_representation_spec. exists n. assumption.
-    + intros. apply nth_valid_codepoint_representation_none in H. unfold interval. lia.
-  - split.
-    + apply inverse_nth_valid_codepoint_representation_bounds.
-    + intros bytes bytes_none bytes_valid.
-      apply <- nth_valid_codepoint_representation_spec in bytes_valid.
-      destruct bytes_valid as [n nth_some].
-      apply nth_valid_codepoint_representation_invertible in nth_some.
-      rewrite bytes_none in nth_some. discriminate.
-  - unfold pointwise_equal, and_then, interval.
-    intros n n_interval. 
-    destruct (nth_valid_codepoint_representation n) eqn:nth_valid; [|apply nth_valid_codepoint_representation_none in nth_valid; lia].
-    apply nth_valid_codepoint_representation_invertible. assumption.
-  - unfold pointwise_equal, and_then, interval.
-    intros bytes bytes_valid.
-    destruct (inverse_nth_valid_codepoint_representation bytes) eqn:inv_bytes.
-    2: { apply <- nth_valid_codepoint_representation_spec in bytes_valid.
-         destruct bytes_valid as [n n_eq].
-         apply nth_valid_codepoint_representation_invertible in n_eq. rewrite n_eq in inv_bytes. discriminate. }
-    apply inverse_nth_valid_codepoint_representation_invertible.
-    all: assumption.
+    + split.
+      * intros n bytes bytes_valid bytes_some. apply nth_valid_codepoint_representation_spec. exists n. assumption.
+      * intros. apply nth_valid_codepoint_representation_none in H. unfold interval. lia.
+    + split.
+      * intros bytes code valid_code inverse_code.
+        apply inverse_nth_valid_codepoint_representation_bounds with (bytes := bytes).
+        assumption.
+      *  intros bytes bytes_none bytes_valid.
+         apply <- nth_valid_codepoint_representation_spec in bytes_valid.
+         destruct bytes_valid as [n nth_some].
+         apply nth_valid_codepoint_representation_invertible in nth_some.
+         rewrite bytes_none in nth_some. discriminate.
+    + unfold pointwise_equal, and_then, interval.
+      intros n n_interval. 
+      destruct (nth_valid_codepoint_representation n) eqn:nth_valid; [|apply nth_valid_codepoint_representation_none in nth_valid; lia].
+      apply nth_valid_codepoint_representation_invertible. assumption.
+    +  unfold pointwise_equal, and_then, interval.
+       intros bytes bytes_valid.
+       destruct (inverse_nth_valid_codepoint_representation bytes) eqn:inv_bytes.
+       2: { apply <- nth_valid_codepoint_representation_spec in bytes_valid.
+            destruct bytes_valid as [n n_eq].
+            apply nth_valid_codepoint_representation_invertible in n_eq. rewrite n_eq in inv_bytes. discriminate. }
+       apply inverse_nth_valid_codepoint_representation_invertible.
+       all: assumption.
   - intros n1 n2 n1_range n2_range. unfold interval in n1_range, n2_range.
     destruct (nth_valid_codepoint_representation n1) eqn:n1_valid; [|apply nth_valid_codepoint_representation_none in n1_valid; lia].
     destruct (nth_valid_codepoint_representation n2) eqn:n2_valid; [|apply nth_valid_codepoint_representation_none in n2_valid; lia].
