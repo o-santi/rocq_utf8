@@ -472,7 +472,23 @@ Lemma ordered_morphism_restriction (n m n' m' : Z) (to : Z -> option Z) :
   to n' = Some m' ->
   partial_morphism (interval n') (interval m') to.
 Proof.
-Admitted.
+  intros [to_some to_none] increasing_to n'_interval m'_interval m'_definition.
+  split.
+  - intros x y x_n'_interval y_definition.
+    apply to_some in y_definition as y_interval; [| unfold interval in *; lia].
+    assert (interval n x) as x_interval by (unfold interval in *; lia).
+    specialize (increasing_to x n' x_interval n'_interval). rewrite m'_definition, y_definition in increasing_to.
+    destruct x_n'_interval as [x_nonneg x_less_n'].
+    rewrite x_less_n' in increasing_to.
+    unfold interval in *; try lia. split. lia.
+    symmetry in increasing_to.
+    rewrite Z.compare_lt_iff in increasing_to. apply increasing_to.
+  - intros x x_none x_interval.
+    apply to_none in x_none.
+    apply x_none.
+    unfold interval in *.
+    lia.
+Qed.
 
 Lemma tighten_ordered_morphism (n m m' : Z) (to : Z -> option Z) :
   partial_morphism (interval (Z.succ n)) (interval m) to ->
@@ -481,7 +497,24 @@ Lemma tighten_ordered_morphism (n m m' : Z) (to : Z -> option Z) :
   to n = Some m' ->
   partial_morphism (interval (Z.succ n)) (interval (Z.succ m')) to.
 Proof.
-Admitted.
+  intros [to_some to_none] increasing_to interval_m' m'_definition.
+  split.
+  - intros x y x_interval y_definition.
+    apply to_some in y_definition as y_interval; [| assumption].
+    assert (interval (Z.succ n) n) as n_interval by (unfold interval in *; lia).
+    specialize (increasing_to x n x_interval n_interval).
+    rewrite m'_definition, y_definition in increasing_to.
+    destruct x_interval as [x_nonneg x_less_n].
+    destruct (Z.compare_spec x n).
+    + symmetry in increasing_to. apply Z.compare_eq_iff in increasing_to. subst.
+      destruct y_interval.
+      split; lia.
+    + symmetry in increasing_to. rewrite Z.compare_lt_iff in increasing_to.
+      unfold interval in *. lia.
+    + destruct n_interval. lia.
+  - intros x x_none x_interval.
+    apply to_none in x_none. tauto.
+Qed.
 
 Theorem no_ordered_morphism_to_smaller_interval : forall (n m : Z) (to : Z -> option Z),
   (0 <= m)%Z ->
@@ -672,3 +705,4 @@ Proof.
     (count:=count) (range1:=range0) (compare0:=compare1)
     (compare1:=compare0) (from1:=from0) (to0:=to1); assumption.
 Qed.
+
