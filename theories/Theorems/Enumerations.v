@@ -127,16 +127,6 @@ Proof.
   - apply f_domain.
 Qed.
 
-Theorem strengthen_increasing {T1 T2}
-  (strong_domain weak_domain: T1 -> Prop)
-  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
-  (to: T1 -> option T2) :
-  (forall x, strong_domain x -> weak_domain x) ->
-  increasing weak_domain compare1 compare2 to ->
-  increasing strong_domain compare1 compare2 to.
-Proof.
-Admitted.
-
 Theorem partial_morphism_induction {X Y}
   (domain : X -> Prop) (range : Y -> Prop) (f : X -> option Y)
   (P : X -> option Y -> Prop) :
@@ -169,6 +159,26 @@ Proof.
   - apply f_none in f_x. apply f_x in domain_x. exfalso. auto.
 Qed.
 
+
+Theorem strengthen_increasing {T1 T2}
+  (strong_domain weak_domain: T1 -> Prop) (range: T2 -> Prop)
+  (compare1: T1 -> T1 -> comparison) (compare2: T2 -> T2 -> comparison)
+  (to: T1 -> option T2) :
+  (forall x, strong_domain x -> weak_domain x) ->
+  partial_morphism weak_domain range to ->
+  increasing weak_domain compare1 compare2 to ->
+  increasing strong_domain compare1 compare2 to.
+Proof.
+  intros strong_to_weak [to_some to_none] increasing_to x y x_domain y_domain.
+  apply strong_to_weak in x_domain as x_weak.
+  apply strong_to_weak in y_domain as y_weak.
+  destruct (to x) as [x'|] eqn:x'_definition; [| apply to_none in x'_definition; tauto].
+  destruct (to y) as [y'|] eqn:y'_definition; [| apply to_none in y'_definition; tauto].
+  specialize (increasing_to x y x_weak y_weak).
+  rewrite x'_definition, y'_definition in increasing_to.
+  apply increasing_to.
+Qed.
+  
 Lemma some_injective : forall {X} (x0 x1 : X),
   Some x0 = Some x1 ->
   x0 = x1.
