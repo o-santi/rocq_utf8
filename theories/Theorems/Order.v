@@ -226,13 +226,9 @@ Definition codepoint_nth_isomorphism : OrderedPartialIsomorphism (interval (0x10
        destruct valid_code as [n nth_valid_is_some].
        apply nth_valid_codepoint_invertible in nth_valid_is_some as [invertible_some _].
        rewrite inverse_code in invertible_some. discriminate.
-  - intros n1 n2 range1 range2.
+  - intros n1 code1 n2 code2 range1 range2 code1_definition code2_definition.
     unfold interval in range1, range2.
-    destruct (nth_valid_codepoint n1) as [code1|]eqn:is_valid1; [ | apply nth_valid_codepoint_none in is_valid1; lia ].
-    destruct (nth_valid_codepoint n2) as [code2|]eqn:is_valid2; [ | apply nth_valid_codepoint_none in is_valid2; lia ].
-    specialize (nth_valid_codepoint_compat n1 code1 n2 code2 is_valid1 is_valid2) as compare_compat.
-    rewrite <- compare_compat.
-    reflexivity.
+    apply nth_valid_codepoint_compat; assumption.
 Qed.
     
 Definition nth_valid_codepoint_representation (n: Z) : option byte_str :=
@@ -1474,9 +1470,7 @@ Lemma valid_codepoint_representation_isomorphism : OrderedPartialIsomorphism (in
             apply nth_valid_codepoint_representation_invertible in n_eq. rewrite n_eq in inv_bytes. discriminate. }
        apply inverse_nth_valid_codepoint_representation_invertible.
        all: assumption.
-  - intros n1 n2 n1_range n2_range. unfold interval in n1_range, n2_range.
-    destruct (nth_valid_codepoint_representation n1) eqn:n1_valid; [|apply nth_valid_codepoint_representation_none in n1_valid; lia].
-    destruct (nth_valid_codepoint_representation n2) eqn:n2_valid; [|apply nth_valid_codepoint_representation_none in n2_valid; lia].
+  - intros n1 code1 n2 code2 n1_range n2_range. unfold interval in n1_range, n2_range.
     apply nth_valid_codepoint_representation_compare_compat; assumption.
 Qed.
     

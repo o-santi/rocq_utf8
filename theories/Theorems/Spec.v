@@ -88,7 +88,7 @@ Definition decoder_to_option (decoder: decoder_type) bytes :=
 
 Lemma encoder_partial_morphism : forall encoder,
     utf8_encoder_spec encoder -> 
-    partial_morphism valid_codepoint valid_codepoint_representation (encoder_to_option encoder).
+    PartialMorphism valid_codepoint valid_codepoint_representation (encoder_to_option encoder).
 Proof.
   intros encoder encoder_spec.
   unfold encoder_to_option.
@@ -110,7 +110,7 @@ Qed.
    
 Lemma decoder_partial_morphism : forall decoder,
     utf8_decoder_spec decoder ->
-    partial_morphism valid_codepoint_representation valid_codepoint (decoder_to_option decoder).
+    PartialMorphism valid_codepoint_representation valid_codepoint (decoder_to_option decoder).
 Proof.
   intros decoder decoder_spec.
   unfold decoder_to_option.
@@ -145,15 +145,14 @@ Lemma encoder_to_option_increasing : forall encoder,
 Proof.
   intros encoder encoder_spec.
   unfold encoder_to_option.
-  intros code1 code2 code1_valid code2_valid.
-  eapply enc_input in code1_valid; [| apply encoder_spec].
-  eapply enc_input in code2_valid; [| apply encoder_spec].
-  destruct code1_valid as [bytes1 encoder_code1].
-  destruct code2_valid as [bytes2 encoder_code2].
-  rewrite encoder_code1. rewrite encoder_code2.
-  specialize (enc_increasing encoder encoder_spec code1 code2 bytes1 bytes2 encoder_code1 encoder_code2) as increasing.
-  simpl in increasing.
-  destruct (code1 ?= code2); assumption.
+  intros code1 bytes1 code2 bytes2 code1_valid code2_valid encode_code1 encode_code2.
+  rewrite enc_increasing with (encoder := encoder) (bytes1:=bytes1) (bytes2 := bytes2).
+  - reflexivity.
+  - apply encoder_spec.
+  - destruct encoder_spec. apply enc_input in code1_valid as [bytes enc].
+    rewrite enc in encode_code1. inversion encode_code1. subst. assumption.
+  - destruct encoder_spec. apply enc_input in code2_valid as [bytes enc].
+    rewrite enc in encode_code2. inversion encode_code2. subst. assumption.
 Qed.
 
 Lemma decoder_to_option_increasing: forall decoder,
@@ -162,15 +161,14 @@ Lemma decoder_to_option_increasing: forall decoder,
 Proof.
   intros decoder decoder_spec.
   unfold decoder_to_option.
-  intros bytes1 bytes2 bytes1_valid bytes2_valid.
-  eapply dec_input in bytes1_valid; [| apply decoder_spec].
-  eapply dec_input in bytes2_valid; [| apply decoder_spec].
-  destruct bytes1_valid as [code1 decoder_bytes1].
-  destruct bytes2_valid as [code2 decoder_bytes2].
-  rewrite decoder_bytes1, decoder_bytes2.
-  specialize (dec_increasing decoder decoder_spec bytes1 bytes2 code1 code2 decoder_bytes1 decoder_bytes2) as increasing.
-  simpl in increasing. symmetry in increasing.
-  destruct (code1 ?= code2); assumption.
+  intros bytes1 code1 bytes2 code2 bytes1_valid bytes2_valid decode_bytes1 decode_bytes2.
+  rewrite dec_increasing with (decoder := decoder) (bytes1:= bytes1) (bytes2:= bytes2).
+  - reflexivity.
+  - apply decoder_spec.
+  - destruct decoder_spec. apply dec_input in bytes1_valid as [code code_eq].
+    rewrite code_eq in decode_bytes1. inversion decode_bytes1. subst. assumption.
+  - destruct decoder_spec. apply dec_input in bytes2_valid as [code code_eq].
+    rewrite code_eq in decode_bytes2. inversion decode_bytes2. subst. assumption.
 Qed.
 
 Lemma utf8_spec_implies_encoder_maps_nth_to_nth : forall encoder decoder,

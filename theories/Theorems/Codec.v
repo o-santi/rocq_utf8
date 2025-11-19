@@ -464,3 +464,8 @@ Proof.
   - apply utf8_dfa_projects.
 Qed.
 
+Theorem utf8_spec_compliant: utf8_spec utf8_encode utf8_dfa_decode.
+  split.
+  - apply utf8_encode_spec_compliant.
+  - apply utf8_decoder_spec_compliant.
+Qed.
