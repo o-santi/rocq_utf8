@@ -33,6 +33,20 @@ Definition and_then {X Y Z}
     | None => None
     end.
 
+Theorem partial_morphism_elimination {X Y}
+  {domain : X -> Prop} {range : Y -> Prop} {f : X -> option Y} :
+  PartialMorphism domain range f ->
+  forall (x : X),
+    domain x ->
+  exists y,
+    ((range y) /\ (f x = Some y)).
+Proof.
+  intros [f_some f_none] x domain_x.
+  destruct (f x) as [y|] eqn:f_x.
+  - exists y. repeat split. apply (f_some x y); assumption.
+  - apply f_none in f_x. apply f_x in domain_x. exfalso. auto.
+Qed.
+
 Definition pointwise_equal {X Y}
   (domain : X -> Prop) (f g : X -> option Y) : Prop :=
   forall x, domain x -> f x = g x.
@@ -167,20 +181,6 @@ Qed.
 (*     + apply f_domain. apply current_case. *)
 (*     + exfalso. apply (not_in_domain x_in_domain). *)
 (* Qed. *)
-
-Theorem partial_morphism_elimination {X Y}
-  {domain : X -> Prop} {range : Y -> Prop} {f : X -> option Y} :
-  PartialMorphism domain range f ->
-  forall (x : X),
-    domain x ->
-  exists y,
-    ((range y) /\ (f x = Some y)).
-Proof.
-  intros [f_some f_none] x domain_x.
-  destruct (f x) as [y|] eqn:f_x.
-  - exists y. repeat split. apply (f_some x y); assumption.
-  - apply f_none in f_x. apply f_x in domain_x. exfalso. auto.
-Qed.
 
 Lemma some_injective : forall {X} (x0 x1 : X),
   Some x0 = Some x1 ->
@@ -563,36 +563,35 @@ Proof.
     unfold interval. intros x x_in_empty_interval.
     lia.
   - intros n n_nonnegative induction_hypothesis to morphism increasing.
-    assert (to n = Some n) as n_works.
-    * specialize
-      (partial_morphism_elimination morphism n)
-      as [n' [n'_in_interval n'_definition]]. unfold interval; lia.
-      rewrite n'_definition; apply f_equal.
+    assert (to n = Some n) as n_works. { 
+      specialize (partial_morphism_elimination morphism n) as [n' [n'_in_interval n'_definition]].
+      split; lia. rewrite n'_definition. apply f_equal.
       assert (n' < n \/ n' = n)%Z as n'_cases by (unfold interval in *; lia).
-      destruct n'_cases as [n'_smaller | duh].
-    + assert (PartialMorphism (interval (Z.succ n)) (interval (Z.succ n')) to) as stricter_morphism.
-      apply tighten_ordered_morphism with (m:=(Z.succ n)); try assumption.
-      exfalso.
-      destruct n'_in_interval as [n'_nonneg n'_less_succ_n].
-      apply (no_ordered_morphism_to_smaller_interval (Z.succ n) (Z.succ n') to); try lia; assumption.
-    + apply duh.
-    * unfold pointwise_equal. intros x x_in_interval.
-      assert (x = n \/ interval n x) as [x_is_n | x_smaller_than_n] by (unfold interval in *; lia).
-      + subst x; assumption.
-      + unfold pointwise_equal in induction_hypothesis. apply induction_hypothesis.
-        -- apply ordered_morphism_restriction with (n:=(Z.succ n)) (m:=(Z.succ n)); try assumption; unfold interval; lia.
-        -- apply strengthen_increasing with (weak_domain:=(interval (Z.succ n))) (range:=interval (Z.succ n)); try assumption. unfold interval. lia.
-        -- assumption.
+      destruct n'_cases as [n'_smaller | n'_eq_n].
+      + assert (PartialMorphism (interval (Z.succ n)) (interval (Z.succ n')) to) as stricter_morphism by
+          (apply tighten_ordered_morphism with (m:=(Z.succ n)); try assumption).
+        exfalso.
+        destruct n'_in_interval as [n'_nonneg n'_less_succ_n].
+        apply (no_ordered_morphism_to_smaller_interval (Z.succ n) (Z.succ n') to); try lia; assumption.
+      + apply n'_eq_n.
+    }
+    unfold pointwise_equal. intros x x_in_interval.
+    assert (x = n \/ interval n x) as [x_is_n | x_smaller_than_n] by (unfold interval in *; lia).
+    + subst x; assumption.
+    + unfold pointwise_equal in induction_hypothesis. apply induction_hypothesis.
+      -- apply ordered_morphism_restriction with (n:=(Z.succ n)) (m:=(Z.succ n)); try assumption; unfold interval; lia.
+      -- apply strengthen_increasing with (weak_domain:=(interval (Z.succ n))) (range:=interval (Z.succ n)); try assumption. unfold interval in *; lia.
+      -- assumption.
 Qed.
 
-Theorem finite_partial_isomorphism_unique_aux {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
+Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
   (0 <= count)%Z ->
   forall from0 from1 to0 to1 to2,
   OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
   OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 to1 from1 ->
   PartialMorphism range0 range1 to2 ->
   increasing range0 compare0 compare1 to2 ->
-  (pointwise_equal range0 to2 (and_then from0 to1)).
+  pointwise_equal range0 to2 (and_then from0 to1).
 Proof.
   intros count_nonneg from0 from1 to0 to1 to2 iso0 iso1 [to2_some to2_none] increasing_to2.
     assert (PartialMorphism (interval count) (interval count) (and_then to0 (and_then to2 from1))) as morphism. {
@@ -658,27 +657,4 @@ Proof.
     rewrite to0_x0 in y3_definition. inversion y3_definition. subst. clear y3_definition.
     rewrite y4_definition in y0_definition. inversion y0_definition. 
     reflexivity.
-Qed.
-
-Theorem finite_partial_isomorphism_unique {T0 T1} (count: Z) (range0: T0 -> Prop) (range1: T1 -> Prop) compare0 compare1:
-  forall from0 from1 from2 to0 to1 to2,
-    (0 <= count)%Z ->
-    OrderedPartialIsomorphism (interval count) range0 Z.compare compare0 to0 from0 ->
-    OrderedPartialIsomorphism (interval count) range1 Z.compare compare1 to1 from1 ->
-    PartialMorphism range0 range1 to2 ->
-    PartialMorphism range1 range0 from2 ->
-    increasing range0 compare0 compare1 to2 ->
-    increasing range1 compare1 compare0 from2 ->
-  (pointwise_equal range0 to2 (and_then from0 to1))
-  /\ (pointwise_equal range1 from2 (and_then from1 to0)).
-Proof.
-  intros from0 from1 from2 to0 to1 to2 count_nonnegative iso0 iso1 morphism0 morphism1
-    increasing0 increasing1.
-  split.
-  - apply finite_partial_isomorphism_unique_aux with
-    (count:=count) (range1:=range1) (compare0:=compare0)
-    (compare1:=compare1) (from1:=from1) (to0:=to0); assumption.
-  - apply finite_partial_isomorphism_unique_aux with
-    (count:=count) (range1:=range0) (compare0:=compare1)
-    (compare1:=compare0) (from1:=from0) (to0:=to1); assumption.
 Qed.
