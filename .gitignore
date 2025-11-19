@@ -10,3 +10,4 @@ src/.*
 *CoqMakefile*
 Makefile.*
 .Makefile.*
+article.pdf
