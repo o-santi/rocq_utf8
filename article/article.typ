@@ -1624,7 +1624,7 @@ Por fim, a prova é feita desconstruindo todos os possíveis tamanhos da lista d
 Lemma utf8_dfa_increasing : decoder_strictly_increasing utf8_dfa_decode.
 ```
 
-Finalmente, a prova de que `utf8_dfa_decode` segue a especificação pode ser descrita como a composição dos 5 lemmas provados anteriormente:
+Finalmente, podemos mostrar que `utf8_dfa_decode` segue a especificação, construindo a composição dos 5 lemmas provados anteriormente:
 
 ```coq
 Theorem utf8_decoder_spec_compliant : utf8_decoder_spec utf8_dfa_decode.
@@ -1642,8 +1642,27 @@ Qed.
 
 = Conclusão e trabalhos futuros
 
+Ao mostrar que o codificador e o decodificador seguem a especificação corretamente, podemos ter bastante certeza que esses não apresentarão problemas se usados de acordo com a semântica especificada. Ainda sim, é necessário entender como e onde aplicar esse conhecimento para de fato produzir software correto.
 
+Ainda que o texto de entrada esteja corretamente escrito em UTF-8, o decodificador ainda pode falhar inesperadamente ao lê-lo, seja por uma falha de transmissão na internet, seja por uma falha de disco, seja por raios cósmicos causando interferência, ou até mesmo pelo usuário escolhendo o arquivo errado a ser lido.
 
+Entretanto, é importante perceber que verificar essa implementação fornece a tranquilidade de eliminar completamente a chance de o código do decodificador estar errado e falhar em código válido. Tal segurança só é atingível através da verificação formal de software, e aumentar o grau de confiança que temos em partes fundamentais dos nossos sistemas, como o Kernel do sistema operacional de nossos computadores ou implementações de protocolos de comunicação de _web browsers_, é a única maneira de aumentar a qualidade dos programas que interagimos cotidianamente.
+
+Ainda há grandes barreiras para a adoção dessa metodologia de desenvolvimento. O ecossistema de Rocq, ainda que tenha mais de 35 anos de existência, ainda tem problemas que dificultam o acesso a projetos existentes. Ao desenvolver esse trabalho, muitos empecilhos foram encontrados para encontrar documentações sobre funções na biblioteca padrão da linguagem, forçando-nos a constantemente duplicar trabalho desnecessariamente. No início do desenvolvimento projeto, por exemplo, as funções de `list_compare` e propriedades de transitividade, reflexividade e antissimetria foram todas descritas e provadas inteiramente, apenas pela ignorância de não saber que já haviam sido implementadas na biblioteca padrão.
+
+Claro, a formalização é um processo laboroso, e pode ser demorado demais para certos cenários, em especial aqueles onde as especificações estão constantemente mudando. Nesse sentido, o UTF-8 é um dos melhores projetos de se formalizar, pois possui uma alta taxa de adoção, é extremamente estável e é extremamente improvável que seja substituido no curto prazo. 
+
+Além disso, protocolos como URL ou JSON utilizam diretamente a especificação UTF-8 como parte da sua própria especificação, e também se encontram no memsmo cenário. Dada a natureza composicional da linguagem Rocq, utilizar essa especificação como parte de uma especificação maior é trivial, e incentiva a implementação de ainda mais sistemas formalmente corretos que podem ser utilizados massivamente.
+
+Apesar de ser significativa, o sistema de codificação UTF-8 ainda é uma parte muito pequena do padrão Unicode, posto que esse define muitas operações em cima de _code points_ diretamente. A especificação define que certos _code points_ devem agir como modificadores, fazendo com que  múltiplas sequências de _code points_ distintas possam ser desenhadas como o exato mesmo caractere. Por exemplo, o caractere '`ǵ`' pode tanto ser representado como \<`U+01F5=`#str.from-unicode(0x01f5)\>, ou como a sequência \<`U+0067=`g, `U+0301=`#str.from-unicode(0x0301)\>. O padrão define múltiplas semânticas para normalizar sequências de _code points_ em formas distintas, chamadas de _Unicode Normalization Forms_, com algoritmos especificados para atingí-las.
+
+Determinar como _code points_ devem ser escritos não é algo raro ou incomum, pelo contrário, é uma tarefa que quase todo software moderno deve realizar constantemente. Para decidir quais pixeis devem ser desenhados dado um arquivo de texto, é necessário combinar os _code points_ em _clusters_ de grafemas que podem ser mapeados em glifos. Não obstante, também é necessário descobrir qual a ordem do texto, dado que o Unicode inclui linguagens como Árabe que são escritas da direita para esquerda, a partir de propriedades definidas em cada _code point_ separadamente. Além disso, é necessário ser capaz de desenhar um texto que mistura direções de escrita, visto que linguagens como árabe escrevem números da esquerda para direita. Decidir como cada uma dessas partes é tratada, e mostrar que todas as propriedades estão sendo respeitadas corretamente, é tarefa extremamente difícil, e a verificação formal dessas claramente teria resultados muito positivos.
+
+Implementar conversões dos outros formatos do Unicode, UTF-16 e UTF-32, para UTF-8 e vice-versa também é outra possível extensão desse trabalho. Tais formatos, ainda que menos populares, ainda são utilizados em cenários chaves -- em especial, UTF-16 ainda é largamente utilizado em Javascript e APIs do Windows -- e converter strings UTF-8 nesses formatos e de volta é extremamente comum. Para isso, bastaria definir um novo tipo, `valid_utf16_codepoint_representation`, e quase todos os teoremas sobre UTF-8 ainda poderiam ser usados. O formato UTF-32 ainda respeita a ordenação lexicográfica, mas UTF-16 não respeita a ordenação lexicográfica, então outra maneira de especificá-lo deve ser necessário.
+
+Por fim, ainda que muitos teoremas de transformação sejam provados, de nada adianta se esses não forem utilizados na prática para tornar programas cotidianos mais corretos. Nesse sentido, uma problema ainda em aberto é como extrair as implementações formalmente verificadas para programas executáveis eficientes. A própria linguagem Rocq oferece algumas alternativas, permitindo que o usuário extraia funções executáveis para linguagens funcionais como OCaml, Haskell e Scheme. Ainda que sejam úteis, a performance de programas nessas linguagens muitas vezes não é suficiente para casos mais extremos, e muitas linguagens imperativas acabam não aproveitando de código verificado.
+
+Uma alternativa a esse problema é a verificação de código em C através da _Verified Software Toolchain_. A VST é um conjunto de ferramentas que permite transformar código escrito C em código Rocq, atribuindo uma semântica a como esse deve ser executado -- e é claro, provando que a transformação C -> Rocq preserva essa semântica. Com ela, é possível provar teoremas sobre a execução de código escrito em C que é compilado diretamente para binário, eliminando o problema de falta de acessibilidade pela performance. Assim, outra linha de pesquisa interessante é de escrever um programa codificador e decodificador de UTF-8 em C, e provar que esse respeita a especificação desenvolvida nesse trabalho.
 
 
 #pagebreak()
